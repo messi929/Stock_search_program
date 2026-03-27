@@ -1,0 +1,39 @@
+# Firebase credentials
+*-adminsdk-*.json
+*firebase*.json
+serviceAccount*.json
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+*.spec
+
+# Cache
+screener/cache/
+*.parquet
+
+# Environment
+.env
+.venv/
+venv/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+# PyInstaller
+*.exe
+
+# Logs
+*.log
+
+# Assets (icons)
+assets/

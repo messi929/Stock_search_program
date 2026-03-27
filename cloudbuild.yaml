@@ -1,0 +1,38 @@
+steps:
+  # Docker 이미지 빌드
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['build', '-t', 'gcr.io/$PROJECT_ID/stock-screener', '.']
+
+  # Container Registry에 푸시
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['push', 'gcr.io/$PROJECT_ID/stock-screener']
+
+  # Cloud Run 배포
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: gcloud
+    args:
+      - 'run'
+      - 'deploy'
+      - 'stock-screener'
+      - '--image'
+      - 'gcr.io/$PROJECT_ID/stock-screener'
+      - '--region'
+      - 'asia-northeast3'  # 서울 리전
+      - '--platform'
+      - 'managed'
+      - '--allow-unauthenticated'
+      - '--memory'
+      - '1Gi'
+      - '--cpu'
+      - '1'
+      - '--timeout'
+      - '3600'
+      - '--min-instances'
+      - '1'          # 콜드스타트 방지
+      - '--max-instances'
+      - '3'
+      - '--set-env-vars'
+      - 'RUN_MODE=server,COLLECT_MODE=readonly'
+
+images:
+  - 'gcr.io/$PROJECT_ID/stock-screener'

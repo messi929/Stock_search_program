@@ -1,0 +1,746 @@
+"""데이터 수집기: FinanceDataReader + 네이버금융.
+
+데이터 소스:
+- FinanceDataReader: 주식 OHLCV, 시가총액, ETF
+- 네이버금융: PER/PBR/배당률, 테마 분류, 외국인/기관 수급
+"""
+
+import os
+import re
+import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from datetime import datetime, timedelta
+
+import pandas as pd
+import requests
+from bs4 import BeautifulSoup
+import FinanceDataReader as fdr
+from loguru import logger
+
+from screener.config import CACHE_DIR, HISTORY_DAYS
+
+_HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+
+
+# ──────────────────────────────────────────────
+# 주식 데이터
+# ──────────────────────────────────────────────
+
+def fetch_daily_snapshot() -> pd.DataFrame:
+    """KOSPI + KOSDAQ 전종목 당일 스냅샷."""
+    logger.info("전종목 일일 스냅샷 수집 시작...")
+
+    all_data = []
+    for market in ["KOSPI", "KOSDAQ"]:
+        df = fdr.StockListing(market)
+        df["market_type"] = market
+        all_data.append(df)
+
+    raw = pd.concat(all_data, ignore_index=True)
+
+    result = pd.DataFrame({
+        "ticker": raw["Code"].astype(str),
+        "name": raw["Name"].astype(str),
+        "market": raw["market_type"],
+        "close": pd.to_numeric(raw.get("Close", 0), errors="coerce").fillna(0).astype(int),
+        "open": pd.to_numeric(raw.get("Open", 0), errors="coerce").fillna(0).astype(int),
+        "high": pd.to_numeric(raw.get("High", 0), errors="coerce").fillna(0).astype(int),
+        "low": pd.to_numeric(raw.get("Low", 0), errors="coerce").fillna(0).astype(int),
+        "volume": pd.to_numeric(raw.get("Volume", 0), errors="coerce").fillna(0).astype(int),
+        "trading_value": pd.to_numeric(raw.get("Amount", 0), errors="coerce").fillna(0),
+        "change_pct": pd.to_numeric(raw.get("ChagesRatio", 0), errors="coerce").fillna(0),
+        "market_cap_raw": pd.to_numeric(raw.get("Marcap", 0), errors="coerce").fillna(0),
+        "shares": pd.to_numeric(raw.get("Stocks", 0), errors="coerce").fillna(0).astype(int),
+    })
+
+    result["market_cap"] = (result["market_cap_raw"] / 1_0000_0000).round(0)
+    result = result[result["close"] > 0].copy()
+
+    # 초기값 — 펀더멘탈은 별도 수집이므로 DataFrame에만 추가 (Firestore에는 저장 안 함)
+    for col in ["per", "pbr", "eps", "div_yield", "roe"]:
+        result[col] = 0.0
+
+    # 종목 타입 분류
+    result["stock_type"] = "stock"
+
+    logger.info(f"스냅샷 수집 완료: {len(result)}종목")
+    return result
+
+
+# ──────────────────────────────────────────────
+# 해외 주식 (NASDAQ)
+# ──────────────────────────────────────────────
+
+def fetch_us_snapshot(top_n: int = 200) -> pd.DataFrame:
+    """NASDAQ/S&P500 주요 종목 스냅샷 (yfinance 배치 수집).
+
+    yfinance.download()로 배치 수집하여 개별 API 호출을 최소화.
+    시가총액, PER 등 실제 데이터를 가져옴.
+    """
+    import yfinance as yf
+
+    logger.info("미국 주식 스냅샷 수집 시작...")
+
+    # S&P500 + NASDAQ 종목 목록 (FDR에서)
+    symbols = {}
+    for market in ["S&P500", "NASDAQ"]:
+        try:
+            listing = fdr.StockListing(market)
+            if listing is not None and len(listing) > 0:
+                for _, row in listing.iterrows():
+                    sym = str(row.get("Symbol", ""))
+                    name = str(row.get("Name", ""))
+                    if sym and sym not in symbols:
+                        symbols[sym] = {"name": name, "market": market}
+        except Exception as e:
+            logger.warning(f"{market} 목록 수집 실패: {e}")
+
+    if not symbols:
+        return pd.DataFrame()
+
+    # S&P500 전종목 + NASDAQ top_n
+    sp500 = {s: d for s, d in symbols.items() if d["market"] == "S&P500"}
+    nasdaq_only = {s: d for s, d in symbols.items() if d["market"] == "NASDAQ" and s not in sp500}
+    targets = list(sp500.keys()) + list(nasdaq_only.keys())[:top_n]
+    logger.info(f"미국 종목 시세 수집: {len(targets)}종목 (yfinance 배치)")
+
+    # ── yfinance 배치 다운로드 (1회 호출로 전체 수집) ──
+    all_rows = []
+    batch_size = 100  # yfinance 배치 크기
+
+    for i in range(0, len(targets), batch_size):
+        batch_symbols = targets[i:i + batch_size]
+        try:
+            data = yf.download(
+                batch_symbols, period="5d", group_by="ticker",
+                auto_adjust=True, threads=True, progress=False,
+            )
+            if data.empty:
+                continue
+
+            for sym in batch_symbols:
+                try:
+                    if len(batch_symbols) == 1:
+                        sym_data = data
+                    else:
+                        sym_data = data[sym] if sym in data.columns.get_level_values(0) else None
+
+                    if sym_data is None or sym_data.empty:
+                        continue
+
+                    sym_data = sym_data.dropna(subset=["Close"])
+                    if len(sym_data) < 1:
+                        continue
+
+                    last = sym_data.iloc[-1]
+                    prev = sym_data.iloc[-2] if len(sym_data) >= 2 else last
+                    change_pct = ((last["Close"] / prev["Close"]) - 1) * 100 if prev["Close"] > 0 else 0
+
+                    all_rows.append({
+                        "ticker": sym,
+                        "name": symbols.get(sym, {}).get("name", sym),
+                        "market": symbols.get(sym, {}).get("market", "NASDAQ"),
+                        "close": float(last["Close"]),
+                        "open": float(last.get("Open", last["Close"])),
+                        "high": float(last.get("High", last["Close"])),
+                        "low": float(last.get("Low", last["Close"])),
+                        "volume": int(last.get("Volume", 0)),
+                        "change_pct": round(change_pct, 2),
+                        "trading_value": float(last["Close"] * last.get("Volume", 0)),
+                        "market_cap": 0.0,
+                        "market_cap_raw": 0.0,
+                    })
+                except Exception:
+                    continue
+
+            logger.info(f"  US 배치: {min(i + batch_size, len(targets))}/{len(targets)} ({len(all_rows)}종목 수집)")
+
+        except Exception as e:
+            logger.warning(f"US 배치 수집 실패 ({i}~{i+batch_size}): {e}")
+            continue
+
+    if not all_rows:
+        return pd.DataFrame()
+
+    result = pd.DataFrame(all_rows)
+    result = result[result["close"] > 0].copy()
+
+    # ── 시가총액/펀더멘탈 수집 (yfinance ticker.info — 병렬) ──
+    logger.info("미국 종목 시가총액/펀더멘탈 수집 중...")
+    tickers_str = result["ticker"].tolist()
+
+    def _fetch_single_info(sym):
+        """yfinance ticker.info로 개별 종목 펀더멘탈 수집."""
+        try:
+            t = yf.Ticker(sym)
+            info = t.info
+            # dividendYield: yfinance returns as percentage already (0.41 = 0.41%)
+            # returnOnEquity: yfinance returns as fraction (1.52 = 152%)
+            raw_div = info.get("dividendYield", 0) or 0
+            raw_roe = info.get("returnOnEquity", 0) or 0
+            return sym, {
+                "market_cap": info.get("marketCap", 0) or 0,
+                "pe_ratio": round(info.get("trailingPE", 0) or 0, 2),
+                "pbr": round(info.get("priceToBook", 0) or 0, 2),
+                "div_yield": round(raw_div, 2),
+                "roe": round(raw_roe * 100, 2),
+                "sector": info.get("sector", "") or "",
+                "industry": info.get("industry", "") or "",
+            }
+        except Exception:
+            return sym, {"market_cap": 0, "pe_ratio": 0, "pbr": 0, "div_yield": 0, "roe": 0, "sector": "", "industry": ""}
+
+    info_results = {}
+    done = 0
+    with ThreadPoolExecutor(max_workers=10) as executor:
+        futures = {executor.submit(_fetch_single_info, sym): sym for sym in tickers_str}
+        for future in as_completed(futures):
+            done += 1
+            sym, data = future.result()
+            info_results[sym] = data
+            if done % 100 == 0:
+                logger.info(f"  US 펀더멘탈: {done}/{len(tickers_str)}")
+    logger.info(f"  펀더멘탈 수집 완료: {sum(1 for v in info_results.values() if v['market_cap']>0)}종목")
+
+    # 시가총액 적용 (억원 환산, 1USD ≈ 1400KRW)
+    usd_to_krw = 1400
+    result["market_cap"] = result["ticker"].map(
+        lambda t: round(info_results.get(t, {}).get("market_cap", 0) * usd_to_krw / 1_0000_0000, 0)
+    )
+    result["per"] = result["ticker"].map(
+        lambda t: round(info_results.get(t, {}).get("pe_ratio", 0), 2)
+    )
+    result["pbr"] = result["ticker"].map(
+        lambda t: info_results.get(t, {}).get("pbr", 0)
+    )
+    result["div_yield"] = result["ticker"].map(
+        lambda t: info_results.get(t, {}).get("div_yield", 0)
+    )
+    result["roe"] = result["ticker"].map(
+        lambda t: info_results.get(t, {}).get("roe", 0)
+    )
+    result["sector"] = result["ticker"].map(
+        lambda t: info_results.get(t, {}).get("sector", "")
+    )
+    result["industry"] = result["ticker"].map(
+        lambda t: info_results.get(t, {}).get("industry", "")
+    )
+
+    for col in ["eps", "shares", "foreign_net", "inst_net", "div_years", "div_growth"]:
+        if col not in result.columns:
+            result[col] = 0.0
+
+    result["stock_type"] = "stock"
+    result = result.drop_duplicates(subset="ticker", keep="first")
+
+    logger.info(f"미국 주식 수집 완료: {len(result)}종목 (시가총액 실제값 포함)")
+    return result
+
+
+# ──────────────────────────────────────────────
+# ETF 데이터
+# ──────────────────────────────────────────────
+
+def fetch_etf_data() -> pd.DataFrame:
+    """ETF 전종목 데이터."""
+    logger.info("ETF 데이터 수집 시작...")
+
+    raw = fdr.StockListing("ETF/KR")
+    if raw is None or len(raw) == 0:
+        logger.warning("ETF 데이터 없음")
+        return pd.DataFrame()
+
+    # ETF 카테고리 매핑
+    cat_map = {
+        "1": "국내시장", "2": "국내섹터", "3": "국내채권",
+        "4": "해외주식", "5": "해외채권", "6": "원자재",
+        "7": "레버리지", "8": "인버스", "9": "기타",
+    }
+
+    result = pd.DataFrame({
+        "ticker": raw["Symbol"].astype(str),
+        "name": raw["Name"].astype(str),
+        "market": "ETF",
+        "close": pd.to_numeric(raw.get("Price", 0), errors="coerce").fillna(0).astype(int),
+        "change_pct": pd.to_numeric(raw.get("ChangeRate", 0), errors="coerce").fillna(0),
+        "volume": pd.to_numeric(raw.get("Volume", 0), errors="coerce").fillna(0).astype(int),
+        "trading_value": pd.to_numeric(raw.get("Amount", 0), errors="coerce").fillna(0) * 1_000_000,
+        "nav": pd.to_numeric(raw.get("NAV", 0), errors="coerce").fillna(0),
+        "earning_rate": pd.to_numeric(raw.get("EarningRate", 0), errors="coerce").fillna(0),
+        "market_cap": (pd.to_numeric(raw.get("MarCap", 0), errors="coerce").fillna(0) / 1_0000_0000).round(0),
+        "etf_category": raw.get("Category", "9").astype(str).map(cat_map).fillna("기타"),
+    })
+
+    result["stock_type"] = "etf"
+    result["open"] = result["close"]
+    result["high"] = result["close"]
+    result["low"] = result["close"]
+
+    for col in ["per", "pbr", "eps", "div_yield", "roe", "market_cap_raw", "shares"]:
+        result[col] = 0.0
+
+    result = result[result["close"] > 0].copy()
+    logger.info(f"ETF 수집 완료: {len(result)}종목")
+    return result
+
+
+# ──────────────────────────────────────────────
+# 펀더멘탈 (네이버금융 PER/PBR/배당률)
+# ──────────────────────────────────────────────
+
+def _fetch_single_fundamental(ticker: str) -> tuple:
+    """단일 종목 PER/PBR/배당률 수집 (병렬용)."""
+    try:
+        url = f"https://finance.naver.com/item/main.naver?code={ticker}"
+        resp = requests.get(url, headers=_HEADERS, timeout=5)
+        resp.encoding = "euc-kr"
+        soup = BeautifulSoup(resp.text, "html.parser")
+
+        data = {}
+        for tag_id, key in [("_per", "per"), ("_pbr", "pbr"), ("_dvr", "div_yield")]:
+            el = soup.select_one(f"#{tag_id}")
+            if el:
+                val = el.text.strip().replace(",", "")
+                try:
+                    data[key] = float(val)
+                except ValueError:
+                    data[key] = 0.0
+            else:
+                data[key] = 0.0
+        return ticker, data
+    except Exception:
+        return ticker, None
+
+
+def fetch_naver_fundamentals(tickers: list[str], max_workers: int = 8) -> dict:
+    """네이버금융에서 PER/PBR/배당률 병렬 수집.
+
+    Returns:
+        {ticker: {"per": float, "pbr": float, "div_yield": float}}
+    """
+    logger.info(f"네이버 펀더멘탈 수집: {len(tickers)}종목 (workers={max_workers})")
+    result = {}
+    done = 0
+
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        futures = {
+            executor.submit(_fetch_single_fundamental, t): t
+            for t in tickers
+        }
+        for future in as_completed(futures):
+            done += 1
+            ticker, data = future.result()
+            if data:
+                result[ticker] = data
+            if done % 100 == 0:
+                logger.info(f"  펀더멘탈: {done}/{len(tickers)}")
+
+    logger.info(f"펀더멘탈 수집 완료: {len(result)}/{len(tickers)}")
+    return result
+
+
+def apply_fundamentals(snapshot: pd.DataFrame, fund_data: dict) -> pd.DataFrame:
+    """펀더멘탈 데이터를 스냅샷에 적용."""
+    for col in ["per", "pbr", "div_yield"]:
+        mapping = {t: d.get(col, 0) for t, d in fund_data.items()}
+        updates = snapshot["ticker"].map(mapping)
+        valid = updates.notna() & (updates > 0)
+        snapshot.loc[valid, col] = updates[valid]
+
+    # ROE = PBR / PER * 100
+    valid_per = snapshot["per"] > 0
+    snapshot.loc[valid_per, "roe"] = (
+        snapshot.loc[valid_per, "pbr"] / snapshot.loc[valid_per, "per"] * 100
+    ).round(2)
+
+    return snapshot
+
+
+# ──────────────────────────────────────────────
+# 배당 지속성 데이터 (yfinance)
+# ──────────────────────────────────────────────
+
+def fetch_dividend_history(tickers: list[str], batch_size: int = 40) -> dict:
+    """배당 이력 수집 (yfinance, 연도별 배당금).
+
+    Returns:
+        {ticker: {"div_years": int, "div_growth": float}}
+    """
+    import yfinance as yf
+
+    logger.info(f"배당 지속성 수집: {len(tickers)}종목 (yfinance)")
+    result = {}
+
+    def _fetch_single_div(ticker):
+        try:
+            sym = f"{ticker}.KS"
+            t = yf.Ticker(sym)
+            divs = t.dividends
+            if divs is None or divs.empty:
+                return ticker, None
+
+            # 연도별 합산
+            annual = divs.groupby(divs.index.year).sum()
+            # 최근 5년만
+            recent = annual.tail(5)
+            if len(recent) == 0:
+                return ticker, None
+
+            div_years = len(recent[recent > 0])
+            if div_years == 0:
+                return ticker, None
+
+            # 배당 성장률: (최근연도 - 5년전) / 5년전 * 100
+            vals = recent[recent > 0].values
+            if len(vals) >= 2 and vals[0] > 0:
+                div_growth = round((vals[-1] - vals[0]) / vals[0] * 100, 1)
+            else:
+                div_growth = 0.0
+
+            return ticker, {"div_years": div_years, "div_growth": div_growth}
+        except Exception:
+            return ticker, None
+
+    done = 0
+    with ThreadPoolExecutor(max_workers=5) as executor:
+        futures = {executor.submit(_fetch_single_div, t): t for t in tickers}
+        for future in as_completed(futures):
+            done += 1
+            ticker, data = future.result()
+            if data:
+                result[ticker] = data
+            if done % batch_size == 0:
+                logger.info(f"  배당 수집: {done}/{len(tickers)}")
+
+    logger.info(f"배당 지속성 완료: {len(result)}/{len(tickers)}")
+    return result
+
+
+def apply_dividend_history(snapshot: pd.DataFrame, div_data: dict) -> pd.DataFrame:
+    """배당 지속성 데이터를 스냅샷에 적용."""
+    for col, default in [("div_years", 0), ("div_growth", 0.0)]:
+        if col not in snapshot.columns:
+            snapshot[col] = default
+        mapping = {t: d.get(col, default) for t, d in div_data.items()}
+        updates = snapshot["ticker"].map(mapping)
+        valid = updates.notna()
+        snapshot.loc[valid, col] = updates[valid]
+    return snapshot
+
+
+# ──────────────────────────────────────────────
+# 테마 데이터 (네이버금융)
+# ──────────────────────────────────────────────
+
+def fetch_themes() -> tuple[dict, dict]:
+    """네이버금융 테마 목록 및 종목-테마 매핑.
+
+    Returns:
+        themes: {theme_no: theme_name}
+        stock_themes: {ticker: [theme1, theme2, ...]}
+    """
+    logger.info("테마 데이터 수집 시작...")
+    themes = {}
+    stock_themes = {}  # ticker → [theme_names]
+
+    # 1) 전체 테마 목록 (페이지네이션)
+    for page in range(1, 50):
+        try:
+            url = f"https://finance.naver.com/sise/theme.naver?&page={page}"
+            resp = requests.get(url, headers=_HEADERS, timeout=5)
+            resp.encoding = "euc-kr"
+            soup = BeautifulSoup(resp.text, "html.parser")
+
+            found = False
+            for a in soup.select("td.col_type1 a"):
+                name = a.text.strip()
+                href = a.get("href", "")
+                if name and "no=" in href:
+                    no = href.split("no=")[-1].split("&")[0]
+                    themes[no] = name
+                    found = True
+
+            if not found:
+                break
+            time.sleep(0.3)
+        except Exception:
+            break
+
+    logger.info(f"테마 수집: {len(themes)}개")
+
+    # 2) 각 테마별 종목 매핑
+    for no, name in themes.items():
+        try:
+            url = f"https://finance.naver.com/sise/sise_group_detail.naver?type=theme&no={no}"
+            resp = requests.get(url, headers=_HEADERS, timeout=5)
+            resp.encoding = "euc-kr"
+            soup = BeautifulSoup(resp.text, "html.parser")
+
+            for a in soup.select("div.name_area a"):
+                href = a.get("href", "")
+                match = re.search(r"code=(\d{6})", href)
+                if match:
+                    ticker = match.group(1)
+                    if ticker not in stock_themes:
+                        stock_themes[ticker] = []
+                    stock_themes[ticker].append(name)
+
+            time.sleep(0.3)
+        except Exception:
+            continue
+
+    logger.info(f"테마-종목 매핑: {len(stock_themes)}종목")
+    return themes, stock_themes
+
+
+# ──────────────────────────────────────────────
+# 외국인/기관 순매수 (네이버금융)
+# ──────────────────────────────────────────────
+
+def fetch_foreign_inst() -> dict:
+    """네이버금융에서 외국인/기관 당일 순매수 수집.
+
+    주의: 장 마감 후(15:30 이후) 네이버에서 데이터를 제공하지 않으므로 0건 반환됨.
+    장중(09:00~15:30)에만 유효한 데이터.
+
+    Returns:
+        {ticker: {"foreign_net": int, "inst_net": int}}  (주 단위)
+    """
+    logger.info("외국인/기관 순매수 수집 시작...")
+    result = {}
+
+    # sosok: 0=KOSPI, 1=KOSDAQ
+    for sosok in [0, 1]:
+        market_name = "KOSPI" if sosok == 0 else "KOSDAQ"
+        for page in range(1, 40):
+            try:
+                url = (
+                    f"https://finance.naver.com/sise/sise_deal.naver"
+                    f"?sosok={sosok}&page={page}"
+                )
+                resp = requests.get(url, headers=_HEADERS, timeout=5)
+                resp.encoding = "euc-kr"
+                soup = BeautifulSoup(resp.text, "html.parser")
+
+                rows = soup.select("table.type2 tr")
+                found = False
+                for row in rows:
+                    tds = row.select("td")
+                    if len(tds) < 7:
+                        continue
+
+                    # 종목코드 추출
+                    a = tds[0].select_one("a")
+                    if not a:
+                        continue
+                    href = a.get("href", "")
+                    match = re.search(r"code=(\d{6})", href)
+                    if not match:
+                        continue
+
+                    ticker = match.group(1)
+                    found = True
+
+                    def parse_int(td):
+                        text = td.text.strip().replace(",", "").replace("+", "")
+                        try:
+                            return int(text)
+                        except ValueError:
+                            return 0
+
+                    # 컬럼 순서: 종목명, 현재가, 전일비, 등락률, 외국인순매수, 기관순매수, 개인순매수
+                    foreign_net = parse_int(tds[4])
+                    inst_net = parse_int(tds[5])
+
+                    result[ticker] = {
+                        "foreign_net": foreign_net,
+                        "inst_net": inst_net,
+                    }
+
+                if not found:
+                    break
+                time.sleep(0.3)
+            except Exception:
+                break
+
+        logger.info(f"  {market_name}: {sum(1 for t, d in result.items())}종목")
+
+    logger.info(f"외국인/기관 수집 완료: {len(result)}종목")
+    return result
+
+
+def apply_foreign_inst(snapshot: pd.DataFrame, fi_data: dict) -> pd.DataFrame:
+    """외국인/기관 순매수 데이터를 스냅샷에 적용."""
+    for col in ["foreign_net", "inst_net"]:
+        if col not in snapshot.columns:
+            snapshot[col] = 0
+        mapping = {t: d.get(col, 0) for t, d in fi_data.items()}
+        updates = snapshot["ticker"].map(mapping)
+        valid = updates.notna()
+        snapshot.loc[valid, col] = updates[valid].astype(int)
+    return snapshot
+
+
+# ──────────────────────────────────────────────
+# 히스토리 데이터 (이동평균/RSI 계산용)
+# ──────────────────────────────────────────────
+
+def _fetch_single_history(ticker: str, start_date: str, days: int):
+    """단일 종목 히스토리 수집 (병렬용). 10초 타임아웃."""
+    import signal
+    import threading
+
+    result_holder = [None]
+    def _fetch():
+        try:
+            df = fdr.DataReader(ticker, start_date)
+            if df is not None and len(df) > 0:
+                df = df.reset_index()
+                df["ticker"] = ticker
+                df = df.rename(columns={
+                    "Date": "date", "Open": "open", "High": "high",
+                    "Low": "low", "Close": "close", "Volume": "volume",
+                })
+                df = df.tail(days)
+                result_holder[0] = df[["date", "ticker", "open", "high", "low", "close", "volume"]]
+        except Exception:
+            pass
+
+    t = threading.Thread(target=_fetch, daemon=True)
+    t.start()
+    t.join(timeout=10)  # 10초 타임아웃
+    return result_holder[0]
+
+
+def fetch_historical_ohlcv(
+    tickers: list[str],
+    days: int = HISTORY_DAYS,
+    max_workers: int = 5,
+) -> pd.DataFrame:
+    """최근 N일 히스토리 수집 (병렬화)."""
+    start_date = (datetime.now() - timedelta(days=days * 2)).strftime("%Y-%m-%d")
+    logger.info(f"히스토리 수집: {len(tickers)}종목, {start_date}~오늘 (workers={max_workers})")
+
+    all_data = []
+    done = 0
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        futures = {
+            executor.submit(_fetch_single_history, t, start_date, days): t
+            for t in tickers
+        }
+        for future in as_completed(futures):
+            done += 1
+            result = future.result()
+            if result is not None:
+                all_data.append(result)
+            if done % 100 == 0:
+                logger.info(f"  히스토리: {done}/{len(tickers)}")
+
+    if not all_data:
+        return pd.DataFrame()
+
+    result = pd.concat(all_data, ignore_index=True)
+    logger.info(f"히스토리 완료: {len(result)}행 ({len(tickers)}종목)")
+    return result
+
+
+# ──────────────────────────────────────────────
+# US 히스토리 데이터 (yfinance 배치)
+# ──────────────────────────────────────────────
+
+def fetch_us_historical_ohlcv(
+    tickers: list[str],
+    days: int = HISTORY_DAYS,
+) -> pd.DataFrame:
+    """US 종목 히스토리 수집 (yfinance 배치 다운로드)."""
+    import yfinance as yf
+
+    logger.info(f"US 히스토리 수집: {len(tickers)}종목")
+    all_history = []
+    batch_size = 100
+    period_days = days * 2
+
+    for i in range(0, len(tickers), batch_size):
+        batch = tickers[i:i + batch_size]
+        try:
+            data = yf.download(
+                batch, period=f"{period_days}d", group_by="ticker",
+                auto_adjust=True, threads=True, progress=False,
+            )
+            if data.empty:
+                continue
+
+            for sym in batch:
+                try:
+                    if len(batch) == 1:
+                        sym_data = data
+                    else:
+                        sym_data = data[sym] if sym in data.columns.get_level_values(0) else None
+
+                    if sym_data is None or sym_data.empty:
+                        continue
+
+                    sym_data = sym_data.dropna(subset=["Close"])
+                    if len(sym_data) < 5:
+                        continue
+
+                    df = sym_data.tail(days).reset_index()
+                    df = df.rename(columns={
+                        "Date": "date", "Open": "open", "High": "high",
+                        "Low": "low", "Close": "close", "Volume": "volume",
+                    })
+                    df["ticker"] = sym
+                    all_history.append(df[["date", "ticker", "open", "high", "low", "close", "volume"]])
+                except Exception:
+                    continue
+
+            logger.info(f"  US 히스토리: {min(i + batch_size, len(tickers))}/{len(tickers)}")
+        except Exception as e:
+            logger.warning(f"US 히스토리 배치 실패 ({i}~{i+batch_size}): {e}")
+
+    if not all_history:
+        return pd.DataFrame()
+
+    result = pd.concat(all_history, ignore_index=True)
+    logger.info(f"US 히스토리 완료: {len(result)}행 ({len(tickers)}종목)")
+    return result
+
+
+# ──────────────────────────────────────────────
+# 캐시
+# ──────────────────────────────────────────────
+
+def save_cache(df: pd.DataFrame, name: str):
+    """DataFrame 캐시 저장."""
+    path = CACHE_DIR / f"{name}.parquet"
+    df.to_parquet(path, index=False)
+
+
+def load_cache(name: str) -> pd.DataFrame | None:
+    """오늘 생성된 캐시만 로드."""
+    path = CACHE_DIR / f"{name}.parquet"
+    if path.exists():
+        mtime = datetime.fromtimestamp(os.path.getmtime(path))
+        if mtime.date() == datetime.now().date():
+            return pd.read_parquet(path)
+    return None
+
+
+def save_dict_cache(data: dict, name: str):
+    """딕셔너리 캐시 저장 (JSON)."""
+    import json
+    path = CACHE_DIR / f"{name}.json"
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False)
+
+
+def load_dict_cache(name: str) -> dict | None:
+    """오늘 생성된 딕셔너리 캐시 로드."""
+    import json
+    path = CACHE_DIR / f"{name}.json"
+    if path.exists():
+        mtime = datetime.fromtimestamp(os.path.getmtime(path))
+        if mtime.date() == datetime.now().date():
+            with open(path, encoding="utf-8") as f:
+                return json.load(f)
+    return None
