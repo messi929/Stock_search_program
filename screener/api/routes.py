@@ -181,7 +181,7 @@ def _build_filter(
     change_pct_min=None, change_pct_max=None,
     above_ma=None, golden_cross=None, ma_aligned=None, surge_only=None,
     rsi_min=None, rsi_max=None, theme=None, theme_group=None, etf_category=None,
-    tickers=None,
+    sector=None, tickers=None,
     sort_by=None, sort_asc=None, sort_by2=None, sort_asc2=None,
     limit=100, offset=0,
 ) -> ScreenerFilter:
