@@ -139,6 +139,10 @@ def _row_to_item(row) -> StockItem:
         foreign_net=int(g("foreign_net")),
         inst_net=int(g("inst_net")),
         themes=str(g("themes", "")),
+        buy_score=round(float(g("buy_score")), 1),
+        buy_grade=str(g("buy_grade", "")),
+        sector=str(g("sector", "")),
+        industry=str(g("industry", "")),
         etf_category=str(g("etf_category", "")),
         nav=round(float(g("nav")), 2),
         earning_rate=round(float(g("earning_rate")), 2),
@@ -613,6 +617,24 @@ async def websocket_endpoint(websocket: WebSocket):
     except WebSocketDisconnect:
         if websocket in _ws_clients:
             _ws_clients.remove(websocket)
+
+
+@router.get("/schedule-status")
+async def get_schedule_status():
+    """스케줄 수집 상태 (안정성 모니터링)."""
+    import json
+    import os
+    status_file = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "schedule_status.json")
+    if not os.path.exists(status_file):
+        return {"message": "아직 스케줄 실행 기록 없음", "runs": [], "summary": {}}
+    try:
+        with open(status_file, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        # 최근 20건만 반환
+        data["runs"] = data.get("runs", [])[-20:]
+        return data
+    except Exception as e:
+        return {"error": str(e)}
 
 
 @router.get("/status", response_model=StatusResponse)

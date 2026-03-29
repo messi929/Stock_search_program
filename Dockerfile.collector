@@ -1,0 +1,22 @@
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# 시스템 의존성 (lxml 빌드 등)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc g++ libxml2-dev libxslt-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# 의존성 설치 (캐시 활용)
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# 데스크톱 UI 불필요
+RUN pip uninstall -y pywebview pystray Pillow 2>/dev/null || true
+
+# 소스 복사 — collector + screener 패키지 모두 필요
+# (.dockerignore가 collector.py를 제외하므로 명시적 COPY)
+COPY screener/ screener/
+COPY collector.py .
+
+ENTRYPOINT ["python", "collector.py"]

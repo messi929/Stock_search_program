@@ -57,18 +57,29 @@
 ## 미진행 — 다음 작업 (우선순위 순)
 
 ### 1단계: 안정성 검증
-- [ ] **T-10** `collector.py --schedule` 72시간 장기 안정성 테스트
-- [ ] **T-E1** 22:30 US 수집 → Cloud Run 리로드 정상 동작 확인
-- [ ] **T-E2** 06:30 / 09:30 / 16:00 각 시간대 수집 정상 동작 확인
+- [x] **T-10** `collector.py --schedule` 안정성 모니터링 (schedule_status.json + heartbeat 로깅 + /api/schedule-status)
+- [ ] **T-E1** 22:30 US 수집 → Cloud Run 리로드 정상 동작 확인 (schedule_status.json 검증)
+- [ ] **T-E2** 06:30 / 09:30 / 16:00 각 시간대 수집 정상 동작 확인 (schedule_status.json 검증)
 
 ### 2단계: UI/UX 검증 및 개선
 - [ ] **T-15** 브라우저 접속 → 전체 UI 검증 (Cloud Run + 데스크톱 앱)
 - [ ] **T-16** 종목 상세 차트 → Firestore 히스토리 로드 확인
 - [ ] **T-17** US 모드 기술지표 카테고리 확인
-- [ ] **T-C3** 백테스트 결과 UI 표시 (현재 API만 구현)
-- [ ] **T-C4** 포트폴리오 관리 UI (현재 API만 구현)
-- [ ] **T-C6** AI 추천 등급 뱃지 색상/스타일 최종 확인
-- [ ] **T-E3** 카테고리별 맥락 필터 UX 검증 (실제 사용 흐름)
+- [x] **T-C3** 백테스트 결과 UI 표시 (헤더 BT 버튼 → 시그널별 적중률 카드 모달)
+- [x] **T-C4** 포트폴리오 관리 UI (헤더 PF 버튼 → 종목 추가/삭제 + 수익률 대시보드)
+- [x] **T-C6** AI 추천 등급 뱃지 — buy_score/buy_grade _row_to_item 매핑 수정
+- [x] **T-E3** 카테고리별 맥락 필터 UX 검증 — 16개 카테고리 모두 매핑 확인
+
+### 2.5단계: 장중 수집 + 클라우드 이관 (v5.2)
+- [x] **T-F1** 장중 light 스케줄 추가 (KR 30분, US 60분 간격 스냅샷)
+- [x] **T-F2** Firestore heartbeat 5분 주기 기록 (failover 감지용)
+- [x] **T-F3** `--cloud-fallback` 플래그 — 로컬 비활성 시에만 클라우드 수집
+- [x] **T-F4** 개별 수집(`--kr-snapshot` 등) 후 Cloud Run 자동 리로드
+- [x] **T-F5** Dockerfile.collector + cloudbuild-collector.yaml (Cloud Run Job 이미지)
+- [x] **T-F6** deploy-cloud-jobs.sh (Cloud Scheduler 20개 cron 배포 스크립트)
+- [ ] **T-F7** Cloud Run Job 배포 테스트 (`gcloud builds submit`)
+- [ ] **T-F8** Cloud Scheduler 배포 (`./deploy-cloud-jobs.sh`)
+- [ ] **T-F9** 72시간 이중화 안정성 검증 (로컬 + 클라우드 동시 운영)
 
 ### 3단계: 상용화 배포
 - [ ] **T-19** 인스톨러 생성 (Inno Setup)
@@ -84,25 +95,25 @@
 
 ---
 
-## 아키텍처 (v5.1)
+## 아키텍처 (v5.2)
 
 ```
-[collector.py --schedule] (로컬 PC)
-  ├─ 고정 스케줄: 06:30 / 09:30 / 16:00 / 22:30 KST
-  │   ├─ 06:30  US 최종 + KR 전체 + 펀더멘탈 + 테마 + 배당
-  │   ├─ 09:30  KR 개장 후 + 외국인/기관 + 히스토리
-  │   ├─ 16:00  KR 마감 + 외국인/기관 확정 + 히스토리 + 배당
-  │   └─ 22:30  US 프리마켓 + US 히스토리
-  ├─ buy_score 계산 (기술40 + 모멘텀25 + 수급20 + 가치15)
-  ├─ 데이터 검증 (validate_data)
-  ├─ 시그널 알림 (텔레그램)
-  ├─ Firestore 쓰기 (429 재시도 + 배치 딜레이)
-  └─ Cloud Run /api/reload 호출 → 고객 즉시 확인
+[Cloud Scheduler + Cloud Run Job] (1차 — 클라우드 수집기)
+  ├─ heavy: 06:30 / 09:30 / 16:00 / 22:30 (전체 수집, --all)
+  ├─ light_kr: 10:00~15:00 매 30분 (--kr-snapshot --etf)
+  ├─ light_us: 00:00~05:00 매 60분 (--us-snapshot)
+  ├─ Cloud Scheduler 20개 cron → Cloud Run Job 트리거
+  └─ 수집 후 /api/reload → 고객 즉시 확인
+        ↓
+[collector.py --schedule] (선택 — 로컬 개발/이중화)
+  ├─ --cloud-fallback: heartbeat 기반 이중화 (클라우드 장애 시 자동 인계)
+  └─ 로컬 테스트 시 --schedule로 직접 실행 가능
         ↓
 [Firestore] (Google Cloud)
         ↓
-[Cloud Run] (COLLECT_MODE=readonly, v5.1)
+[Cloud Run] (COLLECT_MODE=readonly, v5.2)
   ├─ Firestore 즉시 리로드 (/api/reload)
+  ├─ 장중 5분마다 자동 리로드
   ├─ FastAPI API (16개 카테고리 + 백테스트 + 포트폴리오 + 섹터)
   ├─ 카테고리별 맥락 필터 (관련 필터만 표시)
   ├─ Firebase Auth + 티어 미들웨어

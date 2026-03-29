@@ -603,46 +603,115 @@ def _notify_cloud_run():
 
 
 # ──────────────────────────────────────────────
-# 스케줄 정의
+# 스케줄 정의 (heavy + light 2계층)
 # ──────────────────────────────────────────────
 
-SCHEDULES = [
+# heavy: 기존 4회 — 히스토리, 펀더멘탈, 테마 등 포함 (무조건 실행)
+# light_kr: 장중 KR 스냅샷 — 10:00~15:00 매 30분 (KR 장중에만 실행)
+# light_us: 장중 US 스냅샷 — 00:00~05:00 매 60분 (US 장중에만 실행)
+
+HEAVY_SCHEDULES = [
     {
         "time": "06:30",
         "name": "US 장 마감 후",
+        "type": "heavy",
         "tasks": ["us_snapshot", "us_history", "kr_snapshot", "etf",
                   "fundamentals", "themes", "dividend"],
     },
     {
         "time": "09:30",
         "name": "KR 개장 30분 후",
+        "type": "heavy",
         "tasks": ["kr_snapshot", "etf", "foreign_inst", "kr_history"],
     },
     {
         "time": "16:00",
         "name": "KR 장 마감 후",
+        "type": "heavy",
         "tasks": ["kr_snapshot", "etf", "foreign_inst", "fundamentals",
                   "kr_history", "dividend"],
     },
     {
         "time": "22:30",
         "name": "US 장 시작 전",
+        "type": "heavy",
         "tasks": ["us_snapshot", "us_history"],
     },
 ]
+
+LIGHT_KR_SCHEDULES = [
+    {"time": t, "name": f"KR 장중 ({t})", "type": "light_kr", "tasks": ["kr_snapshot", "etf"]}
+    for t in ["10:00", "10:30", "11:00", "11:30", "12:00", "13:00", "13:30", "14:00", "14:30", "15:00"]
+]
+
+LIGHT_US_SCHEDULES = [
+    {"time": t, "name": f"US 장중 ({t})", "type": "light_us", "tasks": ["us_snapshot"]}
+    for t in ["00:00", "01:00", "02:00", "03:00", "04:00", "05:00"]
+]
+
+ALL_SCHEDULES = HEAVY_SCHEDULES + LIGHT_KR_SCHEDULES + LIGHT_US_SCHEDULES
+
+
+def _save_schedule_status(schedule_name: str, status: str, elapsed: float = 0,
+                          tasks_done: list = None, error: str = ""):
+    """스케줄 실행 상태를 JSON 파일에 기록 (72시간 안정성 테스트용)."""
+    import json
+    status_file = os.path.join(os.path.dirname(__file__), "schedule_status.json")
+
+    try:
+        if os.path.exists(status_file):
+            with open(status_file, "r", encoding="utf-8") as f:
+                data = json.load(f)
+        else:
+            data = {"runs": [], "summary": {"total": 0, "success": 0, "fail": 0}}
+    except (json.JSONDecodeError, KeyError):
+        data = {"runs": [], "summary": {"total": 0, "success": 0, "fail": 0}}
+
+    run_entry = {
+        "time": datetime.now().isoformat(),
+        "schedule": schedule_name,
+        "status": status,
+        "elapsed_sec": round(elapsed, 1),
+        "tasks": tasks_done or [],
+        "error": error,
+    }
+    data["runs"].append(run_entry)
+    # 최근 200건만 유지
+    if len(data["runs"]) > 200:
+        data["runs"] = data["runs"][-200:]
+
+    data["summary"]["total"] += 1
+    if status == "success":
+        data["summary"]["success"] += 1
+    else:
+        data["summary"]["fail"] += 1
+    data["summary"]["last_run"] = run_entry["time"]
+    data["summary"]["uptime_hours"] = round(
+        (datetime.now() - datetime.fromisoformat(data["runs"][0]["time"])).total_seconds() / 3600, 1
+    ) if data["runs"] else 0
+    data["summary"]["success_rate"] = round(
+        data["summary"]["success"] / data["summary"]["total"] * 100, 1
+    ) if data["summary"]["total"] > 0 else 0
+
+    with open(status_file, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
 
 
 def _run_scheduled_tasks(schedule: dict):
     """스케줄 정의에 따라 수집 태스크 실행."""
     name = schedule["name"]
     tasks = schedule["tasks"]
-    logger.info(f"[{name}] 수집 시작 — {', '.join(tasks)}")
+    sched_type = schedule.get("type", "heavy")
+    is_light = sched_type.startswith("light")
+    logger.info(f"[{name}] {'경량 ' if is_light else ''}수집 시작 — {', '.join(tasks)}")
 
     start = time.time()
     snapshot = None
+    tasks_done = []
 
     try:
         for task in tasks:
+            task_start = time.time()
             if task == "kr_snapshot":
                 snapshot = collect_kr_snapshot()
             elif task == "etf":
@@ -661,50 +730,104 @@ def _run_scheduled_tasks(schedule: dict):
                 collect_kr_history(snapshot)
             elif task == "us_history":
                 collect_us_history()
+            tasks_done.append({"task": task, "elapsed": round(time.time() - task_start, 1)})
 
         elapsed = time.time() - start
         logger.info(f"[{name}] 수집 완료: {elapsed:.0f}초")
 
+        # 상태 기록
+        _save_schedule_status(name, "success", elapsed, tasks_done)
+
         # Cloud Run에 리로드 알림
         _notify_cloud_run()
 
-        # 시그널 알림 (장중 수집 시)
-        if "kr_history" in tasks or "us_history" in tasks:
-            _send_signal_alerts()
-
-        # 텔레그램 완료 알림
-        _send_alert(f"[{name}] 수집 완료 ({elapsed:.0f}초)")
+        # heavy 수집만: 시그널 알림 + 텔레그램 완료 알림
+        if not is_light:
+            if "kr_history" in tasks or "us_history" in tasks:
+                _send_signal_alerts()
+            _send_alert(f"[{name}] 수집 완료 ({elapsed:.0f}초)")
 
     except Exception as e:
+        elapsed = time.time() - start
         logger.error(f"[{name}] 수집 실패: {e}")
-        _send_alert(f"[{name}] 수집 실패: {e}")
+        _save_schedule_status(name, "fail", elapsed, tasks_done, str(e))
+        if not is_light:
+            _send_alert(f"[{name}] 수집 실패: {e}")
+
+
+def _write_heartbeat():
+    """Firestore에 collector heartbeat 기록 (failover 감지용)."""
+    try:
+        from screener.db.repository import update_sync_metadata
+        update_sync_metadata(collector_heartbeat=datetime.now().isoformat())
+    except Exception as e:
+        logger.debug(f"heartbeat 기록 실패: {e}")
+
+
+def _should_run_schedule(schedule: dict, now: datetime) -> bool:
+    """스케줄 실행 여부 판단. light 스케줄은 장중에만 실행."""
+    sched_type = schedule.get("type", "heavy")
+
+    if sched_type == "heavy":
+        return True  # heavy는 무조건 실행
+
+    if sched_type == "light_kr":
+        # 평일 KR 장중 (09:00~15:30)에만 실행
+        if now.weekday() >= 5:
+            return False
+        return (9 <= now.hour < 15) or (now.hour == 15 and now.minute <= 30)
+
+    if sched_type == "light_us":
+        # US 장중 (KST 23:30~06:00)에만 실행
+        if now.weekday() == 6:
+            return False
+        if now.weekday() == 5 and now.hour >= 6:
+            return False
+        return now.hour >= 23 or now.hour < 6
+
+    return True
 
 
 def schedule_loop():
     """고정 스케줄 기반 수집 루프.
 
-    스케줄: 06:30 / 09:30 / 16:00 / 22:30 (KST)
-    각 시간에 정해진 수집 태스크를 실행하고, Cloud Run에 리로드 알림.
+    heavy 스케줄: 06:30 / 09:30 / 16:00 / 22:30 (무조건 실행)
+    light_kr: 10:00~15:00 매 30분 (KR 장중에만, 스냅샷만)
+    light_us: 00:00~05:00 매 60분 (US 장중에만, 스냅샷만)
+    상태 파일: schedule_status.json (안정성 검증용)
     """
     logger.info("=" * 60)
     logger.info("스케줄 수집 모드 시작")
-    for s in SCHEDULES:
-        logger.info(f"  {s['time']} — {s['name']}: {', '.join(s['tasks'])}")
+    heavy_count = len(HEAVY_SCHEDULES)
+    light_kr_count = len(LIGHT_KR_SCHEDULES)
+    light_us_count = len(LIGHT_US_SCHEDULES)
+    logger.info(f"  heavy: {heavy_count}개, light_kr: {light_kr_count}개, light_us: {light_us_count}개")
+    for s in HEAVY_SCHEDULES:
+        logger.info(f"  [heavy] {s['time']} — {s['name']}: {', '.join(s['tasks'])}")
+    logger.info(f"  [light_kr] 10:00~15:00 매 30분 — kr_snapshot, etf")
+    logger.info(f"  [light_us] 00:00~05:00 매 60분 — us_snapshot")
     logger.info("=" * 60)
 
+    # 시작 기록
+    _save_schedule_status("시스템", "started", 0, [], "")
+
     executed_today = set()
+    heartbeat_count = 0
 
     while True:
         now = datetime.now()
-        current_time = now.strftime("%H:%M")
         today = now.strftime("%Y-%m-%d")
 
-        for schedule in SCHEDULES:
+        for schedule in ALL_SCHEDULES:
             sched_time = schedule["time"]
             sched_key = f"{today}_{sched_time}"
 
             # 이미 실행된 스케줄은 스킵
             if sched_key in executed_today:
+                continue
+
+            # light 스케줄은 장중 여부 체크
+            if not _should_run_schedule(schedule, now):
                 continue
 
             # 스케줄 시간 ± 5분 이내면 실행
@@ -720,8 +843,49 @@ def schedule_loop():
         if now.hour == 0 and now.minute < 2:
             executed_today.clear()
 
+        # 5분마다 Firestore heartbeat (failover 감지용)
+        # 30분마다 콘솔 heartbeat 로그
+        heartbeat_count += 1
+        if heartbeat_count % 10 == 0:  # 30초 * 10 = 5분
+            _write_heartbeat()
+        if heartbeat_count >= 60:  # 30초 * 60 = 30분
+            next_schedules = []
+            for s in ALL_SCHEDULES:
+                if not _should_run_schedule(s, now):
+                    continue
+                sh, sm = map(int, s["time"].split(":"))
+                s_min = sh * 60 + sm
+                now_min = now.hour * 60 + now.minute
+                if s_min > now_min:
+                    next_schedules.append(f"{s['time']}({s['name']})")
+            next_info = next_schedules[0] if next_schedules else "다음 스케줄 대기"
+            executed_count = len(executed_today)
+            total_possible = len([s for s in ALL_SCHEDULES if _should_run_schedule(s, now)])
+            logger.info(f"[heartbeat] 대기 중 | 다음: {next_info} | 오늘 실행: {executed_count}/{total_possible}")
+            heartbeat_count = 0
+
         # 30초마다 체크
         time.sleep(30)
+
+
+def _check_local_collector_active() -> bool:
+    """로컬 collector가 활성 상태인지 확인 (heartbeat 기반).
+
+    Returns:
+        True: 로컬 활성 (10분 이내 heartbeat 있음)
+        False: 로컬 비활성 (10분 초과 또는 heartbeat 없음)
+    """
+    try:
+        from screener.db.repository import get_sync_metadata
+        meta = get_sync_metadata()
+        hb = meta.get("collector_heartbeat")
+        if not hb:
+            return False
+        last = datetime.fromisoformat(hb)
+        age_min = (datetime.now() - last).total_seconds() / 60
+        return age_min <= 10
+    except Exception:
+        return False
 
 
 def main():
@@ -738,8 +902,18 @@ def main():
     parser.add_argument("--history", action="store_true", help="KR 히스토리 + 기술지표")
     parser.add_argument("--us-history", action="store_true", help="US 히스토리 + 기술지표")
     parser.add_argument("--validate", action="store_true", help="수집 데이터 품질 검증")
+    parser.add_argument("--cloud-fallback", action="store_true",
+                        help="클라우드 백업 모드 (로컬 collector 비활성 시에만 실행)")
 
     args = parser.parse_args()
+
+    # 클라우드 백업 모드: 로컬 활성이면 스킵
+    if args.cloud_fallback:
+        if _check_local_collector_active():
+            logger.info("로컬 collector 활성 — 클라우드 백업 스킵")
+            return
+        logger.warning("로컬 collector 비활성 감지 — 클라우드 백업 수집 실행")
+        _send_alert("⚠️ 로컬 collector 비활성 — 클라우드 백업으로 수집 시작")
 
     if args.schedule:
         schedule_loop()
@@ -747,6 +921,7 @@ def main():
         validate_data()
     elif args.all:
         collect_all()
+        _notify_cloud_run()
     else:
         ran = False
         if args.kr_snapshot:
@@ -767,7 +942,9 @@ def main():
             collect_kr_history(); ran = True
         if args.us_history:
             collect_us_history(); ran = True
-        if not ran:
+        if ran:
+            _notify_cloud_run()
+        else:
             parser.print_help()
 
 
