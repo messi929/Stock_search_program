@@ -1,6 +1,6 @@
 # 다음 작업 목록
 
-> 업데이트: 2026-03-27 (v5.1)
+> 업데이트: 2026-03-29 (v5.2)
 
 ---
 
@@ -39,58 +39,96 @@
 ## 완료 (v5.1: 데이터 정합성 + 스케줄)
 
 ### 데이터 정합성
-- [x] **T-13** 배당 지속성 수집 → 네이버(파싱 불가) → **yfinance 배당 이력**으로 전환
-- [x] **T-14** 외국인/기관 수집 — 장중에만 유효 확인, 장외 자동 스킵 처리
-- [x] **T-C1** `collector.py --all` 실행 → buy_score Firestore 반영 (107건)
-- [x] **T-C2** 추세진입 199→**75건** — `volume_ratio_min=1.2` 조건 추가
-- [x] **T-D1** Firestore 429 에러 대응 — save_history/save_stocks 재시도 로직 (3회 + 백오프)
+- [x] **T-13** 배당 지속성 수집 → yfinance 배당 이력으로 전환
+- [x] **T-14** 외국인/기관 수집 — 장중에만 유효, 장외 자동 스킵
+- [x] **T-C1** buy_score Firestore 반영 (107건)
+- [x] **T-C2** 추세진입 199→75건 — `volume_ratio_min=1.2` 추가
+- [x] **T-D1** Firestore 429 에러 — 재시도 로직 (3회 + 백오프)
 
 ### 스케줄 시스템
 - [x] **T-D2** 고정 스케줄 수집 (06:30 / 09:30 / 16:00 / 22:30)
-- [x] **T-D3** Cloud Run 즉시 리로드 (`POST /api/reload`) — 수집 완료 후 자동 호출
-- [x] **T-D4** 카테고리별 맥락 필터 UI — 카테고리에 따라 관련 필터만 노출
-- [x] **T-D5** US 섹터 필터 셀렉터 (`/api/sectors` → `f-sector`)
+- [x] **T-D3** Cloud Run 즉시 리로드 (`POST /api/reload`)
+- [x] **T-D4** 카테고리별 맥락 필터 UI
+- [x] **T-D5** US 섹터 필터 셀렉터
 - [x] **T-D6** Cloud Run v5.1 배포
+
+## 완료 (v5.2: 장중 수집 + 클라우드 이관 + UX 전면 개선)
+
+### 장중 경량 수집
+- [x] **T-F1** heavy/light 2계층 스케줄 — KR 30분, US 60분 장중 스냅샷
+- [x] **T-F2** Firestore heartbeat 5분 주기 (failover 감지)
+- [x] **T-F3** `--cloud-fallback` 플래그 — 로컬 비활성 시 클라우드 자동 인계
+- [x] **T-F4** 개별 수집 후 Cloud Run 자동 리로드 (`_notify_cloud_run`)
+
+### 클라우드 이관
+- [x] **T-F5** Dockerfile.collector + cloudbuild-collector.yaml
+- [x] **T-F6** deploy-cloud-jobs.sh (Cloud Scheduler 20개 cron)
+
+### UX 전면 개선 (30개 이슈)
+- [x] **T-G1** 모바일 반응형 (`@media 768px/480px`) — 헤더/테이블/모달/필터
+- [x] **T-G2** 종목 검색 — 이름/코드 디바운스 자동완성
+- [x] **T-G3** 네트워크 에러 핸들링 — 재시도 버튼 + 토스트 알림
+- [x] **T-G4** 상승/하락 ▲▼ 화살표 (색맹 접근성)
+- [x] **T-G5** 데이터 신선도 상대시간 ("5분 전", 초록/노랑/빨강)
+- [x] **T-G6** BT/PF → "백테스트"/"포트폴리오" 텍스트 라벨
+- [x] **T-G7** Phase 로딩 메시지 ("펀더멘탈 분석 중...")
+- [x] **T-G8** 온보딩 가이드 (첫 방문 5단계 오버레이)
+- [x] **T-G9** 카테고리 그룹별 색상 (전략=파랑, 시장=보라, 시그널=초록)
+- [x] **T-G10** 카테고리 hover tooltip (JS fixed position)
+- [x] **T-G11** 빈 결과 → 필터 초기화 버튼
+- [x] **T-G12** 차트 15초 타임아웃 + 재시도 버튼
+- [x] **T-G13** 내보내기 확인 모달 (종목 수/필터/형식 표시)
+- [x] **T-G14** 필터 min/max 유효성 검증
+- [x] **T-G15** 키보드 단축키 (`/` 검색, `f` 필터, `?` 도움말)
+- [x] **T-G16** 테마주 대분류 가로스크롤 (하위 테마 칩 제거)
+- [x] **T-G17** 칩/테마 스크롤바 표시 (`scrollbar-width:thin`)
+- [x] **T-G18** 선택 칩 가운데 자동 스크롤 (`scrollIntoView`)
+- [x] **T-G19** 활성 칩 glow 효과 (box-shadow)
+- [x] **T-G20** 별표 터치 타겟 확대 (28px + hover 스케일)
+- [x] **T-G21** 관심종목 로컬 저장 안내 문구
+- [x] **T-G22** 테이블 가로스크롤 래퍼
+- [x] **T-G23** 스킵 내비게이션 (sr-only)
+- [x] **T-G24** 로딩 ARIA (`role="status"`)
+- [x] **T-G25** 백테스트 결과 UI (시그널별 적중률 카드 모달)
+- [x] **T-G26** 포트폴리오 관리 UI (종목 추가/삭제 + 수익률 대시보드)
+- [x] **T-G27** buy_score/buy_grade/sector/industry API 매핑 수정
+- [x] **T-G28** AI점수 화살표 제거 (인라인 색상 전용)
+- [x] **T-G29** /api/schedule-status 엔드포인트
+- [x] **T-G30** Cloud Run v5.2 배포 완료
 
 ---
 
 ## 미진행 — 다음 작업 (우선순위 순)
 
-### 1단계: 안정성 검증
-- [x] **T-10** `collector.py --schedule` 안정성 모니터링 (schedule_status.json + heartbeat 로깅 + /api/schedule-status)
-- [ ] **T-E1** 22:30 US 수집 → Cloud Run 리로드 정상 동작 확인 (schedule_status.json 검증)
-- [ ] **T-E2** 06:30 / 09:30 / 16:00 각 시간대 수집 정상 동작 확인 (schedule_status.json 검증)
+### 1단계: 클라우드 수집기 배포 (인프라)
+- [ ] **T-F7** Cloud Run Job 빌드 — `gcloud builds submit --config=cloudbuild-collector.yaml`
+- [ ] **T-F8** Cloud Scheduler 배포 — `./deploy-cloud-jobs.sh` (20개 cron 등록)
+- [ ] **T-F9** Secret Manager 시크릿 등록 (firebase-credentials, admin-key, telegram-*)
+- [ ] **T-F10** Cloud Run Job 수동 실행 테스트 → Firestore 갱신 확인
 
-### 2단계: UI/UX 검증 및 개선
+### 2단계: 안정성 검증
+- [ ] **T-E1** 22:30 US 수집 → Cloud Run 리로드 정상 동작 확인
+- [ ] **T-E2** 06:30 / 09:30 / 16:00 각 시간대 수집 확인
+- [ ] **T-E3** 장중 light 스케줄 (10:00~15:00) 30분 간격 동작 확인
+- [ ] **T-E4** 72시간 안정성 검증 — schedule_status.json 성공률 100% 확인
+
+### 3단계: UI/UX 실사용 검증
 - [ ] **T-15** 브라우저 접속 → 전체 UI 검증 (Cloud Run + 데스크톱 앱)
 - [ ] **T-16** 종목 상세 차트 → Firestore 히스토리 로드 확인
 - [ ] **T-17** US 모드 기술지표 카테고리 확인
-- [x] **T-C3** 백테스트 결과 UI 표시 (헤더 BT 버튼 → 시그널별 적중률 카드 모달)
-- [x] **T-C4** 포트폴리오 관리 UI (헤더 PF 버튼 → 종목 추가/삭제 + 수익률 대시보드)
-- [x] **T-C6** AI 추천 등급 뱃지 — buy_score/buy_grade _row_to_item 매핑 수정
-- [x] **T-E3** 카테고리별 맥락 필터 UX 검증 — 16개 카테고리 모두 매핑 확인
+- [ ] **T-H1** 모바일(375px) 실기기 테스트 — 테이블/모달/필터 사용성
+- [ ] **T-H2** 온보딩 → 검색 → 필터 → 상세 → 관심종목 전체 흐름 테스트
 
-### 2.5단계: 장중 수집 + 클라우드 이관 (v5.2)
-- [x] **T-F1** 장중 light 스케줄 추가 (KR 30분, US 60분 간격 스냅샷)
-- [x] **T-F2** Firestore heartbeat 5분 주기 기록 (failover 감지용)
-- [x] **T-F3** `--cloud-fallback` 플래그 — 로컬 비활성 시에만 클라우드 수집
-- [x] **T-F4** 개별 수집(`--kr-snapshot` 등) 후 Cloud Run 자동 리로드
-- [x] **T-F5** Dockerfile.collector + cloudbuild-collector.yaml (Cloud Run Job 이미지)
-- [x] **T-F6** deploy-cloud-jobs.sh (Cloud Scheduler 20개 cron 배포 스크립트)
-- [ ] **T-F7** Cloud Run Job 배포 테스트 (`gcloud builds submit`)
-- [ ] **T-F8** Cloud Scheduler 배포 (`./deploy-cloud-jobs.sh`)
-- [ ] **T-F9** 72시간 이중화 안정성 검증 (로컬 + 클라우드 동시 운영)
-
-### 3단계: 상용화 배포
-- [ ] **T-19** 인스톨러 생성 (Inno Setup)
-- [ ] **T-20** 자동 업데이트 체계
+### 4단계: 상용화 배포
 - [ ] **T-21** 도메인 + HTTPS 설정
 - [ ] **T-22** 랜딩 페이지 / 다운로드 페이지
 - [ ] **T-C7** 결제 연동 (Stripe / 토스페이먼츠)
-- [ ] **T-C8** 모바일 반응형 최적화
+- [ ] **T-C8** 관심종목 클라우드 동기화 (Firebase Auth 연동)
+- [ ] **T-19** 데스크톱 인스톨러 (Inno Setup)
+- [ ] **T-20** 자동 업데이트 체계
 
-### 4단계: 수동 설정 (사용자)
-- [ ] **T-11** Windows 작업 스케줄러 등록 — `setup_scheduler.bat` 관리자 실행
+### 5단계: 수동 설정 (선택)
+- [ ] **T-11** Windows 작업 스케줄러 — `setup_scheduler.bat` (로컬 이중화 시)
 - [ ] **T-12** 텔레그램 봇 설정 — BotFather 토큰 + chat_id → `.env`
 
 ---
@@ -121,11 +159,11 @@
   └─ 크롤링 없음 (CPU/메모리 절약)
         ↓
 [데스크톱 / 브라우저]
-  └─ https://stock-screener-119320994983.asia-northeast3.run.app
+  └─ https://stock-screener-ug23nrnjva-du.a.run.app
 ```
 
 ## Cloud Run 설정
-- URL: `https://stock-screener-119320994983.asia-northeast3.run.app`
+- URL: `https://stock-screener-ug23nrnjva-du.a.run.app`
 - 리전: asia-northeast3 (서울)
 - 메모리: 1Gi, CPU: 1, min-instances: 1
 - 환경변수: `RUN_MODE=server, COLLECT_MODE=readonly`
@@ -141,7 +179,7 @@ FIREBASE_CREDENTIALS=
 AUTH_ENABLED=false
 FIREBASE_WEB_API_KEY=
 FIREBASE_PROJECT_ID=
-CLOUD_RUN_URL=https://stock-screener-119320994983.asia-northeast3.run.app
+CLOUD_RUN_URL=https://stock-screener-ug23nrnjva-du.a.run.app
 TELEGRAM_BOT_TOKEN=
 TELEGRAM_CHAT_ID=
 ```
