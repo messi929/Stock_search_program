@@ -701,7 +701,7 @@ const COL_DEFS={
   volume:{label:'거래량',fmt:v=>fmtVol(v)},
   volume_ratio:{label:'거래량비',fmt:v=>v>0?`<span class="${v>=3?'up':''}">${v.toFixed(1)}x</span>`:'-'},
   surge_score:{label:'급등점수',fmt:v=>v>0?`${v}/4`:'-'},
-  buy_score:{label:'AI점수',fmt:v=>v>0?`<span class="${v>=70?'up':v>=50?'':'down'}" style="font-weight:700">${v.toFixed(0)}</span>`:'-'},
+  buy_score:{label:'AI점수',fmt:v=>v>0?`<span style="font-weight:700;color:${v>=70?'var(--red)':v>=50?'var(--text)':'var(--text3)'}">${v.toFixed(0)}</span>`:'-'},
   buy_grade:{label:'등급',fmt:v=>{const c={'적극매수':'badge-surge','매수':'badge-golden','관심':'badge-theme'};return v&&v!=='관망'?`<span class="badge ${c[v]||''}">${v}</span>`:(v||'-')}},
   pre_surge_score:{label:'급등예보',fmt:v=>v>0?`<span class="${v>=3?'up':''}">${v}/5</span>`:'-'},
   accumulation:{label:'매집',fmt:v=>v?'<span class="badge badge-surge">매집</span>':'-'},
