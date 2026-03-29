@@ -49,12 +49,14 @@ body{font-family:'Pretendard',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-s
 .seg-btn.active{background:var(--bg2);color:var(--blue);box-shadow:var(--shadow);}
 
 /* ── Category Chips ── */
-.chip-bar{display:flex;gap:8px;padding:16px 0;overflow-x:auto;scrollbar-width:none;}
-.chip-bar::-webkit-scrollbar{display:none;}
-.chip{flex-shrink:0;padding:8px 16px;border-radius:20px;border:1.5px solid var(--border);background:var(--bg2);cursor:pointer;font-size:13px;font-weight:600;color:var(--text2);transition:all .15s;display:flex;align-items:center;gap:6px;}
+.chip-bar{display:flex;gap:8px;padding:16px 0;overflow-x:auto;overflow-y:visible;scrollbar-width:thin;scrollbar-color:var(--border) transparent;padding-bottom:8px;}
+.chip-bar::-webkit-scrollbar{height:4px;}
+.chip-bar::-webkit-scrollbar-track{background:transparent;}
+.chip-bar::-webkit-scrollbar-thumb{background:var(--border);border-radius:4px;}
+.chip{flex-shrink:0;padding:8px 16px;border-radius:20px;border:1.5px solid var(--border);background:var(--bg2);cursor:pointer;font-size:13px;font-weight:600;color:var(--text2);transition:all .2s;display:flex;align-items:center;gap:6px;}
 .chip:hover{border-color:var(--blue);color:var(--blue);}
 .chip:active{transform:scale(.97);}
-.chip.active{background:var(--blue);border-color:var(--blue);color:#fff;}
+.chip.active{background:var(--blue);border-color:var(--blue);color:#fff;box-shadow:0 0 0 3px rgba(49,130,246,.25);}
 .chip .chip-count{font-size:11px;opacity:.7;}
 
 /* ── Market Toggle (국내/해외) ── */
@@ -66,11 +68,13 @@ body{font-family:'Pretendard',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-s
 /* ── Theme Picker ── */
 .theme-picker{display:none;padding:0 0 8px;flex-direction:column;gap:8px;}
 .theme-picker.show{display:flex;}
-.theme-groups{display:flex;overflow-x:auto;gap:6px;padding-bottom:4px;scrollbar-width:none;}
-.theme-groups::-webkit-scrollbar{display:none;}
-.theme-group-chip{flex-shrink:0;padding:7px 16px;border-radius:20px;border:1px solid var(--border);background:var(--bg2);cursor:pointer;font-size:12px;font-weight:600;color:var(--text2);transition:all .15s;}
+.theme-groups{display:flex;overflow-x:auto;gap:6px;padding-bottom:8px;scrollbar-width:thin;scrollbar-color:var(--border) transparent;}
+.theme-groups::-webkit-scrollbar{height:4px;}
+.theme-groups::-webkit-scrollbar-track{background:transparent;}
+.theme-groups::-webkit-scrollbar-thumb{background:var(--border);border-radius:4px;}
+.theme-group-chip{flex-shrink:0;padding:7px 16px;border-radius:20px;border:1px solid var(--border);background:var(--bg2);cursor:pointer;font-size:12px;font-weight:600;color:var(--text2);transition:all .2s;}
 .theme-group-chip:hover{border-color:var(--blue);color:var(--blue);}
-.theme-group-chip.active{background:var(--blue);border-color:var(--blue);color:#fff;}
+.theme-group-chip.active{background:var(--blue);border-color:var(--blue);color:#fff;box-shadow:0 0 0 3px rgba(49,130,246,.25);}
 .theme-group-chip .tg-count{font-size:10px;opacity:.7;margin-left:4px;}
 /* theme-chips removed — 대분류 가로스크롤만 사용 */
 
@@ -226,10 +230,8 @@ tbody tr{animation:fadeIn .2s ease;}
 
 /* ── Category Tooltip ── */
 .chip{position:relative;}
-.chip:hover{z-index:20;}
-.chip-tooltip{display:none;position:absolute;bottom:calc(100% + 8px);left:50%;transform:translateX(-50%);background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:8px 12px;font-size:11px;color:var(--text2);white-space:nowrap;box-shadow:var(--shadow-lg);z-index:30;font-weight:400;pointer-events:none;}
-.chip-tooltip::after{content:'';position:absolute;top:100%;left:50%;transform:translateX(-50%);border:5px solid transparent;border-top-color:var(--border);}
-.chip:hover .chip-tooltip{display:block;}
+/* ── Global Tooltip (JS-positioned) ── */
+#globalTooltip{display:none;position:fixed;background:var(--bg2);border:1px solid var(--border2);border-radius:8px;padding:8px 14px;font-size:12px;color:var(--text);white-space:nowrap;box-shadow:var(--shadow-lg);z-index:999;pointer-events:none;max-width:300px;}
 
 /* ── Onboarding Overlay ── */
 .onboarding{display:none;position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:300;justify-content:center;align-items:center;backdrop-filter:blur(6px);}
@@ -611,6 +613,9 @@ tbody tr{animation:fadeIn .2s ease;}
   </div>
 </div>
 
+<!-- Global Tooltip -->
+<div id="globalTooltip"></div>
+
 <!-- Toast Container -->
 <div class="toast-container" id="toastContainer"></div>
 
@@ -675,6 +680,19 @@ function renderSearchResults(matches,box){
   box.classList.add('show');
 }
 document.addEventListener('click',e=>{if(!e.target.closest('.search-box'))document.getElementById('searchResults').classList.remove('show')});
+
+// ── Global Tooltip ──
+function showTip(e,el){
+  const tip=document.getElementById('globalTooltip');
+  const desc=el.dataset.desc;
+  if(!desc)return;
+  tip.textContent=desc;
+  tip.style.display='block';
+  const rect=el.getBoundingClientRect();
+  tip.style.top=(rect.bottom+8)+'px';
+  tip.style.left=Math.max(8,Math.min(rect.left+rect.width/2-tip.offsetWidth/2,window.innerWidth-tip.offsetWidth-8))+'px';
+}
+function hideTip(){document.getElementById('globalTooltip').style.display='none';}
 
 // ── Region (국내/해외) ──
 function selectRegion(r){
@@ -803,7 +821,8 @@ function selectGroup(g){
   bar.innerHTML=gd.categories.map(c=>{
     const cls=`chip ${c.key===currentCat?'active':''}`;
     const readyTag=c.ready?'':'<span style="font-size:10px;opacity:.5;margin-left:2px">&#x1F512;</span>';
-    return `<div class="${cls}" data-cat="${c.key}" data-group="${g}" onclick="selectCategory('${c.key}')"><span>${c.name}</span>${readyTag}<div class="chip-tooltip">${c.desc||c.name}</div></div>`;
+    const desc=(c.desc||'').replace(/"/g,'&quot;');
+    return `<div class="${cls}" data-cat="${c.key}" data-group="${g}" data-desc="${desc}" onclick="selectCategory('${c.key}')" onmouseenter="showTip(event,this)" onmouseleave="hideTip()"><span>${c.name}</span>${readyTag}</div>`;
   }).join('');
   const keys=gd.categories.map(c=>c.key);
   if(!keys.includes(currentCat)){if(keys.length)selectCategory(keys[0])}
@@ -812,7 +831,10 @@ function selectGroup(g){
 
 function selectCategory(c){
   currentCat=c;currentOffset=0;currentSort={by:null,asc:false,by2:null,asc2:false};selectedTheme='';selectedThemeGroup='';
-  document.querySelectorAll('.chip').forEach(e=>e.classList.toggle('active',e.dataset.cat===c));
+  document.querySelectorAll('.chip').forEach(e=>{
+    e.classList.toggle('active',e.dataset.cat===c);
+    if(e.dataset.cat===c)e.scrollIntoView({behavior:'smooth',inline:'center',block:'nearest'});
+  });
   // 카테고리 설명 표시
   const descEl=document.getElementById('catDesc');
   let desc='';
@@ -842,7 +864,13 @@ function renderThemePicker(){
 
 function pickThemeGroup(g){
   selectedThemeGroup=g;selectedTheme='';currentOffset=0;
-  renderThemePicker();search();
+  renderThemePicker();
+  // 선택된 그룹 칩을 가운데로 스크롤
+  setTimeout(()=>{
+    const active=document.querySelector('.theme-group-chip.active');
+    if(active)active.scrollIntoView({behavior:'smooth',inline:'center',block:'nearest'});
+  },50);
+  search();
 }
 
 // ── API ──
