@@ -226,7 +226,8 @@ tbody tr{animation:fadeIn .2s ease;}
 
 /* ── Category Tooltip ── */
 .chip{position:relative;}
-.chip-tooltip{display:none;position:absolute;bottom:calc(100% + 8px);left:50%;transform:translateX(-50%);background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:8px 12px;font-size:11px;color:var(--text2);white-space:nowrap;box-shadow:var(--shadow-md);z-index:10;font-weight:400;pointer-events:none;}
+.chip:hover{z-index:20;}
+.chip-tooltip{display:none;position:absolute;bottom:calc(100% + 8px);left:50%;transform:translateX(-50%);background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:8px 12px;font-size:11px;color:var(--text2);white-space:nowrap;box-shadow:var(--shadow-lg);z-index:30;font-weight:400;pointer-events:none;}
 .chip-tooltip::after{content:'';position:absolute;top:100%;left:50%;transform:translateX(-50%);border:5px solid transparent;border-top-color:var(--border);}
 .chip:hover .chip-tooltip{display:block;}
 
