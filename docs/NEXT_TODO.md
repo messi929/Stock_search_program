@@ -1,6 +1,6 @@
 # 다음 작업 목록
 
-> 업데이트: 2026-03-29 (v5.2)
+> 업데이트: 2026-03-30 (v5.3)
 
 ---
 
@@ -98,19 +98,31 @@
 
 ---
 
-## 미진행 — 다음 작업 (우선순위 순)
+## 완료 (v5.3: 클라우드 자동 수집 배포)
 
-### 1단계: 클라우드 수집기 배포 (인프라)
-- [ ] **T-F7** Cloud Run Job 빌드 — `gcloud builds submit --config=cloudbuild-collector.yaml`
-- [ ] **T-F8** Cloud Scheduler 배포 — `./deploy-cloud-jobs.sh` (20개 cron 등록)
-- [ ] **T-F9** Secret Manager 시크릿 등록 (firebase-credentials, admin-key, telegram-*)
-- [ ] **T-F10** Cloud Run Job 수동 실행 테스트 → Firestore 갱신 확인
+### 인프라 배포
+- [x] **T-F7** Cloud Run Job 빌드 — `gcloud builds submit --config=cloudbuild-collector.yaml`
+- [x] **T-F8** Cloud Scheduler 배포 — 20개 cron 등록 (heavy 4 + light-kr 10 + light-us 6)
+- [x] **T-F9** Secret Manager 시크릿 등록 (firebase-key, admin-key)
+- [x] **T-F10** Cloud Run Job 수동 실행 테스트 → KR 2,772 + US 711 종목 수집 확인
+- [x] **T-F11** App Engine 초기화 (Cloud Scheduler 필수 의존)
 
-### 2단계: 안정성 검증
-- [ ] **T-E1** 22:30 US 수집 → Cloud Run 리로드 정상 동작 확인
-- [ ] **T-E2** 06:30 / 09:30 / 16:00 각 시간대 수집 확인
+### 버그 수정 + 개선
+- [x] **T-F12** .dockerignore에서 collector.py 제외 해제 → 빌드 COPY 실패 수정
+- [x] **T-F13** cloudbuild-collector.yaml — jobs create||update 멱등성 보장
+- [x] **T-F14** collector.py — 컨테이너 로그 경로(/tmp), Firestore 수집 상태 기록
+- [x] **T-F15** /api/schedule-status — Firestore에서 수집 상태 반환 (Cloud Run 호환)
+- [x] **T-F16** deploy-cloud-jobs.sh — 원클릭 통합 배포 (검증+빌드+Job+Scheduler)
+
+### 안정성 검증 (진행 중)
+- [x] **T-E1** collector-heavy 수동 실행 → Cloud Run 리로드 정상 확인
+- [ ] **T-E2** 06:30 / 09:30 / 16:00 / 22:30 각 시간대 자동 수집 확인
 - [ ] **T-E3** 장중 light 스케줄 (10:00~15:00) 30분 간격 동작 확인
-- [ ] **T-E4** 72시간 안정성 검증 — schedule_status.json 성공률 100% 확인
+- [ ] **T-E4** 72시간 안정성 검증 — Firestore 수집 상태 성공률 100% 확인
+
+---
+
+## 미진행 — 다음 작업 (우선순위 순)
 
 ### 3단계: UI/UX 실사용 검증
 - [ ] **T-15** 브라우저 접속 → 전체 UI 검증 (Cloud Run + 데스크톱 앱)
@@ -159,11 +171,11 @@
   └─ 크롤링 없음 (CPU/메모리 절약)
         ↓
 [데스크톱 / 브라우저]
-  └─ https://stock-screener-ug23nrnjva-du.a.run.app
+  └─ https://stock-screener-119320994983.asia-northeast3.run.app
 ```
 
 ## Cloud Run 설정
-- URL: `https://stock-screener-ug23nrnjva-du.a.run.app`
+- URL: `https://stock-screener-119320994983.asia-northeast3.run.app`
 - 리전: asia-northeast3 (서울)
 - 메모리: 1Gi, CPU: 1, min-instances: 1
 - 환경변수: `RUN_MODE=server, COLLECT_MODE=readonly`
@@ -179,7 +191,7 @@ FIREBASE_CREDENTIALS=
 AUTH_ENABLED=false
 FIREBASE_WEB_API_KEY=
 FIREBASE_PROJECT_ID=
-CLOUD_RUN_URL=https://stock-screener-ug23nrnjva-du.a.run.app
+CLOUD_RUN_URL=https://stock-screener-119320994983.asia-northeast3.run.app
 TELEGRAM_BOT_TOKEN=
 TELEGRAM_CHAT_ID=
 ```

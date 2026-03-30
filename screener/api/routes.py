@@ -621,20 +621,47 @@ async def websocket_endpoint(websocket: WebSocket):
 
 @router.get("/schedule-status")
 async def get_schedule_status():
-    """스케줄 수집 상태 (안정성 모니터링)."""
+    """스케줄 수집 상태 (안정성 모니터링).
+
+    Firestore sync_metadata에서 최근 수집 상태를 반환.
+    로컬 JSON 파일이 있으면 병합.
+    """
     import json
     import os
-    status_file = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "schedule_status.json")
-    if not os.path.exists(status_file):
-        return {"message": "아직 스케줄 실행 기록 없음", "runs": [], "summary": {}}
+    from screener.db.repository import get_sync_metadata
+
+    # Firestore에서 수집 상태 가져오기
+    result = {"runs": [], "summary": {}, "cloud_status": {}}
     try:
-        with open(status_file, "r", encoding="utf-8") as f:
-            data = json.load(f)
-        # 최근 20건만 반환
-        data["runs"] = data.get("runs", [])[-20:]
-        return data
+        meta = get_sync_metadata()
+        result["cloud_status"] = {
+            "last_schedule": meta.get("last_collect_schedule", ""),
+            "last_status": meta.get("last_collect_status", ""),
+            "last_time": meta.get("last_collect_time", ""),
+            "last_elapsed": meta.get("last_collect_elapsed", 0),
+            "last_error": meta.get("last_collect_error", ""),
+            "collector_heartbeat": meta.get("collector_heartbeat", ""),
+            "kr_updated": meta.get("stocks_kr_updated_at", ""),
+            "us_updated": meta.get("stocks_us_updated_at", ""),
+            "etf_updated": meta.get("stocks_etf_updated_at", ""),
+            "history_updated": meta.get("history_updated_at", ""),
+            "themes_updated": meta.get("themes_updated_at", ""),
+        }
     except Exception as e:
-        return {"error": str(e)}
+        result["cloud_status"] = {"error": str(e)}
+
+    # 로컬 JSON 파일 (있으면 병합)
+    status_file = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "schedule_status.json")
+    if os.path.exists(status_file):
+        try:
+            with open(status_file, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            result["runs"] = data.get("runs", [])[-20:]
+            result["summary"] = data.get("summary", {})
+        except Exception:
+            pass
+
+    return result
 
 
 @router.get("/status", response_model=StatusResponse)

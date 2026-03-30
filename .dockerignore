@@ -16,7 +16,6 @@ venv/
 *.md
 desktop.py
 desktop.bat
-collector.py
 collector.bat
 setup_scheduler.bat
 run.sh

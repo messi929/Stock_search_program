@@ -40,12 +40,18 @@ logger.add(
     format="<green>{time:HH:mm:ss}</green> | <level>{level:<7}</level> | {message}",
     level="INFO",
 )
-logger.add(
-    "collector_{time:YYYY-MM-DD}.log",
-    rotation="1 day",
-    retention="7 days",
-    level="DEBUG",
-)
+
+# Cloud Run Job 등 컨테이너 환경에서는 /tmp에 로그, 로컬에서는 현재 디렉토리
+_log_dir = "/tmp" if os.environ.get("K_SERVICE") or os.environ.get("CLOUD_RUN_JOB") else "."
+try:
+    logger.add(
+        os.path.join(_log_dir, "collector_{time:YYYY-MM-DD}.log"),
+        rotation="1 day",
+        retention="7 days",
+        level="DEBUG",
+    )
+except Exception:
+    pass  # 로그 파일 생성 실패 시 stderr만 사용
 
 
 # ──────────────────────────────────────────────
@@ -654,9 +660,27 @@ ALL_SCHEDULES = HEAVY_SCHEDULES + LIGHT_KR_SCHEDULES + LIGHT_US_SCHEDULES
 
 def _save_schedule_status(schedule_name: str, status: str, elapsed: float = 0,
                           tasks_done: list = None, error: str = ""):
-    """스케줄 실행 상태를 JSON 파일에 기록 (72시간 안정성 테스트용)."""
+    """스케줄 실행 상태를 JSON 파일에 기록 (72시간 안정성 테스트용).
+
+    Cloud Run Job (one-shot) 환경에서는 Firestore에 기록하고,
+    로컬/스케줄 모드에서는 JSON 파일에도 기록.
+    """
     import json
-    status_file = os.path.join(os.path.dirname(__file__), "schedule_status.json")
+
+    # Firestore에 실행 상태 기록 (클라우드에서도 영구 보존)
+    try:
+        from screener.db.repository import update_sync_metadata
+        update_sync_metadata(
+            last_collect_schedule=schedule_name,
+            last_collect_status=status,
+            last_collect_time=datetime.now().isoformat(),
+            last_collect_elapsed=round(elapsed, 1),
+            last_collect_error=error[:200] if error else "",
+        )
+    except Exception as e:
+        logger.debug(f"Firestore 상태 기록 실패: {e}")
+
+    status_file = os.path.join(os.path.dirname(__file__) or ".", "schedule_status.json")
 
     try:
         if os.path.exists(status_file):

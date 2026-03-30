@@ -1,93 +1,54 @@
 steps:
-  # Docker 이미지 빌드 (Dockerfile.collector 사용)
+  # 1) Docker 이미지 빌드 (Dockerfile.collector 사용)
   - name: 'gcr.io/cloud-builders/docker'
     args: ['build', '-f', 'Dockerfile.collector',
            '-t', 'gcr.io/$PROJECT_ID/stock-collector', '.']
 
-  # Container Registry에 푸시
+  # 2) Container Registry에 푸시
   - name: 'gcr.io/cloud-builders/docker'
     args: ['push', 'gcr.io/$PROJECT_ID/stock-collector']
 
-  # Cloud Run Job 생성/업데이트 — heavy 수집용
+  # 3) Cloud Run Job 생성/업데이트 — heavy, light-kr, light-us
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
-    entrypoint: gcloud
+    entrypoint: bash
     args:
-      - 'run'
-      - 'jobs'
-      - 'create'
-      - 'collector-heavy'
-      - '--image'
-      - 'gcr.io/$PROJECT_ID/stock-collector'
-      - '--region'
-      - 'asia-northeast3'
-      - '--memory'
-      - '2Gi'
-      - '--cpu'
-      - '1'
-      - '--task-timeout'
-      - '900'
-      - '--max-retries'
-      - '1'
-      - '--set-env-vars'
-      - 'CLOUD_RUN_URL=https://stock-screener-119320994983.asia-northeast3.run.app'
-      - '--set-secrets'
-      - 'FIREBASE_CREDENTIALS=firebase-credentials:latest,ADMIN_KEY=admin-key:latest,TELEGRAM_BOT_TOKEN=telegram-bot-token:latest,TELEGRAM_CHAT_ID=telegram-chat-id:latest'
-      - '--args'
-      - '--all'
+      - '-c'
+      - |
+        REGION="asia-northeast3"
+        IMAGE="gcr.io/$PROJECT_ID/stock-collector"
+        CLOUD_URL="https://stock-screener-119320994983.$${REGION}.run.app"
+        SECRETS="FIREBASE_CREDENTIALS=firebase-key:latest,ADMIN_KEY=admin-key:latest,TELEGRAM_BOT_TOKEN=telegram-bot-token:latest,TELEGRAM_CHAT_ID=telegram-chat-id:latest"
+        SECRETS_LIGHT="FIREBASE_CREDENTIALS=firebase-key:latest,ADMIN_KEY=admin-key:latest"
 
-  # Cloud Run Job — KR 경량 수집용
-  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
-    entrypoint: gcloud
-    args:
-      - 'run'
-      - 'jobs'
-      - 'create'
-      - 'collector-light-kr'
-      - '--image'
-      - 'gcr.io/$PROJECT_ID/stock-collector'
-      - '--region'
-      - 'asia-northeast3'
-      - '--memory'
-      - '1Gi'
-      - '--cpu'
-      - '1'
-      - '--task-timeout'
-      - '300'
-      - '--max-retries'
-      - '1'
-      - '--set-env-vars'
-      - 'CLOUD_RUN_URL=https://stock-screener-119320994983.asia-northeast3.run.app'
-      - '--set-secrets'
-      - 'FIREBASE_CREDENTIALS=firebase-credentials:latest,ADMIN_KEY=admin-key:latest'
-      - '--args'
-      - '--kr-snapshot,--etf'
+        deploy_job() {
+          local NAME=$$1 MEM=$$2 TIMEOUT=$$3 SEC=$$4 JOB_ARGS=$$5
+          echo "=== Job: $${NAME} ==="
+          if gcloud run jobs describe "$${NAME}" --region="$${REGION}" --quiet 2>/dev/null; then
+            gcloud run jobs update "$${NAME}" \
+              --region="$${REGION}" --image="$${IMAGE}" \
+              --memory="$${MEM}" --cpu=1 \
+              --task-timeout="$${TIMEOUT}" --max-retries=1 \
+              --set-env-vars="CLOUD_RUN_URL=$${CLOUD_URL}" \
+              --set-secrets="$${SEC}" \
+              --args="$${JOB_ARGS}" --quiet
+            echo "  ✓ updated"
+          else
+            gcloud run jobs create "$${NAME}" \
+              --region="$${REGION}" --image="$${IMAGE}" \
+              --memory="$${MEM}" --cpu=1 \
+              --task-timeout="$${TIMEOUT}" --max-retries=1 \
+              --set-env-vars="CLOUD_RUN_URL=$${CLOUD_URL}" \
+              --set-secrets="$${SEC}" \
+              --args="$${JOB_ARGS}" --quiet
+            echo "  ✓ created"
+          fi
+        }
 
-  # Cloud Run Job — US 경량 수집용
-  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
-    entrypoint: gcloud
-    args:
-      - 'run'
-      - 'jobs'
-      - 'create'
-      - 'collector-light-us'
-      - '--image'
-      - 'gcr.io/$PROJECT_ID/stock-collector'
-      - '--region'
-      - 'asia-northeast3'
-      - '--memory'
-      - '1Gi'
-      - '--cpu'
-      - '1'
-      - '--task-timeout'
-      - '300'
-      - '--max-retries'
-      - '1'
-      - '--set-env-vars'
-      - 'CLOUD_RUN_URL=https://stock-screener-119320994983.asia-northeast3.run.app'
-      - '--set-secrets'
-      - 'FIREBASE_CREDENTIALS=firebase-credentials:latest,ADMIN_KEY=admin-key:latest'
-      - '--args'
-      - '--us-snapshot'
+        deploy_job "collector-heavy"    "2Gi" "900" "$${SECRETS}"       "--all"
+        deploy_job "collector-light-kr"  "1Gi" "300" "$${SECRETS_LIGHT}" "--kr-snapshot,--etf"
+        deploy_job "collector-light-us"  "1Gi" "300" "$${SECRETS_LIGHT}" "--us-snapshot"
+
+        echo "=== 모든 Job 배포 완료 ==="
 
 images:
   - 'gcr.io/$PROJECT_ID/stock-collector'
