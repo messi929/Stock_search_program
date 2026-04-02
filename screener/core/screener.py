@@ -72,7 +72,7 @@ CATEGORIES = {
             stock_type="stock", pre_surge_only=True,
             sort_by="pre_surge_score", sort_asc=False,
         ),
-        "columns": ["pre_surge_score", "volume_ratio", "volume_trend", "ma_squeeze", "change_pct", "market_cap"],
+        "columns": ["pre_surge_score", "volume_ratio", "volume_trend", "ma_squeeze", "risk_grade", "change_pct", "market_cap"],
         "requires_phase": 3,
     },
     "growth": {
@@ -117,7 +117,7 @@ CATEGORIES = {
             trading_value_min=MIN_TRADING_VALUE,
             stock_type="stock", sort_by="breakout_score", sort_asc=False,
         ),
-        "columns": ["breakout_score", "golden_cross", "ma_aligned", "volume_ratio", "change_pct", "market_cap"],
+        "columns": ["breakout_score", "golden_cross", "golden_cross_long", "ma_aligned", "volume_ratio", "change_pct", "market_cap"],
         "requires_phase": 3,
     },
     "turnaround": {
@@ -129,20 +129,20 @@ CATEGORIES = {
             market_cap_min=500, trading_value_min=MIN_TRADING_VALUE,
             stock_type="stock", sort_by="rsi", sort_asc=True,
         ),
-        "columns": ["rsi", "volume_ratio", "vs_high_52w", "pbr", "change_pct", "market_cap"],
+        "columns": ["rsi", "volume_ratio", "vs_high_52w", "pbr", "sell_signal", "change_pct", "market_cap"],
         "requires_phase": 3,
     },
 
     "recommend": {
-        "name": "AI 추천", "group": "strategy",
-        "desc": "종합 30점 이상, 매수 관심 이상 종목만 추천",
+        "name": "종합 추천", "group": "strategy",
+        "desc": "기술적·모멘텀·수급·가치 종합 30점 이상 종목 (참고용, 투자 판단은 본인 책임)",
         "icon": "brain",
         "filter": ScreenerFilter(
             market_cap_min=1000, trading_value_min=MIN_TRADING_VALUE,
             stock_type="stock", buy_score_min=30,
             sort_by="buy_score", sort_asc=False,
         ),
-        "columns": ["buy_score", "buy_grade", "pre_surge_score", "rsi", "volume_ratio", "foreign_net", "per"],
+        "columns": ["buy_score", "buy_grade", "sell_signal", "risk_grade", "pre_surge_score", "rsi", "volume_ratio", "foreign_net", "per"],
         "requires_phase": 3,
     },
 
@@ -233,7 +233,7 @@ CATEGORIES = {
             trading_value_min=MIN_TRADING_VALUE,
             stock_type="stock", sort_by="breakout_score", sort_asc=False,
         ),
-        "columns": ["breakout_score", "vs_high_52w", "volume_ratio", "volume_trend", "change_pct", "market_cap"],
+        "columns": ["breakout_score", "vs_high_52w", "volume_ratio", "volume_trend", "risk_grade", "change_pct", "market_cap"],
         "requires_phase": 3,
     },
     "oversold": {
@@ -246,7 +246,7 @@ CATEGORIES = {
             volume_ratio_min=1.0,
             stock_type="stock", sort_by="rsi", sort_asc=True,
         ),
-        "columns": ["rsi", "vs_high_52w", "volume_ratio", "change_pct", "pbr", "market_cap"],
+        "columns": ["rsi", "vs_high_52w", "volume_ratio", "sell_signal", "change_pct", "pbr", "market_cap"],
         "requires_phase": 3,
     },
 }

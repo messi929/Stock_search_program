@@ -288,7 +288,7 @@ def collect_kr_history(snapshot=None):
     from screener.core.metrics import (
         calculate_moving_averages, calculate_rsi,
         calculate_52week, detect_surging_stocks,
-        calculate_buy_score,
+        calculate_buy_score, calculate_sell_signals,
     )
     from screener.db.repository import save_stocks, save_history, load_stocks, update_sync_metadata
 
@@ -338,6 +338,7 @@ def collect_kr_history(snapshot=None):
 
     snapshot = detect_surging_stocks(snapshot)
     snapshot = calculate_buy_score(snapshot)
+    snapshot = calculate_sell_signals(snapshot)
     kr_data = snapshot[snapshot["market"].isin(["KOSPI", "KOSDAQ"])]
     save_stocks(kr_data, "kr")
     update_sync_metadata(history_updated_at=datetime.now().isoformat())
@@ -351,7 +352,7 @@ def collect_us_history():
     from screener.core.metrics import (
         calculate_moving_averages, calculate_rsi,
         calculate_52week, detect_surging_stocks,
-        calculate_buy_score,
+        calculate_buy_score, calculate_sell_signals,
     )
     from screener.db.repository import save_stocks, save_history, load_stocks, update_sync_metadata
     from screener.config import HISTORY_DAYS
@@ -445,6 +446,7 @@ def collect_us_history():
 
     us_df = detect_surging_stocks(us_df)
     us_df = calculate_buy_score(us_df)
+    us_df = calculate_sell_signals(us_df)
     save_stocks(us_df, "us")
     update_sync_metadata(us_history_updated_at=datetime.now().isoformat())
     logger.info(f"US 히스토리 완료: {len(targets)}종목, {len(history)}행")

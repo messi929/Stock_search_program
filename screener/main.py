@@ -30,7 +30,7 @@ from screener.core.data_fetcher import (
 from screener.core.metrics import (
     calculate_moving_averages, calculate_rsi,
     calculate_52week, detect_surging_stocks,
-    calculate_buy_score,
+    calculate_buy_score, calculate_sell_signals,
 )
 from screener.db.repository import (
     save_stocks, load_stocks,
@@ -75,6 +75,7 @@ async def load_from_firestore() -> bool:
         # 급등주 탐지 (메모리 내 계산)
         snapshot = detect_surging_stocks(snapshot)
         snapshot = calculate_buy_score(snapshot)
+        snapshot = calculate_sell_signals(snapshot)
 
         # 테마 로드
         themes, stock_themes, theme_groups = await loop.run_in_executor(None, load_themes)
@@ -99,6 +100,7 @@ async def load_from_firestore() -> bool:
             snapshot = _apply_technicals(snapshot, history)
             snapshot = detect_surging_stocks(snapshot)
             snapshot = calculate_buy_score(snapshot)
+            snapshot = calculate_sell_signals(snapshot)
             set_data(snapshot, etf_df=etf_df, names=names,
                      themes=themes or {}, stock_themes=stock_themes or {},
                      theme_groups=theme_groups or {},
@@ -260,6 +262,7 @@ async def _refresh_stale_data_impl(force: bool = False):
 
     snapshot = detect_surging_stocks(snapshot)
     snapshot = calculate_buy_score(snapshot)
+    snapshot = calculate_sell_signals(snapshot)
     set_data(snapshot, etf_df=etf_df, names=names, phase=1)
     logger.info("Phase 1 갱신 완료")
 
@@ -309,6 +312,7 @@ async def _refresh_stale_data_impl(force: bool = False):
 
     snapshot = detect_surging_stocks(snapshot)
     snapshot = calculate_buy_score(snapshot)
+    snapshot = calculate_sell_signals(snapshot)
     set_data(snapshot, etf_df=etf_df, names=names, phase=1)
 
     # ── 테마 (7일) ──
@@ -366,6 +370,7 @@ async def _refresh_stale_data_impl(force: bool = False):
 
     snapshot = detect_surging_stocks(snapshot)
     snapshot = calculate_buy_score(snapshot)
+    snapshot = calculate_sell_signals(snapshot)
     set_data(snapshot, etf_df=etf_df, names=names,
              themes=themes or {}, stock_themes=stock_themes or {},
              theme_groups=theme_groups or {},
@@ -418,6 +423,7 @@ async def _refresh_stale_data_impl(force: bool = False):
 
     snapshot = detect_surging_stocks(snapshot)
     snapshot = calculate_buy_score(snapshot)
+    snapshot = calculate_sell_signals(snapshot)
 
     # 최종 스냅샷을 Firestore에 저장 (기술지표 포함)
     try:

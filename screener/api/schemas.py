@@ -43,6 +43,13 @@ class StockItem(BaseModel):
     inst_net: int = 0
     buy_score: float = 0.0
     buy_grade: str = ""
+    golden_cross_long: int = 0
+    sell_signal: str = ""
+    stop_loss_pct: float = 0.0
+    target_price_pct: float = 0.0
+    volatility_20d: float = 0.0
+    atr_14: float = 0.0
+    risk_grade: str = ""
     sector: str = ""
     industry: str = ""
     themes: str = ""

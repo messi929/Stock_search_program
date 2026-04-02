@@ -132,6 +132,8 @@ tr:hover{background:var(--blue-bg);}
 .down{color:var(--blue);}
 .badge{display:inline-block;padding:2px 8px;border-radius:8px;font-size:10px;font-weight:600;}
 .badge-surge{background:rgba(240,68,82,.12);color:var(--red);}
+.badge-dead{background:rgba(240,68,82,.18);color:var(--red);font-weight:700;}
+.badge-warning{background:rgba(245,159,0,.18);color:var(--gold);font-weight:600;}
 .badge-theme{background:rgba(139,92,246,.12);color:var(--purple);}
 .badge-etf{background:rgba(245,159,0,.12);color:var(--gold);}
 .badge-golden{background:rgba(3,178,108,.12);color:var(--green);}
@@ -343,12 +345,12 @@ tbody tr{animation:fadeIn .2s ease;}
   <div class="onboarding-card">
     <div class="ob-header">
       <h2>Stock Screener Pro</h2>
-      <p>AI 기반 매수 타이밍 추천 시스템</p>
+      <p>데이터 기반 매수 타이밍 스크리닝 시스템</p>
     </div>
     <div class="ob-steps">
       <div class="ob-step">
         <div class="ob-step-num">1</div>
-        <div class="ob-step-text"><strong>카테고리 선택</strong> — 급등 예보, 성장주, AI 추천 등 전략별로 종목을 탐색합니다.</div>
+        <div class="ob-step-text"><strong>카테고리 선택</strong> — 급등 예보, 성장주, 종합 추천 등 전략별로 종목을 탐색합니다.</div>
       </div>
       <div class="ob-step">
         <div class="ob-step-num">2</div>
@@ -366,6 +368,9 @@ tbody tr{animation:fadeIn .2s ease;}
         <div class="ob-step-num">5</div>
         <div class="ob-step-text"><strong>백테스트/포트폴리오</strong> — 상단 버튼으로 시그널 적중률과 보유 종목 수익률을 확인합니다.</div>
       </div>
+    </div>
+    <div class="ob-disclaimer" style="margin:12px 24px 0;padding:10px 12px;background:rgba(255,180,0,0.08);border:1px solid rgba(255,180,0,0.2);border-radius:8px;font-size:11px;color:var(--text3);line-height:1.5">
+      <strong style="color:var(--gold)">투자 유의사항</strong> — 본 프로그램은 기술적 지표와 규칙 기반 알고리즘으로 매수 후보를 스크리닝하는 도구이며, AI/머신러닝 예측이 아닙니다. 모든 투자 판단과 책임은 본인에게 있으며, 제공되는 점수·등급·시그널은 참고 정보일 뿐 매매를 권유하지 않습니다.
     </div>
     <div class="ob-footer">
       <button class="ob-btn-primary" onclick="closeOnboarding()">시작하기</button>
@@ -719,9 +724,14 @@ const COL_DEFS={
   volume:{label:'거래량',fmt:v=>fmtVol(v)},
   volume_ratio:{label:'거래량비',fmt:v=>v>0?`<span class="${v>=3?'up':''}">${v.toFixed(1)}x</span>`:'-'},
   surge_score:{label:'급등점수',fmt:v=>v>0?`${v}/4`:'-'},
-  buy_score:{label:'AI점수',fmt:v=>v>0?`<span style="font-weight:700;color:${v>=70?'var(--red)':v>=50?'var(--text)':'var(--text3)'}">${v.toFixed(0)}</span>`:'-'},
+  buy_score:{label:'종합점수',fmt:v=>v>0?`<span style="font-weight:700;color:${v>=70?'var(--red)':v>=50?'var(--text)':'var(--text3)'}">${v.toFixed(0)}</span>`:'-'},
   buy_grade:{label:'등급',fmt:v=>{const c={'적극매수':'badge-surge','매수':'badge-golden','관심':'badge-theme'};return v&&v!=='관망'?`<span class="badge ${c[v]||''}">${v}</span>`:(v||'-')}},
-  pre_surge_score:{label:'급등예보',fmt:v=>v>0?`<span class="${v>=3?'up':''}">${v}/5</span>`:'-'},
+  sell_signal:{label:'매도신호',fmt:v=>{if(!v)return'-';const c={'손절':'badge-dead','익절':'badge-golden','경고':'badge-warning'};return`<span class="badge ${c[v]||''}">${v}</span>`}},
+  risk_grade:{label:'리스크',fmt:v=>{if(!v||v==='보통')return'<span style="color:var(--text3)">보통</span>';const c={'낮음':'var(--green)','높음':'var(--gold)','매우높음':'var(--red)'};return`<span style="font-weight:600;color:${c[v]||'var(--text3)'}">${v}</span>`}},
+  golden_cross_long:{label:'GC장기',fmt:v=>v?'<span class="badge badge-golden">GC20/60</span>':'-'},
+  volatility_20d:{label:'변동성',fmt:v=>v>0?`<span class="${v>=4?'up':''}">${v.toFixed(1)}%</span>`:'-'},
+  atr_14:{label:'ATR',fmt:v=>v>0?v.toLocaleString():'-'},
+  pre_surge_score:{label:'급등예보',fmt:v=>v>0?`<span class="${v>=4?'up':''}">${v}/5</span>`:'-'},
   accumulation:{label:'매집',fmt:v=>v?'<span class="badge badge-surge">매집</span>':'-'},
   breakout_score:{label:'돌파점수',fmt:v=>v>0?`<span class="${v>=3?'up':''}">${v}/4</span>`:'-'},
   volume_trend:{label:'거래량추세',fmt:v=>v>0?`<span class="up">${v}일↑</span>`:'-'},

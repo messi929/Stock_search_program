@@ -62,13 +62,20 @@ CACHE_DIR = SCREENER_ROOT / "cache"
 if RUN_MODE == "server":
     CACHE_DIR.mkdir(exist_ok=True)
 
-HISTORY_DAYS = 60
+HISTORY_DAYS = 250  # 52주(약 250거래일) — MA/RSI/52주고저 정확도 보장
 REFRESH_INTERVAL_MIN = 30
 
 # 급등주 기준
 SURGE_CHANGE_PCT = 5.0
 SURGE_VOLUME_RATIO = 3.0
 SURGE_MIN_SCORE = 2
+
+# 급등 예보 최소 점수 (0~5 중 N개 이상 충족)
+PRE_SURGE_MIN_SCORE = 4  # 기존 3→4로 강화
+
+# 매도 시그널 기본값
+DEFAULT_STOP_LOSS_PCT = -7.0   # 손절선: 매수가 대비 -7%
+DEFAULT_TARGET_GAIN_PCT = 15.0  # 목표가: 매수가 대비 +15%
 
 # 시가총액 단위: 억원
 DEFAULT_MARKET_CAP_MIN = 500
