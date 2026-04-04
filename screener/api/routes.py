@@ -2,7 +2,7 @@
 
 import io
 from copy import deepcopy
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from fastapi.responses import StreamingResponse
@@ -57,7 +57,8 @@ def set_data(df, etf_df=None, names=None, themes=None, stock_themes=None, theme_
     if phase is not None:
         # Phase는 낮아지지 않도록 (Firestore 캐시 → 백그라운드 갱신 시 리셋 방지)
         _data_store["loading_phase"] = max(_data_store["loading_phase"], phase)
-    _data_store["last_update"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    _kst = timezone(timedelta(hours=9))
+    _data_store["last_update"] = datetime.now(_kst).strftime("%Y-%m-%d %H:%M:%S")
     # WebSocket 알림 (비동기 스케줄)
     if _ws_clients:
         import asyncio
@@ -144,6 +145,13 @@ def _row_to_item(row) -> StockItem:
         sector=str(g("sector", "")),
         industry=str(g("industry", "")),
         etf_category=str(g("etf_category", "")),
+        golden_cross_long=int(g("golden_cross_long")),
+        sell_signal=str(g("sell_signal", "")),
+        stop_loss_pct=round(float(g("stop_loss_pct")), 2),
+        target_price_pct=round(float(g("target_price_pct")), 2),
+        volatility_20d=round(float(g("volatility_20d")), 2),
+        atr_14=round(float(g("atr_14")), 2),
+        risk_grade=str(g("risk_grade", "")),
         nav=round(float(g("nav")), 2),
         earning_rate=round(float(g("earning_rate")), 2),
     )

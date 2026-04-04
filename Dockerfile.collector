@@ -4,8 +4,12 @@ WORKDIR /app
 
 # 시스템 의존성 (lxml 빌드 등)
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    gcc g++ libxml2-dev libxslt-dev \
+    gcc g++ libxml2-dev libxslt-dev tzdata \
+    && ln -sf /usr/share/zoneinfo/Asia/Seoul /etc/localtime \
+    && echo "Asia/Seoul" > /etc/timezone \
     && rm -rf /var/lib/apt/lists/*
+
+ENV TZ=Asia/Seoul
 
 # 의존성 설치 (캐시 활용)
 COPY requirements.txt .

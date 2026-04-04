@@ -127,9 +127,17 @@ fi
 
 # 텔레그램 시크릿 존재 여부에 따라 SECRETS 문자열 결정
 SECRETS_HEAVY="FIREBASE_CREDENTIALS=firebase-key:latest,ADMIN_KEY=admin-key:latest"
-if gcloud secrets describe "telegram-bot-token" --quiet 2>/dev/null && \
-   gcloud secrets describe "telegram-chat-id" --quiet 2>/dev/null; then
-    SECRETS_HEAVY="${SECRETS_HEAVY},TELEGRAM_BOT_TOKEN=telegram-bot-token:latest,TELEGRAM_CHAT_ID=telegram-chat-id:latest"
+TELEGRAM_OK=false
+if gcloud secrets describe "telegram-bot-token" --project="${PROJECT_ID}" --quiet 2>/dev/null && \
+   gcloud secrets describe "telegram-chat-id" --project="${PROJECT_ID}" --quiet 2>/dev/null; then
+    # 버전이 실제 존재하는지까지 확인 (시크릿 껍데기만 있는 경우 방지)
+    if gcloud secrets versions access latest --secret="telegram-bot-token" --project="${PROJECT_ID}" --quiet 2>/dev/null; then
+        SECRETS_HEAVY="${SECRETS_HEAVY},TELEGRAM_BOT_TOKEN=telegram-bot-token:latest,TELEGRAM_CHAT_ID=telegram-chat-id:latest"
+        TELEGRAM_OK=true
+    fi
+fi
+if [ "$TELEGRAM_OK" = false ]; then
+    echo "    텔레그램 시크릿 미등록 → heavy Job에서 제외"
 fi
 SECRETS_LIGHT="FIREBASE_CREDENTIALS=firebase-key:latest,ADMIN_KEY=admin-key:latest"
 

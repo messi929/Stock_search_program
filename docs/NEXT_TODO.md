@@ -1,6 +1,6 @@
 # 다음 작업 목록
 
-> 업데이트: 2026-04-02 (v5.4)
+> 업데이트: 2026-04-04 (v5.4.1)
 
 ---
 
@@ -163,7 +163,50 @@
 
 ---
 
+## 완료 (v5.4.1: 핫픽스 — UTC→KST, 시크릿 검증, API 필드 매핑)
+
+### 수집 시간 UTC→KST 수정
+- [x] **T-I1** Dockerfile — `TZ=Asia/Seoul` + tzdata 설치 (Cloud Run 컨테이너 UTC 문제)
+- [x] **T-I2** Dockerfile.collector — 동일 TZ 수정
+- [x] **T-I3** routes.py — `last_update`에 명시적 KST timezone 적용 (`timedelta(hours=9)`)
+
+### Heavy Collector Job 복구
+- [x] **T-I4** cloudbuild-collector.yaml — heavy job에서 텔레그램 시크릿 제거 (SECRETS_LIGHT 사용)
+- [x] **T-I5** deploy-cloud-jobs.sh — `gcloud secrets versions access` 검증 추가 (describe만으론 부족)
+
+### v5.4 API 필드 매핑 누락 수정
+- [x] **T-I6** routes.py `_row_to_item()` — 7개 필드 매핑 추가 (golden_cross_long, sell_signal, stop_loss_pct, target_price_pct, volatility_20d, atr_14, risk_grade)
+
+### 배포
+- [x] **T-I7** Cloud Run: stock-screener-00024-rrp (100% traffic)
+- [x] **T-I8** Collector image: TZ=Asia/Seoul 적용 리빌드
+- [x] **T-I9** Heavy Job: 텔레그램 시크릿 제거 후 테스트 실행 성공
+
+---
+
 ## 미진행 — 다음 작업 (우선순위 순)
+
+### Phase A: 빈 화면 / 신뢰도 문제 해결 (심각)
+- [ ] **T-J1** surge(급등예보) 카테고리 0건 — v5.4 임계값 4/5 → 3/5 완화 또는 조건 재조정
+- [ ] **T-J2** turnaround(반등매수) 카테고리 0건 — RSI+거래량 동시 충족 조건 완화
+- [ ] **T-J3** ETF 카테고리 0건 — 1,088개 존재하는데 필터링 로직 버그
+- [ ] **T-J4** sell_signal "손절" 80~90% — 52주 고점 대비 -7% 기준 과도 → -15~20%로 완화
+- [ ] **T-J5** foreign_net/inst_net 항상 0 — 수급 데이터 미수집 → 스마트머니 카테고리 0건
+- [ ] **T-J6** golden_cross_long 항상 0 — 히스토리 200일 미달 또는 계산 로직 버그
+
+### Phase B: 데이터 품질 개선 (높음)
+- [ ] **T-J7** KR sector/industry = "0.0" — 한국 주식 섹터 분류 누락 (US는 정상)
+- [ ] **T-J8** US div_years 항상 0 — 미국 배당 연속 연수 수집 누락
+- [ ] **T-J9** KR risk_grade 편향 — 대형주 53%가 높음/매우높음 vs US 5%. 시장별 변동성 기준 분리
+- [ ] **T-J10** 히스토리 미수집 종목 20~40% — RSI/변동성/이동평균 0인 종목이 risk_grade "낮음"으로 오표시
+- [ ] **T-J11** 히스토리 없는 종목(rsi=0) 과매도 필터 통과 — 기술지표 0인 종목 카테고리 제외
+
+### Phase C: 기타 개선 (보통)
+- [ ] **T-J12** schedule-status 모니터링 빈 값 — collector_heartbeat, last_schedule 미기록
+- [ ] **T-J13** sectors 엔드포인트 `name: 0` 잘못된 항목 — US 미분류 종목 처리
+- [ ] **T-J14** stop_loss_pct/target_price_pct 전 종목 -7/+15 고정 — 변동성 기반 종목별 차등
+- [ ] **T-J15** US 성장주 ROE 이상값 — 음수 자본 기업(ROE 7000%) 필터 제외 또는 캡 처리
+- [ ] **T-J16** schedule-status 타임스탬프 UTC→KST 불일치 — collector 측 isoformat에 KST 적용
 
 ### 3단계: UI/UX 실사용 검증
 - [ ] **T-15** 브라우저 접속 → 전체 UI 검증 (Cloud Run + 데스크톱 앱)
