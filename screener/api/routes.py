@@ -335,10 +335,33 @@ async def scan_stocks(
     filtered, total = apply_filters(df, f)
     stocks = [_row_to_item(row) for _, row in filtered.iterrows()]
 
+    # 빈 결과일 때 카테고리 기준 안내 메시지
+    msg = ""
+    if not stocks:
+        cat_info = CATEGORIES.get(category, {})
+        cat_name = cat_info.get("name", category)
+        cat_desc = cat_info.get("desc", "")
+        _empty_hints = {
+            "surge": "급등예보 5개 조건 중 4개 이상 충족 종목이 현재 없습니다.\n(거래량 매집 + 추세 수렴 + 연속 상승 + 골든크로스 동시 충족 필요)",
+            "momentum": "골든크로스 발생 + 거래량 1.2배 이상 동반 종목이 현재 없습니다.",
+            "turnaround": "RSI 35 이하 + 거래량 1.5배 이상 + PBR 1.5 이하 동시 충족 종목이 현재 없습니다.",
+            "accumulation": "거래량 급증 + 가격 안정(매집 의심) 패턴이 현재 감지되지 않습니다.",
+            "breakout": "52주 고가 대비 -5% 이내 + 돌파 점수 2 이상인 종목이 현재 없습니다.",
+            "oversold": "RSI 30 이하 과매도 구간 종목이 현재 없습니다.",
+            "foreign_inst": "외국인·기관 순매수 데이터가 장중에만 수집됩니다.",
+        }
+        hint = _empty_hints.get(category, "")
+        if hint:
+            msg = hint
+        else:
+            msg = f"[{cat_name}] 조건에 맞는 종목이 현재 없습니다."
+        if cat_desc and category not in _empty_hints:
+            msg += f"\n기준: {cat_desc}"
+
     return ScanResponse(
         total=total, offset=offset, limit=limit,
         last_update=_data_store["last_update"],
-        category=category, stocks=stocks,
+        category=category, message=msg, stocks=stocks,
     )
 
 

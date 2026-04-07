@@ -892,8 +892,9 @@ function getFilterParams(){
   for(const[id,key]of fields){const el=document.getElementById(id);if(el&&el.value)p.set(key,el.value)}
   if(selectedTheme)p.set('theme',selectedTheme);
   if(selectedThemeGroup)p.set('theme_group',selectedThemeGroup);
-  // region 기반 시장 필터
-  if(!p.get('market')){
+  // region 기반 시장 필터 (ETF·watchlist는 시장 구분 없이 전체 표시)
+  const noMarketCats=['etf','watchlist'];
+  if(!p.get('market')&&!noMarketCats.includes(currentCat)){
     if(currentRegion==='us')p.set('market','US');
     else if(currentRegion==='kr')p.set('market','KR');
   }
@@ -967,7 +968,7 @@ function renderTable(data){
     }
     currentOffset=0;search()}});
   const tbody=document.getElementById('tableBody');
-  if(!data.stocks||!data.stocks.length){const msg=data.message||'조건에 맞는 종목이 없습니다';tbody.innerHTML=`<tr><td colspan="${cols.length+2}" class="empty-state">${msg}<br><button onclick="clearCustomFilter()" style="margin-top:8px;padding:6px 16px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text2);cursor:pointer;font-size:12px;">필터 초기화</button></td></tr>`;return}
+  if(!data.stocks||!data.stocks.length){const msg=data.message||'조건에 맞는 종목이 없습니다';const lines=msg.split('\n').map(l=>`<div>${l}</div>`).join('');tbody.innerHTML=`<tr><td colspan="${cols.length+2}" class="empty-state"><div style="font-size:15px;margin-bottom:6px;color:var(--text2)">📭 해당 조건을 충족하는 종목이 없습니다</div><div style="font-size:13px;line-height:1.8;color:var(--text3)">${lines}</div><button onclick="clearCustomFilter()" style="margin-top:12px;padding:6px 16px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text2);cursor:pointer;font-size:12px;">필터 초기화</button></td></tr>`;return}
   const wl=getWatchlist();
   tbody.innerHTML=data.stocks.map(s=>{
     const chg=s.change_pct>0?'up':s.change_pct<0?'down':'';
