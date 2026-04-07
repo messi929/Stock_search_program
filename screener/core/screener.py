@@ -215,7 +215,7 @@ CATEGORIES = {
     },
     "foreign_inst": {
         "name": "스마트머니", "group": "signal",
-        "desc": "외국인·기관이 순매수 중인 종목 (장중 09:00~15:30 데이터)",
+        "desc": "외국인·기관이 당일 순매수 중인 종목 (KRX 공식 데이터)",
         "icon": "globe",
         "filter": ScreenerFilter(
             market_cap_min=1000, trading_value_min=MIN_TRADING_VALUE,

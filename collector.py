@@ -238,14 +238,26 @@ def collect_themes():
     logger.info(f"테마 완료: {len(themes)}테마, {len(stock_themes)}종목")
 
 
-def collect_foreign_inst():
+def collect_foreign_inst(snapshot=None):
     """외국인/기관 순매수 수집 → Firestore."""
     from screener.core.data_fetcher import fetch_foreign_inst
-    from screener.db.repository import save_stocks, update_sync_metadata
+    from screener.db.repository import save_stocks, load_stocks, update_sync_metadata
     import pandas as pd
 
     logger.info("=== 외국인/기관 수집 시작 ===")
-    fi_data = fetch_foreign_inst()
+    # 네이버 폴백용 ticker 목록 (pykrx 실패 시 사용)
+    tickers = None
+    if snapshot is not None and "ticker" in snapshot.columns:
+        kr_mask = snapshot["market"].isin(["KOSPI", "KOSDAQ"])
+        tickers = snapshot.loc[kr_mask, "ticker"].tolist()
+    elif not tickers:
+        try:
+            kr_df = load_stocks("kr")
+            if kr_df is not None and "ticker" in kr_df.columns:
+                tickers = kr_df["ticker"].tolist()
+        except Exception:
+            pass
+    fi_data = fetch_foreign_inst(tickers=tickers)
     if fi_data:
         rows = [{"ticker": t, **d} for t, d in fi_data.items()]
         fi_df = pd.DataFrame(rows)
@@ -561,11 +573,8 @@ def collect_all():
     collect_fundamentals(snapshot)
     collect_us_snapshot()
     collect_themes()
-    # 외국인/기관: 장중에만 유효 (장외 시 네이버에서 0건 반환)
-    if _is_kr_market_hours():
-        collect_foreign_inst()
-    else:
-        logger.info("장외 시간 — 외국인/기관 수집 스킵 (장중에만 유효)")
+    # 외국인/기관: pykrx 우선, 실패 시 네이버 폴백
+    collect_foreign_inst(snapshot)
     collect_dividend(snapshot)
 
     # Phase 3: 히스토리 + 기술지표
@@ -747,7 +756,7 @@ def _run_scheduled_tasks(schedule: dict):
             elif task == "themes":
                 collect_themes()
             elif task == "foreign_inst":
-                collect_foreign_inst()
+                collect_foreign_inst(snapshot)
             elif task == "dividend":
                 collect_dividend(snapshot)
             elif task == "kr_history":

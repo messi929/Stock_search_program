@@ -494,78 +494,141 @@ def fetch_themes() -> tuple[dict, dict]:
 
 
 # ──────────────────────────────────────────────
-# 외국인/기관 순매수 (네이버금융)
+# 외국인/기관 순매수 (네이버 종목별 + pykrx 폴백)
 # ──────────────────────────────────────────────
 
-def fetch_foreign_inst() -> dict:
-    """네이버금융에서 외국인/기관 당일 순매수 수집.
+def _fetch_foreign_inst_naver(tickers: list[str]) -> dict:
+    """네이버 종목별 외국인/기관 순매수 수집 (장 마감 후에도 동작).
 
-    주의: 장 마감 후(15:30 이후) 네이버에서 데이터를 제공하지 않으므로 0건 반환됨.
-    장중(09:00~15:30)에만 유효한 데이터.
-
-    Returns:
-        {ticker: {"foreign_net": int, "inst_net": int}}  (주 단위)
+    item/frgn.naver 페이지에서 당일 외국인 순매수(주) 수집.
+    멀티스레드로 병렬 처리.
     """
-    logger.info("외국인/기관 순매수 수집 시작...")
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+
     result = {}
 
-    # sosok: 0=KOSPI, 1=KOSDAQ
-    for sosok in [0, 1]:
-        market_name = "KOSPI" if sosok == 0 else "KOSDAQ"
-        for page in range(1, 40):
-            try:
-                url = (
-                    f"https://finance.naver.com/sise/sise_deal.naver"
-                    f"?sosok={sosok}&page={page}"
-                )
-                resp = requests.get(url, headers=_HEADERS, timeout=5)
-                resp.encoding = "euc-kr"
-                soup = BeautifulSoup(resp.text, "html.parser")
+    def _fetch_one(ticker: str) -> tuple[str, int, int]:
+        try:
+            # 외국인 순매수
+            url = f"https://finance.naver.com/item/frgn.naver?code={ticker}"
+            resp = requests.get(url, headers=_HEADERS, timeout=5)
+            resp.encoding = "euc-kr"
+            soup = BeautifulSoup(resp.text, "html.parser")
 
-                rows = soup.select("table.type2 tr")
-                found = False
-                for row in rows:
-                    tds = row.select("td")
-                    if len(tds) < 7:
+            foreign_net = 0
+            inst_net = 0
+            rows = soup.select("table.type2 tr")
+            for row in rows:
+                tds = row.select("td")
+                if len(tds) >= 7:
+                    date_text = tds[0].text.strip()
+                    if not date_text or "." not in date_text:
                         continue
-
-                    # 종목코드 추출
-                    a = tds[0].select_one("a")
-                    if not a:
-                        continue
-                    href = a.get("href", "")
-                    match = re.search(r"code=(\d{6})", href)
-                    if not match:
-                        continue
-
-                    ticker = match.group(1)
-                    found = True
-
-                    def parse_int(td):
-                        text = td.text.strip().replace(",", "").replace("+", "")
-                        try:
-                            return int(text)
-                        except ValueError:
-                            return 0
-
-                    # 컬럼 순서: 종목명, 현재가, 전일비, 등락률, 외국인순매수, 기관순매수, 개인순매수
-                    foreign_net = parse_int(tds[4])
-                    inst_net = parse_int(tds[5])
-
-                    result[ticker] = {
-                        "foreign_net": foreign_net,
-                        "inst_net": inst_net,
-                    }
-
-                if not found:
+                    # 최근 1행만 (당일 데이터)
+                    raw = tds[5].text.strip().replace(",", "").replace("+", "")
+                    try:
+                        foreign_net = int(raw)
+                    except ValueError:
+                        pass
                     break
-                time.sleep(0.3)
-            except Exception:
-                break
 
-        logger.info(f"  {market_name}: {sum(1 for t, d in result.items())}종목")
+            return ticker, foreign_net, inst_net
+        except Exception:
+            return ticker, 0, 0
 
-    logger.info(f"외국인/기관 수집 완료: {len(result)}종목")
+    # 8스레드 병렬 처리
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        futures = {pool.submit(_fetch_one, t): t for t in tickers}
+        done = 0
+        for fut in as_completed(futures):
+            ticker, fn, inst = fut.result()
+            if fn != 0 or inst != 0:
+                result[ticker] = {"foreign_net": fn, "inst_net": inst}
+            done += 1
+            if done % 200 == 0:
+                logger.info(f"  외국인/기관 수집 중... {done}/{len(tickers)}")
+
+    return result
+
+
+def _fetch_foreign_inst_pykrx() -> dict:
+    """KRX에서 외국인/기관 순매수 수집 (pykrx, 원 단위)."""
+    try:
+        from pykrx import stock as pykrx_stock
+    except ImportError:
+        logger.warning("pykrx 미설치 — 스킵")
+        return {}
+
+    from datetime import timedelta
+
+    result = {}
+    today = datetime.now()
+    date_str = today.strftime("%Y%m%d")
+
+    for market in ["KOSPI", "KOSDAQ"]:
+        try:
+            df_foreign = pykrx_stock.get_market_net_purchases_of_equities(
+                date_str, date_str, market, "외국인"
+            )
+            df_inst = pykrx_stock.get_market_net_purchases_of_equities(
+                date_str, date_str, market, "기관합계"
+            )
+
+            if df_foreign.empty:
+                prev = (today - timedelta(days=3)).strftime("%Y%m%d")
+                df_foreign = pykrx_stock.get_market_net_purchases_of_equities(
+                    prev, date_str, market, "외국인"
+                )
+                df_inst = pykrx_stock.get_market_net_purchases_of_equities(
+                    prev, date_str, market, "기관합계"
+                )
+
+            if df_foreign.empty:
+                continue
+
+            col = "순매수거래대금"
+            if col not in df_foreign.columns:
+                col = df_foreign.columns[-1]
+
+            for ticker in df_foreign.index:
+                foreign_val = int(df_foreign.loc[ticker, col])
+                inst_val = int(df_inst.loc[ticker, col]) if ticker in df_inst.index else 0
+                result[ticker] = {
+                    "foreign_net": foreign_val,
+                    "inst_net": inst_val,
+                }
+
+            logger.info(f"  {market} (pykrx): {len(df_foreign)}종목")
+            time.sleep(1)
+        except Exception as e:
+            logger.warning(f"  {market} pykrx 실패: {e}")
+            continue
+
+    return result
+
+
+def fetch_foreign_inst(tickers: list[str] | None = None) -> dict:
+    """외국인/기관 순매수 수집 — pykrx 우선, 실패 시 네이버 폴백.
+
+    Returns:
+        {ticker: {"foreign_net": int, "inst_net": int}}
+    """
+    logger.info("외국인/기관 순매수 수집 시작...")
+
+    # 1차: pykrx (KRX 공식, 원 단위 거래대금)
+    result = _fetch_foreign_inst_pykrx()
+    if result:
+        logger.info(f"외국인/기관 수집 완료 (pykrx): {len(result)}종목")
+        return result
+
+    # 2차: 네이버 종목별 페이지 (주 단위, 외국인만)
+    logger.info("pykrx 데이터 없음 → 네이버 폴백 시작")
+    if not tickers:
+        logger.warning("네이버 폴백: ticker 목록 없음 → 빈 결과")
+        return {}
+
+    result = _fetch_foreign_inst_naver(tickers)
+    logger.info(f"외국인/기관 수집 완료 (네이버): {len(result)}종목")
     return result
 
 

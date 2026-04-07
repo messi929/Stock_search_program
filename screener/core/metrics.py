@@ -392,19 +392,15 @@ def calculate_buy_score(df: pd.DataFrame) -> pd.DataFrame:
     # ── 3. 수급 (KR only, 20점) / 성장 (US only, 20점) ──
     supply_score_kr = pd.Series(0.0, index=df.index)
 
-    # 외국인 순매수 (KR)
+    # 외국인 순매수 (KR) — 양수=매수, 음수=매도
     if "foreign_net" in df.columns:
         fn = df["foreign_net"]
-        supply_score_kr[fn > 0] += 4.0
-        supply_score_kr[fn > 10000] += 2.0
-        supply_score_kr[fn > 50000] += 2.0
+        supply_score_kr[fn > 0] += 8.0        # 순매수 중
 
-    # 기관 순매수 (KR)
+    # 기관 순매수 (KR) — 양수=매수, 음수=매도
     if "inst_net" in df.columns:
         inst = df["inst_net"]
-        supply_score_kr[inst > 0] += 3.0
-        supply_score_kr[inst > 10000] += 2.0
-        supply_score_kr[inst > 50000] += 2.0
+        supply_score_kr[inst > 0] += 7.0      # 순매수 중
 
     # 매집 시그널 (KR)
     if "accumulation" in df.columns:

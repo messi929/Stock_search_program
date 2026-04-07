@@ -345,7 +345,7 @@ async def scan_stocks(
             "accumulation": "거래량 급증 + 가격 안정(매집 의심) 패턴이 현재 감지되지 않습니다.",
             "breakout": "52주 고가 대비 -5% 이내 + 돌파 점수 2 이상인 종목이 현재 없습니다.",
             "oversold": "RSI 30 이하 과매도 구간 종목이 현재 없습니다.",
-            "foreign_inst": "외국인·기관 순매수 데이터는 장중(09:00~15:30)에만 제공됩니다.\n장 마감 후·주말에는 데이터가 갱신되지 않아 결과가 없을 수 있습니다.",
+            "foreign_inst": "외국인·기관 순매수 종목이 현재 없습니다.\n휴일·장 시작 전에는 직전 거래일 데이터가 표시됩니다.",
         }
         hint = _empty_hints.get(category, "")
         if hint:
@@ -374,7 +374,7 @@ _EXPORT_COLUMNS = {
     "surge_score": "급등점수", "pre_surge_score": "급등예보점수",
     "accumulation": "매집신호", "breakout_score": "돌파점수",
     "volume_trend": "거래량추세(일)", "ma_squeeze": "이평수렴(%)",
-    "foreign_net": "외국인순매수", "inst_net": "기관순매수",
+    "foreign_net": "외국인순매수(원)", "inst_net": "기관순매수(원)",
     "themes": "테마",
     "etf_category": "ETF분류", "nav": "NAV", "earning_rate": "수익률(%)",
 }

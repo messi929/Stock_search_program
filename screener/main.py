@@ -342,7 +342,12 @@ async def _refresh_stale_data_impl(force: bool = False):
     try:
         if _is_stale("foreign_inst_updated_at", max_age_hours=intervals["foreign_inst"]):
             logger.info(f"외국인/기관 갱신 중... (주기: {intervals['foreign_inst']}h)")
-            fi_data = await loop.run_in_executor(None, fetch_foreign_inst)
+            kr_tickers = snapshot.loc[
+                snapshot["market"].isin(["KOSPI", "KOSDAQ"]), "ticker"
+            ].tolist() if snapshot is not None else None
+            fi_data = await loop.run_in_executor(
+                None, lambda: fetch_foreign_inst(tickers=kr_tickers)
+            )
             if fi_data:
                 snapshot = apply_foreign_inst(snapshot, fi_data)
                 try:

@@ -717,6 +717,7 @@ function toggleWatchlist(t){let w=getWatchlist();if(w.includes(t))w=w.filter(x=>
 function isUS(m){return m==='NASDAQ'||m==='S&P500'}
 function fmtPrice(v,market){return isUS(market)?'$'+v.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2}):v.toLocaleString()+'원'}
 function fmtVol(v){if(Math.abs(v)>=1e6)return(v/1e6).toFixed(1)+'M';if(Math.abs(v)>=1e3)return(v/1e3).toFixed(0)+'K';return v.toLocaleString()}
+function fmtAmt(v){const a=Math.abs(v);if(a>=1e12)return(v/1e12).toFixed(1)+'조';if(a>=1e8)return(v/1e8).toFixed(0)+'억';if(a>=1e7)return(v/1e7).toFixed(0)+'천만';if(a>=1e4)return(v/1e4).toFixed(0)+'만';return v.toLocaleString()+'원'}
 function fmtCap(v){if(v>=99999)return'-';if(v>=10000)return(v/10000).toFixed(1)+'조';if(v>0)return Math.round(v).toLocaleString();return'-'}
 
 const COL_DEFS={
@@ -757,8 +758,8 @@ const COL_DEFS={
   etf_category:{label:'분류',fmt:v=>v?`<span class="badge badge-etf">${v}</span>`:'-'},
   nav:{label:'NAV',fmt:v=>v>0?v.toLocaleString():'-'},
   earning_rate:{label:'수익률',fmt:v=>`<span class="${v>0?'up':v<0?'down':''}">${v>0?'+':''}${v.toFixed(2)}%</span>`},
-  foreign_net:{label:'외국인',fmt:v=>v!==0?`<span class="${v>0?'up':'down'}">${v>0?'+':''}${fmtVol(v)}</span>`:'-'},
-  inst_net:{label:'기관',fmt:v=>v!==0?`<span class="${v>0?'up':'down'}">${v>0?'+':''}${fmtVol(v)}</span>`:'-'},
+  foreign_net:{label:'외국인',fmt:v=>v!==0?`<span class="${v>0?'up':'down'}">${v>0?'+':''}${fmtAmt(v)}</span>`:'-'},
+  inst_net:{label:'기관',fmt:v=>v!==0?`<span class="${v>0?'up':'down'}">${v>0?'+':''}${fmtAmt(v)}</span>`:'-'},
 };
 
 // ── Filter ──
