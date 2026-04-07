@@ -930,11 +930,15 @@ async def get_sector_flow():
     # 테마 그룹별 수급 집계
     from screener.db.repository import THEME_GROUP_MAP
     group_flow = {}
+    import math
     for _, row in kr.iterrows():
         themes_str = str(row.get("themes", ""))
         fn = float(row.get("foreign_net", 0))
         inst = float(row.get("inst_net", 0))
         mcap = float(row.get("market_cap", 0))
+        fn = 0.0 if (math.isnan(fn) or math.isinf(fn)) else fn
+        inst = 0.0 if (math.isnan(inst) or math.isinf(inst)) else inst
+        mcap = 0.0 if (math.isnan(mcap) or math.isinf(mcap)) else mcap
 
         # 종목의 테마에서 그룹 결정
         group = "기타"
@@ -957,13 +961,15 @@ async def get_sector_flow():
     for name, data in sorted(group_flow.items(), key=lambda x: x[1]["foreign_net"], reverse=True):
         if data["count"] < 3:
             continue
+        fn = data["foreign_net"]
+        inst = data["inst_net"]
         sectors.append({
             "name": name,
-            "foreign_net": int(data["foreign_net"]),
-            "inst_net": int(data["inst_net"]),
-            "market_cap": round(data["market_cap"]),
+            "foreign_net": int(fn) if not pd.isna(fn) else 0,
+            "inst_net": int(inst) if not pd.isna(inst) else 0,
+            "market_cap": round(data["market_cap"]) if not pd.isna(data["market_cap"]) else 0,
             "count": data["count"],
-            "flow": "inflow" if data["foreign_net"] > 0 else "outflow",
+            "flow": "inflow" if fn > 0 else "outflow",
         })
 
     return {"sectors": sectors}
