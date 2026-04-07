@@ -73,10 +73,6 @@ SURGE_MIN_SCORE = 2
 # 급등 예보 최소 점수 (0~5 중 N개 이상 충족)
 PRE_SURGE_MIN_SCORE = 4  # 기존 3→4로 강화
 
-# 매도 시그널 기본값
-DEFAULT_STOP_LOSS_PCT = -7.0   # 손절선: 매수가 대비 -7%
-DEFAULT_TARGET_GAIN_PCT = 15.0  # 목표가: 매수가 대비 +15%
-
 # 시가총액 단위: 억원
 DEFAULT_MARKET_CAP_MIN = 500
 DEFAULT_MARKET_CAP_MAX = 999999

@@ -1,4 +1,4 @@
-"""파생 지표 계산: 이동평균, RSI, 거래량 비율 + 예측 시그널 + 매도 시그널 + 리스크."""
+"""파생 지표 계산: 이동평균, RSI, 거래량 비율 + 예측 시그널 + 리스크."""
 
 import numpy as np
 import pandas as pd
@@ -6,7 +6,7 @@ from loguru import logger
 
 from screener.config import (
     SURGE_CHANGE_PCT, SURGE_VOLUME_RATIO, SURGE_MIN_SCORE,
-    PRE_SURGE_MIN_SCORE, DEFAULT_STOP_LOSS_PCT, DEFAULT_TARGET_GAIN_PCT,
+    PRE_SURGE_MIN_SCORE,
 )
 
 
@@ -241,57 +241,6 @@ def calculate_52week(history: pd.DataFrame) -> tuple[pd.Series, pd.Series]:
     return vs_high.round(2), vs_low.round(2)
 
 
-# ──────────────────────────────────────────────
-# 매도 시그널
-# ──────────────────────────────────────────────
-
-def calculate_sell_signals(df: pd.DataFrame) -> pd.DataFrame:
-    """매도 시그널 계산: 손절선, 목표가, 종합 매도 경고.
-
-    sell_signal 값:
-      - "손절"  : 현재가가 최근 고점 대비 손절선 이하
-      - "익절"  : 현재가가 최근 저점 대비 목표가 이상 도달
-      - "경고"  : 데드크로스 or RSI 과열(>70) or MA 역배열
-      - ""      : 매도 시그널 없음
-    """
-    df = df.copy()
-    df["sell_signal"] = ""
-    df["stop_loss_pct"] = DEFAULT_STOP_LOSS_PCT
-    df["target_price_pct"] = DEFAULT_TARGET_GAIN_PCT
-
-    # 손절 시그널: 52주 고점 대비 큰 하락
-    if "vs_high_52w" in df.columns:
-        df.loc[df["vs_high_52w"] <= DEFAULT_STOP_LOSS_PCT, "sell_signal"] = "손절"
-
-    # 익절 시그널: 52주 저점 대비 목표 수익률 도달
-    if "vs_low_52w" in df.columns:
-        df.loc[
-            (df["sell_signal"] == "") &
-            (df["vs_low_52w"] >= DEFAULT_TARGET_GAIN_PCT),
-            "sell_signal"
-        ] = "익절"
-
-    # 경고 시그널: 데드크로스 or RSI 과열 or MA 역배열
-    warning_mask = pd.Series(False, index=df.index)
-
-    if "death_cross" in df.columns:
-        warning_mask = warning_mask | (df["death_cross"] == 1)
-
-    if "rsi" in df.columns:
-        warning_mask = warning_mask | (df["rsi"] >= 75)
-
-    # MA 역배열 (MA5 < MA20 < MA60)
-    if all(c in df.columns for c in ["ma5", "ma20", "ma60"]):
-        ma_reverse = (df["ma5"] < df["ma20"]) & (df["ma20"] < df["ma60"])
-        # MA값이 실제로 계산된 경우만 (0이 아닌 경우)
-        ma_valid = (df["ma5"] > 0) & (df["ma60"] > 0)
-        warning_mask = warning_mask | (ma_reverse & ma_valid)
-
-    df.loc[(df["sell_signal"] == "") & warning_mask, "sell_signal"] = "경고"
-
-    sell_count = (df["sell_signal"] != "").sum()
-    logger.info(f"매도 시그널 계산 완료: {sell_count}종목에 시그널 발생")
-    return df
 
 
 # ──────────────────────────────────────────────

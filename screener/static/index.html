@@ -133,7 +133,6 @@ tr:hover{background:var(--blue-bg);}
 .down{color:var(--blue);}
 .badge{display:inline-block;padding:2px 8px;border-radius:8px;font-size:10px;font-weight:600;}
 .badge-surge{background:rgba(240,68,82,.12);color:var(--red);}
-.badge-dead{background:rgba(240,68,82,.18);color:var(--red);font-weight:700;}
 .badge-warning{background:rgba(245,159,0,.18);color:var(--gold);font-weight:600;}
 .badge-theme{background:rgba(139,92,246,.12);color:var(--purple);}
 .badge-etf{background:rgba(245,159,0,.12);color:var(--gold);}
@@ -727,7 +726,6 @@ const COL_DEFS={
   surge_score:{label:'급등점수',fmt:v=>v>0?`${v}/4`:'-'},
   buy_score:{label:'종합점수',fmt:v=>v>0?`<span style="font-weight:700;color:${v>=70?'var(--red)':v>=50?'var(--text)':'var(--text3)'}">${v.toFixed(0)}</span>`:'-'},
   buy_grade:{label:'등급',fmt:v=>{const c={'적극매수':'badge-surge','매수':'badge-golden','관심':'badge-theme'};return v&&v!=='관망'?`<span class="badge ${c[v]||''}">${v}</span>`:(v||'-')}},
-  sell_signal:{label:'매도신호',fmt:v=>{if(!v)return'-';const c={'손절':'badge-dead','익절':'badge-golden','경고':'badge-warning'};return`<span class="badge ${c[v]||''}">${v}</span>`}},
   risk_grade:{label:'리스크',fmt:v=>{if(!v||v==='보통')return'<span style="color:var(--text3)">보통</span>';const c={'낮음':'var(--green)','높음':'var(--gold)','매우높음':'var(--red)'};return`<span style="font-weight:600;color:${c[v]||'var(--text3)'}">${v}</span>`}},
   golden_cross_long:{label:'GC장기',fmt:v=>v?'<span class="badge badge-golden">GC20/60</span>':'-'},
   volatility_20d:{label:'변동성',fmt:v=>v>0?`<span class="${v>=4?'up':''}">${v.toFixed(1)}%</span>`:'-'},

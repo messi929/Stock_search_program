@@ -129,7 +129,7 @@ CATEGORIES = {
             market_cap_min=500, trading_value_min=MIN_TRADING_VALUE,
             stock_type="stock", sort_by="rsi", sort_asc=True,
         ),
-        "columns": ["rsi", "volume_ratio", "vs_high_52w", "pbr", "sell_signal", "change_pct", "market_cap"],
+        "columns": ["rsi", "volume_ratio", "vs_high_52w", "pbr", "change_pct", "market_cap"],
         "requires_phase": 3,
     },
 
@@ -142,7 +142,7 @@ CATEGORIES = {
             stock_type="stock", buy_score_min=30,
             sort_by="buy_score", sort_asc=False,
         ),
-        "columns": ["buy_score", "buy_grade", "sell_signal", "risk_grade", "pre_surge_score", "rsi", "volume_ratio", "foreign_net", "per"],
+        "columns": ["buy_score", "buy_grade", "risk_grade", "pre_surge_score", "rsi", "volume_ratio", "foreign_net", "per"],
         "requires_phase": 3,
     },
 
@@ -246,7 +246,7 @@ CATEGORIES = {
             volume_ratio_min=1.0,
             stock_type="stock", sort_by="rsi", sort_asc=True,
         ),
-        "columns": ["rsi", "vs_high_52w", "volume_ratio", "sell_signal", "change_pct", "pbr", "market_cap"],
+        "columns": ["rsi", "vs_high_52w", "volume_ratio", "change_pct", "pbr", "market_cap"],
         "requires_phase": 3,
     },
 }
