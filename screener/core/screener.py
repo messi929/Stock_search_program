@@ -142,7 +142,7 @@ CATEGORIES = {
             stock_type="stock", buy_score_min=30,
             sort_by="buy_score", sort_asc=False,
         ),
-        "columns": ["buy_score", "buy_grade", "risk_grade", "pre_surge_score", "rsi", "volume_ratio", "foreign_net", "per"],
+        "columns": ["buy_score", "buy_grade", "risk_grade", "pre_surge_score", "rsi", "volume_ratio", "per"],
         "requires_phase": 3,
     },
 
@@ -215,7 +215,7 @@ CATEGORIES = {
     },
     "foreign_inst": {
         "name": "스마트머니", "group": "signal",
-        "desc": "외국인·기관이 순매수 중인 종목",
+        "desc": "외국인·기관이 순매수 중인 종목 (장중 09:00~15:30 데이터)",
         "icon": "globe",
         "filter": ScreenerFilter(
             market_cap_min=1000, trading_value_min=MIN_TRADING_VALUE,
