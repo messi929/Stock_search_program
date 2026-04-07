@@ -215,7 +215,75 @@
 
 ---
 
-## 미진행 — 다음 작업 (우선순위 순)
+## 완료 (v6.0: 기관급 분석 — Phase 1~5 백엔드)
+
+### Phase 1: 시그널 신뢰도 확보
+- [x] **P1-1** backtest.py 전면 개편 — 다기간 수익률(5/10/20/60d), sharpe, profit_factor, max_drawdown
+- [x] **P1-2** score_history Firestore 컬렉션 — 30일 보관, 16:00 장마감 1회 저장
+- [x] **P1-3** 벤치마크 대비 알파 — 전종목 평균 수익률 기준, 시그널별 alpha 필드
+
+### Phase 2: 수급 분석 고도화
+- [x] **P2-1** supply_history Firestore 컬렉션 — 종목별 20일 수급 이력 자동 저장
+- [x] **P2-2** 수급 시그널 — foreign_consecutive, supply_intensity, dual_buy, supply_grade(5등급)
+- [x] **P2-3** GET /api/market-sentiment — 시장 전체 수급 게이지 (외국인/기관 비율, 등락비)
+
+### Phase 3: 펀더멘탈 깊이 확장
+- [x] **P3-1** yfinance 10개 필드 추가 — forward_pe, peg_ratio, ev_ebitda, profit_margin, operating_margin, fcf_yield, debt_equity, revenue_growth, target_price, target_upside
+- [x] **P3-2** StockItem 스키마 확장 — 12개 신규 필드 (62 fields total)
+- [x] **P3-3** buy_score 가치 팩터 5단계 강화 — PER(4) + PBR(3) + EV/EBITDA(3) + FCF(3) + 목표가(2)
+- [x] **P3-4** quality(퀄리티주) 카테고리 추가 — profit_margin≥10, debt_equity≤100, revenue_growth≥5
+
+### Phase 4: 리스크 프레임워크
+- [x] **P4-1** ATR 기반 포지션 사이징 — 2ATR 손절, 최대 25%
+- [x] **P4-2** POST /api/portfolio/risk — 상관관계 행렬 + 포트폴리오 변동성 + 섹터 편중 경고
+- [x] **P4-3** GET /api/market-regime — 강세/약세/횡보 감지 + 전략별 가중치
+
+### Phase 5: 차별화 기능
+- [x] **P5-1** GET /api/compare — 2~5개 종목 나란히 비교
+- [x] **P5-2** 스마트 복합 알림 — 외국인연속+기술반등, 수급동반+목표가
+- [x] **P5-3** GET /api/sector-flow — 섹터(테마그룹)별 자금 흐름
+
+### 배포
+- [x] Cloud Run API: rev 00033 (stock-screener)
+- [x] Cloud Run Collector: 3개 Job 업데이트 (collector-heavy/light-kr/light-us)
+- [x] 핫픽스: sector-flow NaN→int 변환 에러 수정
+
+---
+
+## 미진행 — v6.0 프론트엔드 (다음 우선)
+
+### v6 UI: 시그널 성적표 (Phase 1-4)
+- [ ] **V6-UI-1** 백테스트 모달 리디자인 — 5/10/20/60일 탭, profit_factor/max_drawdown/sharpe 표시
+- [ ] **V6-UI-2** 벤치마크 대비 알파 표시 — 시그널별 초과수익 배지
+- [ ] **V6-UI-3** 스냅샷 시그널 섹션 — buy_70plus, pre_surge, breakout, dual_buy 적중률 카드
+
+### v6 UI: 수급 게이지 (Phase 2-3)
+- [ ] **V6-UI-4** 헤더/결과 상단 수급 게이지 바 — 외국인/기관 매수세 프로그레스바
+- [ ] **V6-UI-5** 수급 등급 badge — 강력매수(빨강)/매수세(주황)/중립/매도세/강력매도
+- [ ] **V6-UI-6** 외국인 연속매수일 컬럼 + 동반매수 아이콘
+
+### v6 UI: 펀더멘탈 탭 (Phase 3-5)
+- [ ] **V6-UI-7** 종목 상세 모달 탭 추가 — 기본 | 펀더멘탈 | 수급
+- [ ] **V6-UI-8** 펀더멘탈 탭 — EV/EBITDA, 영업이익률, FCF Yield, 부채비율, 매출 성장률, 목표가
+- [ ] **V6-UI-9** 수급 탭 — 외국인/기관 연속일수, 수급 강도, 동반매수, 수급 등급
+
+### v6 UI: 리스크 (Phase 4)
+- [ ] **V6-UI-10** 포지션 사이징 표시 — 모달에 "총 자산의 X% 투자 권장" 문구
+- [ ] **V6-UI-11** 포트폴리오 리스크 대시보드 — 상관관계 히트맵 + 섹터 파이차트 + 편중 경고
+- [ ] **V6-UI-12** 시장 레짐 인디케이터 — 헤더에 강세🟢/약세🔴/횡보🟡 + 추천 전략 텍스트
+
+### v6 UI: 차별화 (Phase 5)
+- [ ] **V6-UI-13** 종목 비교 뷰 — 2~3개 종목 나란히 테이블 + 차트 오버레이
+- [ ] **V6-UI-14** 섹터 자금흐름 히트맵 — 유입=녹색, 유출=빨강, 버블 크기=시총
+- [ ] **V6-UI-15** 퀄리티주 카테고리 칩 + 컬럼 정의 (profit_margin, debt_equity 등)
+
+### v6 미구현 백엔드 (외부 의존)
+- [ ] **V6-BE-1** pykrx 기관 유형별 분리 — 연기금 vs 투신 (pykrx 정상화 대기)
+- [ ] **V6-BE-2** 실적 캘린더 — yfinance earningsDate / DART API (Phase 5-4)
+
+---
+
+## 미진행 — 기존 이슈 (우선순위 순)
 
 ### Phase A: 데이터 품질 (v5.5에서 일부 해결)
 - [x] ~~T-J3 ETF 0건~~ → v5.5 T-K1에서 해결
