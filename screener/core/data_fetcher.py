@@ -178,17 +178,41 @@ def fetch_us_snapshot(top_n: int = 200) -> pd.DataFrame:
             # returnOnEquity: yfinance returns as fraction (1.52 = 152%)
             raw_div = info.get("dividendYield", 0) or 0
             raw_roe = info.get("returnOnEquity", 0) or 0
+            # v6 Phase 3: 추가 펀더멘탈 필드
+            mcap = info.get("marketCap", 0) or 0
+            fcf = info.get("freeCashflow", 0) or 0
+            fcf_yield = round(fcf / mcap * 100, 2) if mcap > 0 else 0
+            close_price = info.get("currentPrice", 0) or info.get("regularMarketPrice", 0) or 0
+            target_mean = info.get("targetMeanPrice", 0) or 0
+            target_upside = round((target_mean - close_price) / close_price * 100, 2) if close_price > 0 and target_mean > 0 else 0
             return sym, {
-                "market_cap": info.get("marketCap", 0) or 0,
+                "market_cap": mcap,
                 "pe_ratio": round(info.get("trailingPE", 0) or 0, 2),
                 "pbr": round(info.get("priceToBook", 0) or 0, 2),
                 "div_yield": round(raw_div, 2),
                 "roe": round(raw_roe * 100, 2),
                 "sector": info.get("sector", "") or "",
                 "industry": info.get("industry", "") or "",
+                # v6 Phase 3 추가
+                "forward_pe": round(info.get("forwardPE", 0) or 0, 2),
+                "peg_ratio": round(info.get("pegRatio", 0) or 0, 2),
+                "ev_ebitda": round(info.get("enterpriseToEbitda", 0) or 0, 2),
+                "profit_margin": round((info.get("profitMargins", 0) or 0) * 100, 2),
+                "operating_margin": round((info.get("operatingMargins", 0) or 0) * 100, 2),
+                "fcf_yield": fcf_yield,
+                "debt_equity": round(info.get("debtToEquity", 0) or 0, 2),
+                "revenue_growth": round((info.get("revenueGrowth", 0) or 0) * 100, 2),
+                "target_price": round(target_mean, 2),
+                "target_upside": target_upside,
             }
         except Exception:
-            return sym, {"market_cap": 0, "pe_ratio": 0, "pbr": 0, "div_yield": 0, "roe": 0, "sector": "", "industry": ""}
+            return sym, {
+                "market_cap": 0, "pe_ratio": 0, "pbr": 0, "div_yield": 0, "roe": 0,
+                "sector": "", "industry": "",
+                "forward_pe": 0, "peg_ratio": 0, "ev_ebitda": 0,
+                "profit_margin": 0, "operating_margin": 0, "fcf_yield": 0,
+                "debt_equity": 0, "revenue_growth": 0, "target_price": 0, "target_upside": 0,
+            }
 
     info_results = {}
     done = 0
@@ -225,6 +249,14 @@ def fetch_us_snapshot(top_n: int = 200) -> pd.DataFrame:
     result["industry"] = result["ticker"].map(
         lambda t: info_results.get(t, {}).get("industry", "")
     )
+
+    # v6 Phase 3: 추가 펀더멘탈 필드 매핑
+    for field in ["forward_pe", "peg_ratio", "ev_ebitda", "profit_margin",
+                   "operating_margin", "fcf_yield", "debt_equity",
+                   "revenue_growth", "target_price", "target_upside"]:
+        result[field] = result["ticker"].map(
+            lambda t, f=field: info_results.get(t, {}).get(f, 0)
+        )
 
     for col in ["eps", "shares", "foreign_net", "inst_net", "div_years", "div_growth"]:
         if col not in result.columns:

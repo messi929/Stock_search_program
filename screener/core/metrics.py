@@ -431,27 +431,55 @@ def calculate_buy_score(df: pd.DataFrame) -> pd.DataFrame:
 
     growth_score_us = growth_score_us.clip(0, 20)
 
-    # ── 4. 가치 (15점 만점 — 한/미 공통) ──
+    # ── 4. 가치 (15점 만점 — 한/미 공통, v6 강화) ──
     value_score = pd.Series(0.0, index=df.index)
 
+    # PER 적정 범위: 4점
     if "per" in df.columns:
         per = df["per"]
         per_score = pd.Series(0.0, index=df.index)
-        per_score[(per > 0) & (per <= 5)] = 6.0
-        per_score[(per > 5) & (per <= 10)] = 8.0
-        per_score[(per > 10) & (per <= 15)] = 6.0
-        per_score[(per > 15) & (per <= 25)] = 3.0
+        per_score[(per > 0) & (per <= 5)] = 3.0
+        per_score[(per > 5) & (per <= 10)] = 4.0
+        per_score[(per > 10) & (per <= 15)] = 3.0
+        per_score[(per > 15) & (per <= 25)] = 1.0
         value_score += per_score
 
+    # PBR < 1.0: 3점
     if "pbr" in df.columns:
         pbr = df["pbr"]
         pbr_score = pd.Series(0.0, index=df.index)
-        pbr_score[(pbr > 0) & (pbr <= 0.5)] = 7.0
-        pbr_score[(pbr > 0.5) & (pbr <= 1.0)] = 6.0
-        pbr_score[(pbr > 1.0) & (pbr <= 2.0)] = 3.0
-        # US는 PBR>1이 일반적이므로 2~4 구간도 약간 인정
-        pbr_score[is_us & (pbr > 2.0) & (pbr <= 4.0)] = 2.0
+        pbr_score[(pbr > 0) & (pbr <= 0.5)] = 3.0
+        pbr_score[(pbr > 0.5) & (pbr <= 1.0)] = 2.5
+        pbr_score[(pbr > 1.0) & (pbr <= 2.0)] = 1.0
+        pbr_score[is_us & (pbr > 2.0) & (pbr <= 4.0)] = 0.5
         value_score += pbr_score
+
+    # v6: EV/EBITDA < 10: 3점
+    if "ev_ebitda" in df.columns:
+        ev = df["ev_ebitda"]
+        ev_score = pd.Series(0.0, index=df.index)
+        ev_score[(ev > 0) & (ev <= 5)] = 3.0
+        ev_score[(ev > 5) & (ev <= 10)] = 2.0
+        ev_score[(ev > 10) & (ev <= 15)] = 1.0
+        value_score += ev_score
+
+    # v6: FCF Yield > 5%: 3점
+    if "fcf_yield" in df.columns:
+        fcf = df["fcf_yield"]
+        fcf_score = pd.Series(0.0, index=df.index)
+        fcf_score[fcf >= 10] = 3.0
+        fcf_score[(fcf >= 5) & (fcf < 10)] = 2.0
+        fcf_score[(fcf >= 2) & (fcf < 5)] = 1.0
+        value_score += fcf_score
+
+    # v6: 목표주가 괴리율 > 20%: 2점
+    if "target_upside" in df.columns:
+        tu = df["target_upside"]
+        tu_score = pd.Series(0.0, index=df.index)
+        tu_score[tu >= 30] = 2.0
+        tu_score[(tu >= 20) & (tu < 30)] = 1.5
+        tu_score[(tu >= 10) & (tu < 20)] = 0.5
+        value_score += tu_score
 
     value_score = value_score.clip(0, 15)
 
@@ -470,9 +498,174 @@ def calculate_buy_score(df: pd.DataFrame) -> pd.DataFrame:
     df.loc[(df["buy_score"] >= 50) & (df["buy_score"] < 70), "buy_grade"] = "매수"
     df.loc[(df["buy_score"] >= 30) & (df["buy_score"] < 50), "buy_grade"] = "관심"
 
+    # v6 Phase 4: 포지션 사이징
+    df["position_size"] = 0.0
+    if "atr_14" in df.columns and "close" in df.columns:
+        for idx, row in df.iterrows():
+            atr = float(row.get("atr_14", 0))
+            close = float(row.get("close", 0))
+            if atr > 0 and close > 0:
+                df.at[idx, "position_size"] = calculate_position_size(atr, close)
+
     high_count = (df["buy_score"] >= 50).sum()
     logger.info(f"매수 추천 점수 계산 완료: 매수 이상 {high_count}종목")
     return df
+
+
+# ──────────────────────────────────────────────
+# 수급 시그널 (v6 Phase 2)
+# ──────────────────────────────────────────────
+
+def calculate_supply_signals(df: pd.DataFrame, supply_history: dict) -> pd.DataFrame:
+    """수급 이력 기반 시그널 계산.
+
+    Args:
+        df: 종목 DataFrame
+        supply_history: {ticker: [{"date": ..., "foreign_net": ..., "inst_net": ...}, ...]}
+
+    새 필드:
+        foreign_consecutive: 외국인 연속 순매수 일수 (음수=연속 순매도)
+        supply_intensity: 수급 강도 (거래대금 대비 %)
+        dual_buy: 외국인+기관 동반 순매수
+        supply_grade: 수급 등급
+    """
+    df = df.copy()
+    df["foreign_consecutive"] = 0
+    df["supply_intensity"] = 0.0
+    df["dual_buy"] = False
+    df["supply_grade"] = "중립"
+
+    if not supply_history:
+        return df
+
+    for idx, row in df.iterrows():
+        ticker = str(row.get("ticker", ""))
+        history = supply_history.get(ticker, [])
+        if not history:
+            continue
+
+        # 연속 매수/매도 일수
+        consecutive = 0
+        for entry in reversed(history):
+            fn = entry.get("foreign_net", 0)
+            if fn > 0:
+                if consecutive >= 0:
+                    consecutive += 1
+                else:
+                    break
+            elif fn < 0:
+                if consecutive <= 0:
+                    consecutive -= 1
+                else:
+                    break
+            else:
+                break
+
+        df.at[idx, "foreign_consecutive"] = consecutive
+
+        # 수급 강도: foreign_net / trading_value * 100
+        trading_val = float(row.get("trading_value", 0))
+        foreign_net = float(row.get("foreign_net", 0))
+        if trading_val > 0:
+            df.at[idx, "supply_intensity"] = round(abs(foreign_net) / trading_val * 100, 2)
+
+        # 동반 매수
+        inst_net = float(row.get("inst_net", 0))
+        df.at[idx, "dual_buy"] = (foreign_net > 0 and inst_net > 0)
+
+    # 수급 등급
+    df.loc[
+        (df["foreign_consecutive"] >= 5) & (df["dual_buy"]),
+        "supply_grade"
+    ] = "강력매수"
+    df.loc[
+        (df["supply_grade"] == "중립") & (
+            (df["foreign_consecutive"] >= 3) | (df["supply_intensity"] > 10)
+        ),
+        "supply_grade"
+    ] = "매수세"
+    df.loc[
+        (df["supply_grade"] == "중립") & (df["foreign_consecutive"] <= -3),
+        "supply_grade"
+    ] = "매도세"
+    df.loc[
+        (df["supply_grade"] == "중립") & (df["foreign_consecutive"] <= -5),
+        "supply_grade"
+    ] = "강력매도"
+
+    buy_count = (df["supply_grade"].isin(["강력매수", "매수세"])).sum()
+    logger.info(f"수급 시그널 계산 완료: 매수세 이상 {buy_count}종목")
+    return df
+
+
+# ──────────────────────────────────────────────
+# 포지션 사이징 + 시장 레짐 (v6 Phase 4)
+# ──────────────────────────────────────────────
+
+def calculate_position_size(atr: float, close: float, account_size: float = 10_000_000, risk_pct: float = 0.02) -> float:
+    """ATR 기반 적정 투자 비중 (%).
+
+    Args:
+        atr: 14일 ATR
+        close: 현재가
+        account_size: 계좌 규모 (기본 1000만원)
+        risk_pct: 최대 손실 허용 비율 (기본 2%)
+
+    Returns:
+        position_pct: 총 자산 대비 권장 투자 비중 (%)
+    """
+    if atr <= 0 or close <= 0:
+        return 0.0
+    risk_per_share = atr * 2  # 2ATR 손절 기준
+    shares = (account_size * risk_pct) / risk_per_share
+    position_pct = (shares * close) / account_size * 100
+    return round(min(position_pct, 25.0), 1)  # 최대 25%
+
+
+def detect_market_regime(close_series: pd.Series) -> dict:
+    """시장 레짐 판별 (인덱스 close 시리즈 기반).
+
+    Returns:
+        {"regime": "bull"|"bear"|"sideways", "confidence": 0.0~1.0}
+    """
+    if close_series is None or len(close_series) < 60:
+        return {"regime": "sideways", "confidence": 0.3}
+
+    current = float(close_series.iloc[-1])
+    ma20 = float(close_series.tail(20).mean())
+    ma60 = float(close_series.tail(60).mean())
+
+    # MA60 방향 (최근 20일 vs 이전 20일)
+    ma60_recent = float(close_series.tail(20).mean())
+    ma60_prev = float(close_series.iloc[-40:-20].mean()) if len(close_series) >= 40 else ma60_recent
+    ma60_direction = ma60_recent - ma60_prev
+
+    signals = 0  # 양수=강세, 음수=약세
+
+    # 1) 현재가 > MA20
+    if current > ma20:
+        signals += 1
+    else:
+        signals -= 1
+
+    # 2) 현재가 > MA60
+    if current > ma60:
+        signals += 1
+    else:
+        signals -= 1
+
+    # 3) MA60 방향
+    if ma60_direction > 0:
+        signals += 1
+    else:
+        signals -= 1
+
+    if signals >= 2:
+        return {"regime": "bull", "confidence": round(min(0.6 + abs(signals) * 0.1, 1.0), 2)}
+    elif signals <= -2:
+        return {"regime": "bear", "confidence": round(min(0.6 + abs(signals) * 0.1, 1.0), 2)}
+    else:
+        return {"regime": "sideways", "confidence": 0.5}
 
 
 # ──────────────────────────────────────────────

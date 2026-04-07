@@ -47,6 +47,13 @@ class ScreenerFilter:
     foreign_net_min: Optional[int] = None
     sector: Optional[str] = None
     tickers: Optional[list] = None
+    # v6 Phase 3: 퀄리티 필터
+    profit_margin_min: Optional[float] = None
+    debt_equity_max: Optional[float] = None
+    revenue_growth_min: Optional[float] = None
+    # v6 Phase 2: 수급 필터
+    dual_buy_only: bool = False
+    supply_grade: Optional[str] = None
     sort_by: str = "change_pct"
     sort_asc: bool = False
     sort_by2: Optional[str] = None
@@ -133,6 +140,18 @@ CATEGORIES = {
         "requires_phase": 3,
     },
 
+    "quality": {
+        "name": "퀄리티주", "group": "strategy",
+        "desc": "높은 수익성 + 낮은 부채 + 안정 성장",
+        "icon": "award",
+        "filter": ScreenerFilter(
+            profit_margin_min=10, debt_equity_max=100,
+            revenue_growth_min=5, market_cap_min=1000,
+            stock_type="stock", sort_by="profit_margin", sort_asc=False,
+        ),
+        "columns": ["profit_margin", "operating_margin", "debt_equity",
+                     "revenue_growth", "fcf_yield", "ev_ebitda", "per"],
+    },
     "recommend": {
         "name": "종합 추천", "group": "strategy",
         "desc": "기술적·모멘텀·수급·가치 종합 30점 이상 종목 (참고용, 투자 판단은 본인 책임)",
@@ -262,7 +281,7 @@ GROUPS = {
 # Phase 3 필요 카테고리: 기술지표(RSI/MA/52주) 기반 시그널
 CATEGORY_PHASE = {
     "surge": 3, "growth": 2, "value": 2, "dividend": 2,
-    "momentum": 3, "turnaround": 3, "recommend": 3,
+    "quality": 2, "momentum": 3, "turnaround": 3, "recommend": 3,
     "etf": 1, "bluechip": 1, "smallcap": 1, "theme": 2, "watchlist": 1,
     "accumulation": 3, "foreign_inst": 1, "breakout": 3, "oversold": 3,
 }
@@ -440,6 +459,20 @@ def apply_filters(df: pd.DataFrame, f: ScreenerFilter) -> tuple[pd.DataFrame, in
             result = result.iloc[0:0]
         else:
             result = result[result["buy_score"] >= f.buy_score_min]
+
+    # v6 Phase 3: 퀄리티 필터
+    if f.profit_margin_min is not None and "profit_margin" in result.columns:
+        result = result[result["profit_margin"] >= f.profit_margin_min]
+    if f.debt_equity_max is not None and "debt_equity" in result.columns:
+        result = result[(result["debt_equity"] > 0) & (result["debt_equity"] <= f.debt_equity_max)]
+    if f.revenue_growth_min is not None and "revenue_growth" in result.columns:
+        result = result[result["revenue_growth"] >= f.revenue_growth_min]
+
+    # v6 Phase 2: 수급 필터
+    if f.dual_buy_only and "dual_buy" in result.columns:
+        result = result[result["dual_buy"] == True]
+    if f.supply_grade and "supply_grade" in result.columns:
+        result = result[result["supply_grade"] == f.supply_grade]
 
     # 외국인 순매수 최소 — 데이터 없으면 빈 결과
     if f.foreign_net_min is not None:

@@ -151,6 +151,24 @@ def _row_to_item(row) -> StockItem:
         risk_grade=str(g("risk_grade", "")),
         nav=round(float(g("nav")), 2),
         earning_rate=round(float(g("earning_rate")), 2),
+        # v6 Phase 2: 수급
+        foreign_consecutive=int(g("foreign_consecutive")),
+        supply_intensity=round(float(g("supply_intensity")), 2),
+        dual_buy=bool(g("dual_buy", False)),
+        supply_grade=str(g("supply_grade", "")),
+        # v6 Phase 3: 펀더멘탈 확장
+        forward_pe=round(float(g("forward_pe")), 2),
+        peg_ratio=round(float(g("peg_ratio")), 2),
+        ev_ebitda=round(float(g("ev_ebitda")), 2),
+        profit_margin=round(float(g("profit_margin")), 2),
+        operating_margin=round(float(g("operating_margin")), 2),
+        fcf_yield=round(float(g("fcf_yield")), 2),
+        debt_equity=round(float(g("debt_equity")), 2),
+        revenue_growth=round(float(g("revenue_growth")), 2),
+        target_price=round(float(g("target_price")), 2),
+        target_upside=round(float(g("target_upside")), 2),
+        # v6 Phase 4: 리스크
+        position_size=round(float(g("position_size")), 1),
     )
 
 
@@ -542,7 +560,7 @@ async def get_sectors():
 
 @router.get("/backtest")
 async def get_backtest():
-    """시그널 백테스트 결과."""
+    """시그널 백테스트 결과 (v6 다기간)."""
     from screener.core.backtest import backtest_signals
     from screener.db.repository import load_history
 
@@ -551,14 +569,14 @@ async def get_backtest():
 
     df = _get_combined_df()
     if df is None or df.empty:
-        return {"signals": {}, "message": "데이터 없음"}
+        return {"signals": {}, "score_tracking": {}, "message": "데이터 없음"}
 
     history = await loop.run_in_executor(None, load_history)
     if history.empty:
-        return {"signals": {}, "message": "히스토리 데이터 없음"}
+        return {"signals": {}, "score_tracking": {}, "message": "히스토리 데이터 없음"}
 
     results = await loop.run_in_executor(None, backtest_signals, history, df)
-    return {"signals": results}
+    return results if results else {"signals": {}, "score_tracking": {}}
 
 
 @router.post("/portfolio")
@@ -705,3 +723,247 @@ async def get_status():
         last_update=_data_store["last_update"],
         loading_phase=_data_store["loading_phase"],
     )
+
+
+# ──────────────────────────────────────────────
+# v6 Phase 2-3: 시장 전체 수급 게이지
+# ──────────────────────────────────────────────
+
+@router.get("/market-sentiment")
+async def get_market_sentiment():
+    """시장 전체 수급 센티먼트."""
+    df = _data_store.get("df")
+    if df is None or df.empty:
+        return {"kr": {}, "us": {}}
+
+    result = {}
+    for label, markets in [("kr", ["KOSPI", "KOSDAQ"]), ("us", ["NASDAQ", "S&P500"])]:
+        mdf = df[df["market"].isin(markets)]
+        if mdf.empty:
+            result[label] = {}
+            continue
+
+        total = len(mdf)
+        foreign_buy = (mdf.get("foreign_net", pd.Series(0, index=mdf.index)) > 0).sum()
+        inst_buy = (mdf.get("inst_net", pd.Series(0, index=mdf.index)) > 0).sum()
+        foreign_total = int(mdf.get("foreign_net", pd.Series(0, index=mdf.index)).sum())
+        advancing = (mdf["change_pct"] > 0).sum()
+        declining = (mdf["change_pct"] < 0).sum()
+        adl_ratio = round(advancing / max(declining, 1), 2)
+
+        above_ma20 = 0
+        if "ma20" in mdf.columns:
+            above_ma20 = ((mdf["close"] > 0) & (mdf["ma20"] > 0) & (mdf["close"] > mdf["ma20"])).sum()
+
+        # 센티먼트 판별
+        buy_ratio = foreign_buy / max(total, 1)
+        if buy_ratio > 0.5 and adl_ratio > 1.2:
+            sentiment = "매수 우위"
+        elif buy_ratio < 0.3 and adl_ratio < 0.8:
+            sentiment = "매도 우위"
+        else:
+            sentiment = "중립"
+
+        result[label] = {
+            "foreign_buy_ratio": round(foreign_buy / max(total, 1), 2),
+            "foreign_total_net": foreign_total,
+            "inst_buy_ratio": round(inst_buy / max(total, 1), 2),
+            "advance_decline": adl_ratio,
+            "above_ma20_ratio": round(above_ma20 / max(total, 1), 2),
+            "sentiment": sentiment,
+            "total_stocks": total,
+        }
+
+    return result
+
+
+# ──────────────────────────────────────────────
+# v6 Phase 4-2: 포트폴리오 리스크 (상관관계)
+# ──────────────────────────────────────────────
+
+@router.post("/portfolio/risk")
+async def portfolio_risk(body: dict):
+    """관심종목 상관관계 + 섹터 편중 분석."""
+    import asyncio
+    import numpy as np
+    from screener.db.repository import load_history_single
+
+    tickers = body.get("tickers", [])
+    if not tickers or len(tickers) < 2:
+        return {"error": "2개 이상 종목 필요"}
+
+    loop = asyncio.get_event_loop()
+
+    # 각 종목 히스토리 로드
+    histories = {}
+    for t in tickers[:10]:  # 최대 10개
+        hdf = await loop.run_in_executor(None, load_history_single, t)
+        if hdf is not None and not hdf.empty:
+            hdf = hdf.sort_values("date").set_index("date")
+            histories[t] = hdf["close"].pct_change().dropna()
+
+    if len(histories) < 2:
+        return {"error": "히스토리 데이터 부족"}
+
+    # 수익률 DataFrame 합치기
+    returns_df = pd.DataFrame(histories)
+    returns_df = returns_df.dropna()
+
+    if len(returns_df) < 10:
+        return {"error": "공통 기간 데이터 부족"}
+
+    # 상관계수 행렬
+    corr_matrix = returns_df.corr().round(3).values.tolist()
+
+    # 포트폴리오 변동성 (동일 비중 가정)
+    n = len(histories)
+    weights = np.array([1.0 / n] * n)
+    cov_matrix = returns_df.cov().values
+    port_vol = round(float(np.sqrt(weights @ cov_matrix @ weights) * np.sqrt(250) * 100), 2)
+
+    # 섹터 편중
+    df = _get_combined_df()
+    sector_counts = {}
+    if df is not None:
+        for t in tickers:
+            row = df[df["ticker"] == t]
+            if not row.empty:
+                sector = str(row.iloc[0].get("sector", "")) or str(row.iloc[0].get("themes", "기타"))[:10]
+                sector_counts[sector] = sector_counts.get(sector, 0) + 1
+
+    total_t = max(len(tickers), 1)
+    sector_pct = {k: round(v / total_t * 100) for k, v in sector_counts.items()}
+    max_sector = max(sector_pct.items(), key=lambda x: x[1], default=("", 0))
+
+    risk_warning = ""
+    if max_sector[1] >= 60:
+        risk_warning = f"{max_sector[0]} 섹터 {max_sector[1]}% 집중 — 분산 권장"
+
+    return {
+        "tickers": list(histories.keys()),
+        "correlation_matrix": corr_matrix,
+        "portfolio_volatility": port_vol,
+        "sector_concentration": sector_pct,
+        "risk_warning": risk_warning,
+    }
+
+
+# ──────────────────────────────────────────────
+# v6 Phase 4-3: 시장 레짐
+# ──────────────────────────────────────────────
+
+@router.get("/market-regime")
+async def get_market_regime():
+    """시장 레짐 감지 (강세/약세/횡보)."""
+    import asyncio
+    from screener.db.repository import load_history
+    from screener.core.metrics import detect_market_regime
+
+    loop = asyncio.get_event_loop()
+    history = await loop.run_in_executor(None, load_history)
+
+    if history.empty:
+        return {"regime": "unknown", "confidence": 0}
+
+    close_pivot = history.pivot_table(
+        index="date", columns="ticker", values="close", aggfunc="last"
+    ).sort_index()
+
+    # 전종목 평균으로 인덱스 대체
+    index_series = close_pivot.mean(axis=1)
+    regime = detect_market_regime(index_series)
+
+    # 레짐별 가중치
+    REGIME_WEIGHTS = {
+        "bull": {"surge": 1.0, "momentum": 1.2, "turnaround": 0.5, "value": 0.8},
+        "bear": {"surge": 0.5, "momentum": 0.3, "turnaround": 1.5, "value": 1.2},
+        "sideways": {"surge": 0.8, "momentum": 0.7, "turnaround": 1.0, "value": 1.0},
+    }
+
+    return {
+        **regime,
+        "strategy_weights": REGIME_WEIGHTS.get(regime["regime"], {}),
+    }
+
+
+# ──────────────────────────────────────────────
+# v6 Phase 5-1: 종목 비교
+# ──────────────────────────────────────────────
+
+@router.get("/compare")
+async def compare_stocks(tickers: str = ""):
+    """2~5개 종목 나란히 비교."""
+    if not tickers:
+        return {"error": "tickers 파라미터 필요 (쉼표 구분)"}
+
+    ticker_list = [t.strip() for t in tickers.split(",") if t.strip()][:5]
+    df = _get_combined_df()
+    if df is None or df.empty:
+        return {"error": "데이터 없음"}
+
+    results = []
+    for t in ticker_list:
+        row = df[df["ticker"] == t]
+        if row.empty:
+            continue
+        results.append(_row_to_item(row.iloc[0]).model_dump())
+
+    return {"stocks": results, "count": len(results)}
+
+
+# ──────────────────────────────────────────────
+# v6 Phase 5-3: 섹터 자금 흐름
+# ──────────────────────────────────────────────
+
+@router.get("/sector-flow")
+async def get_sector_flow():
+    """섹터별 외국인/기관 순매수 합계."""
+    df = _data_store.get("df")
+    if df is None or df.empty:
+        return {"sectors": []}
+
+    # 테마그룹 또는 섹터 기준
+    kr = df[df["market"].isin(["KOSPI", "KOSDAQ"])]
+    if kr.empty:
+        return {"sectors": []}
+
+    # 테마 그룹별 수급 집계
+    from screener.db.repository import THEME_GROUP_MAP
+    group_flow = {}
+    for _, row in kr.iterrows():
+        themes_str = str(row.get("themes", ""))
+        fn = float(row.get("foreign_net", 0))
+        inst = float(row.get("inst_net", 0))
+        mcap = float(row.get("market_cap", 0))
+
+        # 종목의 테마에서 그룹 결정
+        group = "기타"
+        for g, keywords in THEME_GROUP_MAP.items():
+            for kw in keywords:
+                if kw.lower() in themes_str.lower():
+                    group = g
+                    break
+            if group != "기타":
+                break
+
+        if group not in group_flow:
+            group_flow[group] = {"foreign_net": 0, "inst_net": 0, "market_cap": 0, "count": 0}
+        group_flow[group]["foreign_net"] += fn
+        group_flow[group]["inst_net"] += inst
+        group_flow[group]["market_cap"] += mcap
+        group_flow[group]["count"] += 1
+
+    sectors = []
+    for name, data in sorted(group_flow.items(), key=lambda x: x[1]["foreign_net"], reverse=True):
+        if data["count"] < 3:
+            continue
+        sectors.append({
+            "name": name,
+            "foreign_net": int(data["foreign_net"]),
+            "inst_net": int(data["inst_net"]),
+            "market_cap": round(data["market_cap"]),
+            "count": data["count"],
+            "flow": "inflow" if data["foreign_net"] > 0 else "outflow",
+        })
+
+    return {"sectors": sectors}

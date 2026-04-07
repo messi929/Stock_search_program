@@ -88,13 +88,32 @@
 - [x] Yahoo v7 API 차단 대응 — yfinance ticker.info로 전환
 - [x] metrics.py 방어 코드 (KeyError 수정)
 - [x] Cloud Run 재배포 + E2E 검증 완료
-- [ ] 외국인/기관 연속 순매수일 추적
+- [x] 외국인/기관 연속 순매수일 추적
+
+### Step 10: v6.0 기관급 분석 개선 (2026-04-07)
+- [x] **P1-1** 백테스트 다기간 수익률 (5/10/20/60일, sharpe/profit_factor/max_drawdown)
+- [x] **P1-2** score_history Firestore 저장 (30일 보관, 장마감 1회)
+- [x] **P1-3** 벤치마크 대비 알파 (전종목 평균 기준)
+- [x] **P2-1** supply_history Firestore 저장 (종목별 20일 수급 이력)
+- [x] **P2-2** 수급 시그널 (foreign_consecutive, supply_intensity, dual_buy, supply_grade)
+- [x] **P2-3** 시장 수급 센티먼트 API (GET /market-sentiment)
+- [x] **P3-1** yfinance 펀더멘탈 10개 필드 추가 (forward_pe~target_upside)
+- [x] **P3-2** StockItem 스키마 확장 (12개 신규 필드)
+- [x] **P3-3** buy_score 가치 팩터 5단계 강화 (PER+PBR+EV/EBITDA+FCF+목표가)
+- [x] **P3-4** quality(퀄리티주) 카테고리 추가
+- [x] **P4-1** ATR 기반 포지션 사이징
+- [x] **P4-2** 포트폴리오 상관관계 + 섹터 편중 (POST /portfolio/risk)
+- [x] **P4-3** 시장 레짐 감지 (GET /market-regime, 강세/약세/횡보 + 전략 가중치)
+- [x] **P5-1** 종목 비교 API (GET /compare)
+- [x] **P5-2** 스마트 복합 알림 (외국인연속+기술반등, 수급동반+목표가)
+- [x] **P5-3** 섹터 자금 흐름 API (GET /sector-flow)
 
 ### 기능 추가
 - [ ] KIS API 연동 (실시간 호가/체결)
-- [ ] 종목 비교 기능 (2~3종목 나란히)
-- [ ] 포트폴리오 시뮬레이션
+- [x] 종목 비교 기능 (2~3종목 나란히)
+- [x] 포트폴리오 리스크 분석 (상관관계 + 섹터 편중)
 - [ ] 뉴스/공시 연동
+- [ ] 실적 캘린더 (yfinance earningsDate / DART)
 
 ### 상용화 배포
 - [x] 클라우드 서버 배포 (Cloud Run)

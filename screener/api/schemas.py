@@ -53,6 +53,24 @@ class StockItem(BaseModel):
     etf_category: str = ""
     nav: float = 0.0
     earning_rate: float = 0.0
+    # v6 Phase 2: 수급 분석
+    foreign_consecutive: int = 0
+    supply_intensity: float = 0.0
+    dual_buy: bool = False
+    supply_grade: str = ""
+    # v6 Phase 3: 펀더멘탈 확장
+    forward_pe: float = 0.0
+    peg_ratio: float = 0.0
+    ev_ebitda: float = 0.0
+    profit_margin: float = 0.0
+    operating_margin: float = 0.0
+    fcf_yield: float = 0.0
+    debt_equity: float = 0.0
+    revenue_growth: float = 0.0
+    target_price: float = 0.0
+    target_upside: float = 0.0
+    # v6 Phase 4: 리스크
+    position_size: float = 0.0
 
 
 class ScanResponse(BaseModel):

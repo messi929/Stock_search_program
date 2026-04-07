@@ -133,6 +133,28 @@ def _send_signal_alerts():
                 lines = [f"  {r['name']}({r['ticker']}) RSI {r['rsi']:.0f}" for _, r in top_os.iterrows()]
                 alerts.append("📉 <b>과매도 반등 기회</b>\n" + "\n".join(lines))
 
+        # v6 Phase 5-2: 스마트 복합 알림
+        # 외국인 연속매수 + 기술적 반등
+        if "foreign_consecutive" in kr.columns and "rsi" in kr.columns:
+            smart1 = kr[
+                (kr["foreign_consecutive"] >= 5) &
+                (kr["rsi"] > 0) & (kr["rsi"] <= 40) &
+                (kr.get("golden_cross", pd.Series(0)) == 1)
+            ]
+            if not smart1.empty:
+                lines = [f"  {r['name']}({r['ticker']}) 외국인{r['foreign_consecutive']}일연속+RSI{r['rsi']:.0f}" for _, r in smart1.head(5).iterrows()]
+                alerts.append("🎯 <b>외국인 연속매수 + 기술반등</b>\n" + "\n".join(lines))
+
+        # 수급 동반 + 목표가 괴리
+        if "dual_buy" in kr.columns and "target_upside" in kr.columns:
+            smart2 = kr[
+                (kr["dual_buy"] == True) &
+                (kr["target_upside"] > 20)
+            ]
+            if not smart2.empty:
+                lines = [f"  {r['name']}({r['ticker']}) 동반매수+목표↑{r['target_upside']:.0f}%" for _, r in smart2.head(5).iterrows()]
+                alerts.append("💎 <b>수급동반 + 실적기대</b>\n" + "\n".join(lines))
+
         if alerts:
             message = "\n\n".join(alerts)
             _send_alert(message)
@@ -263,6 +285,14 @@ def collect_foreign_inst(snapshot=None):
         fi_df = pd.DataFrame(rows)
         save_stocks(fi_df, "kr")
         update_sync_metadata(foreign_inst_updated_at=datetime.now().isoformat())
+
+        # v6: 수급 이력 저장
+        try:
+            from screener.db.repository import save_supply_history
+            save_supply_history(fi_data)
+        except Exception as e:
+            logger.warning(f"supply_history 저장 실패: {e}")
+
     logger.info(f"외국인/기관 완료: {len(fi_data)}종목")
 
 
@@ -292,6 +322,33 @@ def collect_dividend(snapshot=None):
         save_stocks(div_df, "kr")
         update_sync_metadata(dividend_updated_at=datetime.now().isoformat())
     logger.info(f"배당 완료: {len(div_data)}종목")
+
+
+def collect_score_history():
+    """v6: 일별 buy_score 스냅샷 저장 (장 마감 후 1회)."""
+    from screener.db.repository import load_stocks, save_score_history
+
+    logger.info("=== score_history 저장 시작 ===")
+    kr = load_stocks("kr")
+    if kr.empty or "buy_score" not in kr.columns:
+        logger.warning("buy_score 데이터 없음 — score_history 스킵")
+        return
+
+    today = datetime.now().strftime("%Y-%m-%d")
+    scores = {}
+    for _, row in kr.iterrows():
+        ticker = str(row.get("ticker", ""))
+        bs = float(row.get("buy_score", 0))
+        if ticker and bs > 0:
+            scores[ticker] = {
+                "buy_score": round(bs, 1),
+                "buy_grade": str(row.get("buy_grade", "")),
+                "close": int(row.get("close", 0)),
+            }
+
+    if scores:
+        save_score_history(today, scores)
+    logger.info(f"score_history 완료: {len(scores)}종목")
 
 
 def collect_kr_history(snapshot=None):
@@ -349,6 +406,17 @@ def collect_kr_history(snapshot=None):
             snapshot.drop(columns=["vs_low_52w_old"], inplace=True)
 
     snapshot = detect_surging_stocks(snapshot)
+
+    # v6: 수급 시그널 계산
+    try:
+        from screener.core.metrics import calculate_supply_signals
+        from screener.db.repository import load_all_supply_history
+        supply_hist = load_all_supply_history()
+        if supply_hist:
+            snapshot = calculate_supply_signals(snapshot, supply_hist)
+    except Exception as e:
+        logger.warning(f"수급 시그널 계산 실패: {e}")
+
     snapshot = calculate_buy_score(snapshot)
     kr_data = snapshot[snapshot["market"].isin(["KOSPI", "KOSDAQ"])]
     save_stocks(kr_data, "kr")
@@ -644,7 +712,7 @@ HEAVY_SCHEDULES = [
         "name": "KR 장 마감 후",
         "type": "heavy",
         "tasks": ["kr_snapshot", "etf", "foreign_inst", "fundamentals",
-                  "kr_history", "dividend"],
+                  "kr_history", "dividend", "score_history"],
     },
     {
         "time": "22:30",
@@ -763,6 +831,8 @@ def _run_scheduled_tasks(schedule: dict):
                 collect_kr_history(snapshot)
             elif task == "us_history":
                 collect_us_history()
+            elif task == "score_history":
+                collect_score_history()
             tasks_done.append({"task": task, "elapsed": round(time.time() - task_start, 1)})
 
         elapsed = time.time() - start

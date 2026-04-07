@@ -554,6 +554,147 @@ def get_history_last_date(ticker: str) -> Optional[str]:
 
 
 # ──────────────────────────────────────────────
+# score_history — 일별 buy_score 이력 (30일 보관)
+# ──────────────────────────────────────────────
+
+def save_score_history(date_str: str, scores: dict):
+    """일별 buy_score 스냅샷 저장.
+
+    Args:
+        date_str: "2026-04-07" 형식
+        scores: {ticker: {"buy_score": 72, "buy_grade": "적극매수", "close": 196500}, ...}
+    """
+    db = get_db()
+    doc_ref = db.collection("score_history").document(date_str)
+    doc_ref.set({"date": date_str, "scores": scores, "updated_at": datetime.now().isoformat()})
+    logger.info(f"score_history 저장: {date_str} ({len(scores)}종목)")
+
+    # 30일 이전 데이터 정리
+    _cleanup_score_history(db, days=30)
+
+
+def _cleanup_score_history(db, days: int = 30):
+    """오래된 score_history 문서 삭제."""
+    cutoff = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")
+    try:
+        old_docs = db.collection("score_history").where(
+            filter=FieldFilter("date", "<", cutoff)
+        ).stream()
+        batch = db.batch()
+        count = 0
+        for doc in old_docs:
+            batch.delete(doc.reference)
+            count += 1
+            if count >= _BATCH_LIMIT:
+                batch.commit()
+                batch = db.batch()
+                count = 0
+        if count > 0:
+            batch.commit()
+            logger.info(f"score_history 정리: {cutoff} 이전 삭제")
+    except Exception as e:
+        logger.debug(f"score_history 정리 실패: {e}")
+
+
+def load_score_history(date_str: str) -> dict:
+    """특정 일자 score_history 로드."""
+    db = get_db()
+    doc = db.collection("score_history").document(date_str).get()
+    if doc.exists:
+        return doc.to_dict().get("scores", {})
+    return {}
+
+
+# ──────────────────────────────────────────────
+# supply_history — 종목별 수급 이력
+# ──────────────────────────────────────────────
+
+def save_supply_history(supply_data: dict):
+    """수급 이력 저장 (종목별 최근 20일 배열).
+
+    Args:
+        supply_data: {ticker: {"foreign_net": int, "inst_net": int}, ...}
+    """
+    db = get_db()
+    col = db.collection("supply_history")
+    today = datetime.now().strftime("%Y-%m-%d")
+
+    import time as _time
+
+    tickers = list(supply_data.keys())
+    saved = 0
+
+    for i in range(0, len(tickers), _BATCH_LIMIT):
+        batch = db.batch()
+        chunk = tickers[i:i + _BATCH_LIMIT]
+        for ticker in chunk:
+            entry = supply_data[ticker]
+            doc_ref = col.document(ticker)
+
+            # 기존 데이터 로드 후 append
+            try:
+                existing = doc_ref.get()
+                if existing.exists:
+                    data_list = existing.to_dict().get("data", [])
+                else:
+                    data_list = []
+            except Exception:
+                data_list = []
+
+            # 당일 데이터 중복 방지
+            if data_list and data_list[-1].get("date") == today:
+                data_list[-1] = {
+                    "date": today,
+                    "foreign_net": _safe_val(entry.get("foreign_net", 0)),
+                    "inst_net": _safe_val(entry.get("inst_net", 0)),
+                }
+            else:
+                data_list.append({
+                    "date": today,
+                    "foreign_net": _safe_val(entry.get("foreign_net", 0)),
+                    "inst_net": _safe_val(entry.get("inst_net", 0)),
+                })
+
+            # 최근 20일만 유지
+            data_list = data_list[-20:]
+
+            batch.set(doc_ref, {"data": data_list, "updated_at": datetime.now().isoformat()})
+
+        for attempt in range(3):
+            try:
+                batch.commit(timeout=30)
+                saved += len(chunk)
+                break
+            except Exception as e:
+                if "429" in str(e) or "exceeded" in str(e).lower():
+                    _time.sleep((attempt + 1) * 5)
+                else:
+                    logger.warning(f"supply_history 배치 저장 실패: {e}")
+                    break
+
+    logger.info(f"supply_history 저장: {saved}/{len(tickers)}종목")
+
+
+def load_supply_history(ticker: str) -> list[dict]:
+    """단일 종목 수급 이력 로드."""
+    db = get_db()
+    doc = db.collection("supply_history").document(ticker).get()
+    if doc.exists:
+        return doc.to_dict().get("data", [])
+    return []
+
+
+def load_all_supply_history() -> dict:
+    """전체 종목 수급 이력 로드."""
+    db = get_db()
+    result = {}
+    for doc in db.collection("supply_history").stream():
+        data = doc.to_dict()
+        result[doc.id] = data.get("data", [])
+    return result
+
+
+# ──────────────────────────────────────────────
 # 동기화 메타데이터
 # ──────────────────────────────────────────────
 
