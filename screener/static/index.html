@@ -87,14 +87,14 @@ body{font-family:'Pretendard',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-s
 .ft-arrow{font-size:10px;color:var(--text3);transition:transform .2s;}
 .ft-arrow.open{transform:rotate(180deg);}
 .filter-panel{max-height:0;overflow:hidden;transition:max-height .4s ease;background:var(--bg2);border-radius:0 0 var(--radius) var(--radius);margin-top:-12px;margin-bottom:12px;box-shadow:var(--shadow);}
-.filter-panel.open{max-height:800px;padding:16px;overflow-y:auto;}
-.fp-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:14px 12px;}
-.fp-item{min-height:0;}
+.filter-panel.open{max-height:none;padding:16px;}
+.fp-grid{display:flex;flex-wrap:wrap;gap:14px 12px;}
+.fp-item{flex:0 0 auto;width:200px;}
 .fp-item label{display:block;font-size:11px;color:var(--text3);font-weight:600;margin-bottom:6px;text-transform:uppercase;letter-spacing:.3px;}
 .fp-row{display:flex;align-items:center;gap:4px;}
-.fp-row input,.fp-row select{flex:1;background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:8px 12px;color:var(--text);font-size:13px;font-family:inherit;}
+.fp-row input,.fp-row select{flex:1;min-width:0;background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:8px 10px;color:var(--text);font-size:13px;font-family:inherit;}
 .fp-row input:focus,.fp-row select:focus{outline:none;border-color:var(--blue);box-shadow:0 0 0 3px rgba(49,130,246,.1);}
-.fp-row .sep{color:var(--text3);font-size:11px;}
+.fp-row .sep{color:var(--text3);font-size:11px;flex-shrink:0;}
 .fp-actions{display:flex;gap:8px;margin-top:16px;}
 .btn-primary{flex:1;background:var(--blue);color:#fff;border:none;padding:10px;border-radius:10px;font-size:14px;font-weight:600;cursor:pointer;transition:background .15s;}
 .btn-primary:hover{background:var(--blue2);}
@@ -281,7 +281,7 @@ tbody tr{animation:fadeIn .2s ease;}
   .chip{padding:6px 12px;font-size:12px;}
   .market-toggle .mt-btn{padding:6px 14px;font-size:12px;}
   .filter-panel.open{padding:12px;}
-  .fp-grid{grid-template-columns:1fr;}
+  .fp-item{width:100%;}
   .result-header{flex-direction:column;gap:8px;align-items:flex-start;}
   table{font-size:12px;}
   th{padding:8px 10px;font-size:11px;}
