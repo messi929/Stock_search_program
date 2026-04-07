@@ -184,15 +184,46 @@
 
 ---
 
+## 완료 (v5.5: 실사용성 개선 — ETF 수정, 수급 전환, UI 정리)
+
+### 버그 수정
+- [x] **T-K1** ETF 카테고리 0건 수정 — 프론트엔드 market=KR 자동 주입이 ETF(market="ETF") 제외시킴
+- [x] **T-K2** 필터 패널 영역 겹침 — max-height 확장 → flexbox 고정 폭 200px로 전환
+- [x] **T-K3** 빈 결과 안내 개선 — 카테고리별 구체적 기준 설명 메시지 (7개 시그널 카테고리)
+
+### 기능 제거
+- [x] **T-K4** 매도 시그널(손절/익절/경고) 전면 제거 — 매수가 없이 52주 고저가 기준은 실용성 없음
+  - calculate_sell_signals() 삭제, config 상수 삭제
+  - schemas, routes, screener columns, main, collector 호출부 제거
+  - 프론트엔드 매도신호 컬럼 및 badge-dead CSS 제거
+
+### 수급 데이터 전환 (네이버 → pykrx + 네이버 하이브리드)
+- [x] **T-K5** pykrx(KRX 공식) 우선, 실패 시 네이버 frgn.naver 폴백
+- [x] **T-K6** 장 마감 후에도 외국인 순매수 수집 가능 (기존: 장중만)
+- [x] **T-K7** collector에서 장중 시간 체크(_is_kr_market_hours) 제거
+- [x] **T-K8** buy_score 수급 점수: 규모별 가산점 → 부호 기반 단순화 (단위 무관)
+- [x] **T-K9** 프론트엔드 금액 표시 fmtAmt 함수 추가 (억/조 단위)
+
+### UI/UX 개선
+- [x] **T-K10** 종목 상세 모달에 외국인/기관 순매수 표시 추가
+- [x] **T-K11** 종합추천 카테고리에서 foreign_net 컬럼 제거 (장 마감 후 항상 "-")
+- [x] **T-K12** 스마트머니 카테고리 desc 업데이트 (KRX 공식 데이터)
+- [x] **T-K13** export 컬럼 단위 표기 수정 (외국인순매수(원), 기관순매수(원))
+
+### 배포
+- [x] Cloud Run: stock-screener-00025 ~ 00031 (7회 배포)
+
+---
+
 ## 미진행 — 다음 작업 (우선순위 순)
 
-### Phase A: 빈 화면 / 신뢰도 문제 해결 (심각)
-- [ ] **T-J1** surge(급등예보) 카테고리 0건 — v5.4 임계값 4/5 → 3/5 완화 또는 조건 재조정
-- [ ] **T-J2** turnaround(반등매수) 카테고리 0건 — RSI+거래량 동시 충족 조건 완화
-- [ ] **T-J3** ETF 카테고리 0건 — 1,088개 존재하는데 필터링 로직 버그
-- [ ] **T-J4** sell_signal "손절" 80~90% — 52주 고점 대비 -7% 기준 과도 → -15~20%로 완화
-- [ ] **T-J5** foreign_net/inst_net 항상 0 — 수급 데이터 미수집 → 스마트머니 카테고리 0건
-- [ ] **T-J6** golden_cross_long 항상 0 — 히스토리 200일 미달 또는 계산 로직 버그
+### Phase A: 데이터 품질 (v5.5에서 일부 해결)
+- [x] ~~T-J3 ETF 0건~~ → v5.5 T-K1에서 해결
+- [x] ~~T-J4 sell_signal 과도~~ → v5.5 T-K4에서 제거
+- [x] ~~T-J5 foreign_net 항상 0~~ → v5.5 T-K5에서 해결
+- [ ] **T-J1** surge(급등예보) 0건 — 설계 의도대로 엄격 필터링 (정상, 임계값 조정 보류)
+- [ ] **T-J2** turnaround(반등매수) 0건 — RSI+거래량 동시 충족 조건 (정상, 빈 결과 안내 추가됨)
+- [ ] **T-J6** golden_cross_long — 히스토리 수집 범위 문제 (250일 수집 중이나 커버리지 확대 필요)
 
 ### Phase B: 데이터 품질 개선 (높음)
 - [ ] **T-J7** KR sector/industry = "0.0" — 한국 주식 섹터 분류 누락 (US는 정상)
@@ -200,12 +231,11 @@
 - [ ] **T-J9** KR risk_grade 편향 — 대형주 53%가 높음/매우높음 vs US 5%. 시장별 변동성 기준 분리
 - [ ] **T-J10** 히스토리 미수집 종목 20~40% — RSI/변동성/이동평균 0인 종목이 risk_grade "낮음"으로 오표시
 - [ ] **T-J11** 히스토리 없는 종목(rsi=0) 과매도 필터 통과 — 기술지표 0인 종목 카테고리 제외
+- [ ] **T-J15** US 성장주 ROE 이상값 — 음수 자본 기업(ROE 7000%) 필터 제외 또는 캡 처리
 
 ### Phase C: 기타 개선 (보통)
 - [ ] **T-J12** schedule-status 모니터링 빈 값 — collector_heartbeat, last_schedule 미기록
 - [ ] **T-J13** sectors 엔드포인트 `name: 0` 잘못된 항목 — US 미분류 종목 처리
-- [ ] **T-J14** stop_loss_pct/target_price_pct 전 종목 -7/+15 고정 — 변동성 기반 종목별 차등
-- [ ] **T-J15** US 성장주 ROE 이상값 — 음수 자본 기업(ROE 7000%) 필터 제외 또는 캡 처리
 - [ ] **T-J16** schedule-status 타임스탬프 UTC→KST 불일치 — collector 측 isoformat에 KST 적용
 
 ### 3단계: UI/UX 실사용 검증
