@@ -90,23 +90,73 @@
 
 ---
 
-## 변경 파일
+## 트레이더 실사용 이슈 수정 (7건)
+
+| # | 이슈 | 수정 |
+|---|------|------|
+| UX-1 | 검색이 대형주만 | 3개 카테고리 병렬 검색으로 커버리지 확대 |
+| UX-2 | 퀄리티주 KR 0건 | "해외 전용" desc + 빈 결과 안내 메시지 |
+| UX-3 | buy_score 히스토리 없는 종목 부풀림 | RSI=0+MA20=0 → 점수 70% 감점 |
+| UX-4 | 백테스트/레짐 API 캐싱 없음 | 5분 TTL 간이 캐시 |
+| UX-5 | 비교 잘못된 코드 무시 | not_found 목록 반환 + 토스트 |
+| UX-6 | 포트폴리오 리스크 1종목 무반응 | "2개 이상 필요" 안내 |
+| UX-7 | 온보딩 자동 팝업 | 비활성화 (? 키 수동) |
+
+---
+
+## KR 섹터 분류 (T-J7)
+
+- 네이버금융 크롤링에 업종 추출 추가 (`_fetch_single_fundamental`)
+- `apply_fundamentals`에서 sector/industry 자동 적용
+- `fetch_daily_snapshot`에 sector/industry 초기값 빈 문자열 추가
+
+---
+
+## 히스토리 커버리지 확대 (T-J10)
+
+| 항목 | Before | After |
+|------|--------|-------|
+| KR 시총 상위 | 300 | 600 |
+| KR 거래량 상위 | 200 | 400 |
+| US 시총 상위 | 150 | 300 |
+| US 거래량 상위 | 100 | 200 |
+| 타임아웃 | 10초 | 20초 |
+| 실패 로깅 | 없음 | debug 로깅 추가 |
+
+---
+
+## 배포
+
+| 대상 | 상태 | 소요 |
+|------|------|------|
+| Cloud Run 웹 서비스 | SUCCESS | 5분 5초 |
+| Cloud Run Collector Jobs | SUCCESS | 4분 34초 |
+| 라이브 확인 | 200 OK, 3,495종목, Phase 3 | - |
+
+---
+
+## 변경 파일 (전체 5개 커밋)
 
 | 파일 | 줄 수 | 설명 |
 |------|-------|------|
-| `screener/static/index.html` | +400 | 15개 v6 UI + CSS 95줄 |
+| `screener/static/index.html` | +430 | 15개 v6 UI + 트레이더 UX 7건 + CSS |
+| `screener/api/routes.py` | +46 | API 캐싱 + 비교 피드백 + 퀄리티 안내 |
+| `screener/core/metrics.py` | +25 | risk_grade 분리 + ROE 캡 + buy_score 감점 |
 | `screener/core/backtest.py` | +14 | windows 키 형식 통일 |
-| `screener/core/metrics.py` | +20 | risk_grade 분리 + ROE 캡 |
-| `screener/core/screener.py` | +2 | rsi_min=1 추가 |
-| `docs/NEXT_TODO.md` | 갱신 | 완료 상태 업데이트 |
-| **합계** | **+460줄** | |
+| `screener/core/screener.py` | +4 | rsi_min=1 + 퀄리티 desc |
+| `screener/core/data_fetcher.py` | +45 | KR 섹터 크롤링 + 타임아웃 확대 |
+| `collector.py` | +6 | 히스토리 타겟 확대 |
+| `docs/DEPLOY_GUIDE.md` | 신규 | Cloud Run + 도메인 + HTTPS 가이드 |
+| `docs/CHANGELOG_v6.1.md` | 신규 | 본 문서 |
+| `docs/TODO.md` | 갱신 | Step 11 추가 |
+| `docs/NEXT_TODO.md` | 갱신 | 전체 상태 업데이트 |
+| **합계** | **+700줄** | **11개 파일, 5개 커밋** |
 
 ---
 
 ## 다음 작업
 
-- [ ] Cloud Run 재배포 (v6.1)
-- [ ] KR 섹터/업종 분류 (T-J7)
-- [ ] 히스토리 커버리지 확대 (T-J10)
-- [ ] 도메인 + HTTPS
-- [ ] 결제 연동
+- [ ] 도메인 + HTTPS (가이드: docs/DEPLOY_GUIDE.md)
+- [ ] 결제 연동 (Stripe / 토스페이먼츠)
+- [ ] US div_years 수집 (T-J8)
+- [ ] 실적 캘린더 (V6-BE-2)
