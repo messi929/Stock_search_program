@@ -822,15 +822,18 @@ function onStockSearch(q){
   if(!q||q.length<1){box.classList.remove('show');box.innerHTML='';return}
   searchDebounce=setTimeout(async()=>{
     try{
-      const r=await fetch(`/api/scan?category=bluechip&limit=20&offset=0&market=${currentRegion==='us'?'US':'KR'}`);
-      const d=await r.json();
-      const stocks=d.stocks||[];
+      // 시장 전체에서 검색 (시총 제한 없음, watchlist 카테고리로 tickers 전달 대신 전체 조회)
+      const market=currentRegion==='us'?'US':'KR';
+      // 3개 카테고리에서 병렬 검색하여 커버리지 확대
+      const cats=['bluechip','smallcap','recommend'];
+      const promises=cats.map(c=>fetch(`/api/scan?category=${c}&limit=50&offset=0&market=${market}`).then(r=>r.json()).catch(()=>({stocks:[]})));
+      const results=await Promise.all(promises);
+      const allStocks=new Map();
+      results.forEach(d=>(d.stocks||[]).forEach(s=>allStocks.set(s.ticker,s)));
+      // lastSearchData도 포함 (현재 화면 종목)
+      lastSearchData.forEach(s=>allStocks.set(s.ticker,s));
       const ql=q.toLowerCase();
-      const matches=stocks.filter(s=>s.name.toLowerCase().includes(ql)||s.ticker.toLowerCase().includes(ql)).slice(0,8);
-      if(!matches.length&&lastSearchData.length){
-        const localM=lastSearchData.filter(s=>s.name.toLowerCase().includes(ql)||s.ticker.toLowerCase().includes(ql)).slice(0,8);
-        if(localM.length){renderSearchResults(localM,box);return}
-      }
+      const matches=[...allStocks.values()].filter(s=>s.name.toLowerCase().includes(ql)||s.ticker.toLowerCase().includes(ql)).slice(0,10);
       if(!matches.length){box.innerHTML='<div class="search-result-item" style="color:var(--text3)">결과 없음</div>';box.classList.add('show');return}
       renderSearchResults(matches,box);
     }catch{box.classList.remove('show')}
@@ -1269,7 +1272,8 @@ function closeOnboarding(neverAgain){
   if(neverAgain)localStorage.setItem('onboarding_done','1');
   else sessionStorage.setItem('onboarding_shown','1');
 }
-if(!localStorage.getItem('onboarding_done')&&!sessionStorage.getItem('onboarding_shown'))setTimeout(showOnboarding,1500);
+// 온보딩: 기본 비활성. ? 키로 수동 열기 가능
+// if(!localStorage.getItem('onboarding_done')&&!sessionStorage.getItem('onboarding_shown'))setTimeout(showOnboarding,1500);
 
 // ── Export with Confirmation ──
 function exportData(f){
@@ -1501,7 +1505,9 @@ async function doCompare(){
   try{
     const r=await fetch(`/api/compare?tickers=${encodeURIComponent(input)}`);
     const d=await r.json();
-    if(d.error||!d.stocks||!d.stocks.length){grid.innerHTML=`<div class="empty-state">${d.error||'종목을 찾을 수 없습니다'}</div>`;return}
+    if(d.error){grid.innerHTML=`<div class="empty-state">${d.error}</div>`;return}
+    if(!d.stocks||!d.stocks.length){grid.innerHTML=`<div class="empty-state">${d.message||'종목을 찾을 수 없습니다'}</div>`;return}
+    if(d.message){showToast(d.message,'info',4000)}
     const n=d.stocks.length;
     grid.className=`compare-grid cols-${Math.min(n,3)}`;
     grid.innerHTML=d.stocks.map(s=>{
@@ -1575,7 +1581,11 @@ async function loadRegime(){
 // ── v6: Portfolio Risk ──
 async function loadPortfolioRisk(){
   const holdings=getPortfolio();
-  if(holdings.length<2)return;
+  const existingRisk=document.getElementById('pfRiskSection');
+  if(holdings.length<2){
+    if(existingRisk)existingRisk.innerHTML=holdings.length===1?'<div class="risk-section"><p style="color:var(--text3);font-size:12px;">리스크 분석은 2개 이상 종목이 필요합니다.</p></div>':'';
+    return;
+  }
   const tickers=holdings.map(h=>h.ticker);
   try{
     const r=await fetch('/api/portfolio/risk',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({tickers})});

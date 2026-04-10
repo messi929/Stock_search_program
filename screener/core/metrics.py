@@ -506,6 +506,11 @@ def calculate_buy_score(df: pd.DataFrame) -> pd.DataFrame:
     df.loc[is_us, "buy_score"] = us_total[is_us]
     df["buy_score"] = df["buy_score"].round(1).clip(0, 100)
 
+    # 히스토리 미수집 종목 페널티: 기술+모멘텀이 0이면 가치만으로 등급 부여 방지
+    # RSI=0이면 히스토리 없는 것 → 가치 점수만으로 "관심" 등급 받는 것 방지
+    no_history = (df.get("rsi", pd.Series(0, index=df.index)) <= 0) & (df.get("ma20", pd.Series(0, index=df.index)) <= 0)
+    df.loc[no_history, "buy_score"] = (df.loc[no_history, "buy_score"] * 0.3).round(1)  # 70% 감점
+
     # 등급 부여
     df["buy_grade"] = "관망"
     df.loc[df["buy_score"] >= 70, "buy_grade"] = "적극매수"

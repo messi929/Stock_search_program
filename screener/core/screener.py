@@ -142,7 +142,7 @@ CATEGORIES = {
 
     "quality": {
         "name": "퀄리티주", "group": "strategy",
-        "desc": "높은 수익성 + 낮은 부채 + 안정 성장",
+        "desc": "높은 수익성 + 낮은 부채 + 안정 성장 (해외 종목 전용 — yfinance 펀더멘탈 기반)",
         "icon": "award",
         "filter": ScreenerFilter(
             profit_margin_min=10, debt_equity_max=100,

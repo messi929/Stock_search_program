@@ -14,6 +14,23 @@ from screener.core.screener import ScreenerFilter, apply_filters, CATEGORIES, GR
 
 router = APIRouter(prefix="/api")
 
+# ── 간이 캐시 (무거운 API 결과 5분 캐싱) ──
+_api_cache: dict = {}  # {key: {"data": ..., "expires": datetime}}
+CACHE_TTL = timedelta(minutes=5)
+
+
+def _cache_get(key: str):
+    """캐시에서 값 가져오기 (만료 시 None)."""
+    entry = _api_cache.get(key)
+    if entry and datetime.now() < entry["expires"]:
+        return entry["data"]
+    return None
+
+
+def _cache_set(key: str, data):
+    """캐시에 값 저장."""
+    _api_cache[key] = {"data": data, "expires": datetime.now() + CACHE_TTL}
+
 _data_store = {
     "df": None,
     "etf_df": None,
@@ -364,6 +381,7 @@ async def scan_stocks(
             "breakout": "52주 고가 대비 -5% 이내 + 돌파 점수 2 이상인 종목이 현재 없습니다.",
             "oversold": "RSI 30 이하 과매도 구간 종목이 현재 없습니다.",
             "foreign_inst": "외국인·기관 순매수 종목이 현재 없습니다.\n휴일·장 시작 전에는 직전 거래일 데이터가 표시됩니다.",
+            "quality": "퀄리티주는 해외(US) 종목 전용입니다.\n국내 종목은 yfinance 펀더멘탈(순이익률·부채비율·매출성장률) 미제공.\n🇺🇸 해외 탭으로 전환하면 결과를 확인할 수 있습니다.",
         }
         hint = _empty_hints.get(category, "")
         if hint:
@@ -560,7 +578,11 @@ async def get_sectors():
 
 @router.get("/backtest")
 async def get_backtest():
-    """시그널 백테스트 결과 (v6 다기간)."""
+    """시그널 백테스트 결과 (v6 다기간, 5분 캐싱)."""
+    cached = _cache_get("backtest")
+    if cached:
+        return cached
+
     from screener.core.backtest import backtest_signals
     from screener.db.repository import load_history
 
@@ -576,7 +598,9 @@ async def get_backtest():
         return {"signals": {}, "score_tracking": {}, "message": "히스토리 데이터 없음"}
 
     results = await loop.run_in_executor(None, backtest_signals, history, df)
-    return results if results else {"signals": {}, "score_tracking": {}}
+    result = results if results else {"signals": {}, "score_tracking": {}}
+    _cache_set("backtest", result)
+    return result
 
 
 @router.post("/portfolio")
@@ -854,7 +878,11 @@ async def portfolio_risk(body: dict):
 
 @router.get("/market-regime")
 async def get_market_regime():
-    """시장 레짐 감지 (강세/약세/횡보)."""
+    """시장 레짐 감지 (강세/약세/횡보, 5분 캐싱)."""
+    cached = _cache_get("market_regime")
+    if cached:
+        return cached
+
     import asyncio
     from screener.db.repository import load_history
     from screener.core.metrics import detect_market_regime
@@ -880,10 +908,12 @@ async def get_market_regime():
         "sideways": {"surge": 0.8, "momentum": 0.7, "turnaround": 1.0, "value": 1.0},
     }
 
-    return {
+    result = {
         **regime,
         "strategy_weights": REGIME_WEIGHTS.get(regime["regime"], {}),
     }
+    _cache_set("market_regime", result)
+    return result
 
 
 # ──────────────────────────────────────────────
@@ -902,13 +932,19 @@ async def compare_stocks(tickers: str = ""):
         return {"error": "데이터 없음"}
 
     results = []
+    not_found = []
     for t in ticker_list:
         row = df[df["ticker"] == t]
         if row.empty:
+            not_found.append(t)
             continue
         results.append(_row_to_item(row.iloc[0]).model_dump())
 
-    return {"stocks": results, "count": len(results)}
+    resp = {"stocks": results, "count": len(results)}
+    if not_found:
+        resp["not_found"] = not_found
+        resp["message"] = f"다음 종목을 찾을 수 없습니다: {', '.join(not_found)}"
+    return resp
 
 
 # ──────────────────────────────────────────────
