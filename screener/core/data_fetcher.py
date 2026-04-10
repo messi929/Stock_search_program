@@ -59,6 +59,9 @@ def fetch_daily_snapshot() -> pd.DataFrame:
     # 초기값 — 펀더멘탈은 별도 수집이므로 DataFrame에만 추가 (Firestore에는 저장 안 함)
     for col in ["per", "pbr", "eps", "div_yield", "roe"]:
         result[col] = 0.0
+    # 섹터/업종 초기값 (네이버 펀더멘탈 수집 시 채워짐)
+    result["sector"] = ""
+    result["industry"] = ""
 
     # 종목 타입 분류
     result["stock_type"] = "stock"
@@ -321,7 +324,7 @@ def fetch_etf_data() -> pd.DataFrame:
 # ──────────────────────────────────────────────
 
 def _fetch_single_fundamental(ticker: str) -> tuple:
-    """단일 종목 PER/PBR/배당률 수집 (병렬용)."""
+    """단일 종목 PER/PBR/배당률 + 업종 수집 (병렬용)."""
     try:
         url = f"https://finance.naver.com/item/main.naver?code={ticker}"
         resp = requests.get(url, headers=_HEADERS, timeout=5)
@@ -339,6 +342,25 @@ def _fetch_single_fundamental(ticker: str) -> tuple:
                     data[key] = 0.0
             else:
                 data[key] = 0.0
+
+        # 업종 추출: "업종" 링크 텍스트 (div.sub_info > dl > dd 또는 a[href*="upjong"])
+        sector = ""
+        # 방법 1: 업종 링크 (가장 신뢰성 높음)
+        upjong_link = soup.select_one('a[href*="/sise/sise_group_detail.naver"]')
+        if upjong_link:
+            sector = upjong_link.text.strip()
+        else:
+            # 방법 2: div.sub_info 내 업종 텍스트
+            sub_info = soup.select_one("div.sub_info")
+            if sub_info:
+                for a_tag in sub_info.select("a"):
+                    href = a_tag.get("href", "")
+                    if "upjong" in href or "group" in href:
+                        sector = a_tag.text.strip()
+                        break
+        if sector:
+            data["sector"] = sector
+
         return ticker, data
     except Exception:
         return ticker, None
@@ -384,6 +406,19 @@ def apply_fundamentals(snapshot: pd.DataFrame, fund_data: dict) -> pd.DataFrame:
     snapshot.loc[valid_per, "roe"] = (
         snapshot.loc[valid_per, "pbr"] / snapshot.loc[valid_per, "per"] * 100
     ).round(2)
+
+    # 업종 (KR) — 네이버에서 가져온 sector 적용
+    if "sector" not in snapshot.columns:
+        snapshot["sector"] = ""
+    if "industry" not in snapshot.columns:
+        snapshot["industry"] = ""
+    sector_map = {t: d.get("sector", "") for t, d in fund_data.items() if d.get("sector")}
+    if sector_map:
+        updates = snapshot["ticker"].map(sector_map)
+        valid = updates.notna() & (updates != "")
+        snapshot.loc[valid, "sector"] = updates[valid]
+        # KR은 industry = sector와 동일하게 설정 (네이버는 업종만 제공)
+        snapshot.loc[valid, "industry"] = updates[valid]
 
     return snapshot
 
@@ -698,12 +733,14 @@ def _fetch_single_history(ticker: str, start_date: str, days: int):
                 })
                 df = df.tail(days)
                 result_holder[0] = df[["date", "ticker", "open", "high", "low", "close", "volume"]]
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"히스토리 수집 실패 [{ticker}]: {e}")
 
     t = threading.Thread(target=_fetch, daemon=True)
     t.start()
-    t.join(timeout=10)  # 10초 타임아웃
+    t.join(timeout=20)  # v6.1: 20초 타임아웃 (10초에서 확대, 커버리지 개선)
+    if result_holder[0] is None:
+        logger.debug(f"히스토리 타임아웃/실패 [{ticker}]")
     return result_holder[0]
 
 

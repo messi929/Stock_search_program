@@ -369,8 +369,9 @@ def collect_kr_history(snapshot=None):
         return
 
     kr = snapshot[snapshot["market"].isin(["KOSPI", "KOSDAQ"])]
-    top_cap = kr.nlargest(300, "market_cap")["ticker"].tolist()
-    top_vol = kr.nlargest(200, "volume")["ticker"].tolist()
+    # v6.1: 커버리지 확대 (300+200 → 600+400, 중복 제거 시 ~700-800종목)
+    top_cap = kr.nlargest(600, "market_cap")["ticker"].tolist()
+    top_vol = kr.nlargest(400, "volume")["ticker"].tolist()
     target = list(set(top_cap + top_vol))
 
     history = fetch_historical_ohlcv(target)
@@ -442,9 +443,9 @@ def collect_us_history():
         logger.warning("US 스냅샷 없음 — 히스토리 스킵")
         return
 
-    # 시가총액 상위 + 거래량 상위
-    top_cap = us_df.nlargest(150, "market_cap")["ticker"].tolist()
-    top_vol = us_df.nlargest(100, "volume")["ticker"].tolist()
+    # v6.1: 시가총액 상위 + 거래량 상위 (커버리지 확대)
+    top_cap = us_df.nlargest(300, "market_cap")["ticker"].tolist()
+    top_vol = us_df.nlargest(200, "volume")["ticker"].tolist()
     targets = list(set(top_cap + top_vol))
     logger.info(f"US 히스토리 대상: {len(targets)}종목")
 
