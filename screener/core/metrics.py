@@ -171,12 +171,24 @@ def calculate_moving_averages(
     # 골든크로스
     result.loc[result["golden_cross"] == 1, "breakout_score"] += 1
 
-    # ── 리스크 등급 ──
+    # ── 리스크 등급 (시장별 변동성 기준 분리) ──
     result["risk_grade"] = "보통"
-    if "volatility_20d" in result.columns:
-        result.loc[result["volatility_20d"] >= 4.0, "risk_grade"] = "높음"
-        result.loc[result["volatility_20d"] >= 6.0, "risk_grade"] = "매우높음"
-        result.loc[result["volatility_20d"] <= 2.0, "risk_grade"] = "낮음"
+    if "volatility_20d" in result.columns and "market" in result.columns:
+        is_us = result["market"].isin(["NASDAQ", "S&P500"])
+        is_kr = ~is_us
+        vol = result["volatility_20d"]
+        # 히스토리 미수집 종목(volatility=0) → "데이터없음"
+        result.loc[vol <= 0, "risk_grade"] = "데이터없음"
+        # KR: 변동성이 상대적으로 높으므로 기준 완화
+        result.loc[is_kr & (vol > 0) & (vol <= 2.5), "risk_grade"] = "낮음"
+        result.loc[is_kr & (vol > 2.5) & (vol < 5.0), "risk_grade"] = "보통"
+        result.loc[is_kr & (vol >= 5.0) & (vol < 8.0), "risk_grade"] = "높음"
+        result.loc[is_kr & (vol >= 8.0), "risk_grade"] = "매우높음"
+        # US: 변동성이 상대적으로 낮으므로 기준 엄격
+        result.loc[is_us & (vol > 0) & (vol <= 1.5), "risk_grade"] = "낮음"
+        result.loc[is_us & (vol > 1.5) & (vol < 3.0), "risk_grade"] = "보통"
+        result.loc[is_us & (vol >= 3.0) & (vol < 5.0), "risk_grade"] = "높음"
+        result.loc[is_us & (vol >= 5.0), "risk_grade"] = "매우높음"
 
     logger.info("이동평균 + 예측 시그널 + 리스크 지표 계산 완료")
     return result
@@ -411,11 +423,13 @@ def calculate_buy_score(df: pd.DataFrame) -> pd.DataFrame:
     # 성장 팩터 (US) — ROE + 시가총액 안정성
     growth_score_us = pd.Series(0.0, index=df.index)
     if "roe" in df.columns:
-        roe = df["roe"]
+        # ROE 캡 처리 (음수 자본 기업의 ROE 7000% 등 이상치 방지)
+        roe = df["roe"].clip(-100, 200)
         growth_score_us[(roe > 0) & (roe <= 10)] = 4.0
         growth_score_us[(roe > 10) & (roe <= 20)] = 8.0
         growth_score_us[(roe > 20) & (roe <= 40)] = 10.0
-        growth_score_us[(roe > 40)] = 6.0  # 지나치게 높으면 감점
+        growth_score_us[(roe > 40) & (roe <= 200)] = 6.0  # 지나치게 높으면 감점
+        growth_score_us[roe > 200] = 0.0  # 이상치 제외
 
     # 거래량 모멘텀 (US 추가 보너스)
     if "volume_ratio" in df.columns:

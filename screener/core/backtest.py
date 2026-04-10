@@ -72,7 +72,7 @@ def backtest_signals(history: pd.DataFrame, snapshot: pd.DataFrame) -> dict:
         for w, stats in r.get("windows", {}).items():
             if stats["sample_count"] > 0:
                 logger.info(
-                    f"백테스트 [{name}][{w}d]: 적중률 {stats['hit_rate']:.1f}%, "
+                    f"백테스트 [{name}][{w}]: 적중률 {stats['hit_rate']:.1f}%, "
                     f"평균수익 {stats['avg_return']:.2f}%, 샘플 {stats['sample_count']}건"
                 )
 
@@ -169,7 +169,6 @@ def _test_signal_multi(
         # 알파 계산: 시그널 평균수익 - 벤치마크 평균수익
         alpha = 0.0
         if benchmark_returns and n in benchmark_returns and returns:
-            # 시그널 발생 시점의 벤치마크 수익률
             bench_returns = _extract_benchmark_at_signal(
                 signal_mask, benchmark_returns[n]
             )
@@ -178,9 +177,11 @@ def _test_signal_multi(
 
         stats = _summarize(returns, f"{label} {n}일", n)
         stats["alpha"] = alpha
-        windows[n] = stats
+        windows[f"{n}d"] = stats
 
-    return {"label": label, "windows": windows}
+    # 기본 5d 통계를 최상위에도 포함 (하위 호환)
+    default_stats = windows.get("5d", {})
+    return {"label": label, "windows": windows, **default_stats}
 
 
 def _extract_benchmark_at_signal(
@@ -280,9 +281,10 @@ def _test_snapshot_signals(
                     val = fwd_df.loc[last_date, t]
                     if not pd.isna(val):
                         returns.append(val)
-            windows[n] = _summarize(returns, f"{cfg['label']} {n}일", n)
+            windows[f"{n}d"] = _summarize(returns, f"{cfg['label']} {n}일", n)
 
-        result[key] = {"label": cfg["label"], "windows": windows, "current_count": len(ticker_list)}
+        default_stats = windows.get("5d", {})
+        result[key] = {"label": cfg["label"], "windows": windows, "current_count": len(ticker_list), **default_stats}
 
     return result
 

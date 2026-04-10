@@ -132,7 +132,7 @@ CATEGORIES = {
         "desc": "바닥권에서 거래가 살아나며 반등이 시작되는 종목",
         "icon": "refresh-cw",
         "filter": ScreenerFilter(
-            rsi_max=35, volume_ratio_min=1.5, pbr_max=1.5,
+            rsi_min=1, rsi_max=35, volume_ratio_min=1.5, pbr_max=1.5,
             market_cap_min=500, trading_value_min=MIN_TRADING_VALUE,
             stock_type="stock", sort_by="rsi", sort_asc=True,
         ),
@@ -260,7 +260,7 @@ CATEGORIES = {
         "desc": "RSI 30 이하 과매도 종목, 반등 매수 기회",
         "icon": "activity",
         "filter": ScreenerFilter(
-            rsi_max=30, market_cap_min=1000,
+            rsi_min=1, rsi_max=30, market_cap_min=1000,
             trading_value_min=MIN_TRADING_VALUE,
             volume_ratio_min=1.0,
             stock_type="stock", sort_by="rsi", sort_asc=True,
