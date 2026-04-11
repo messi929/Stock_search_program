@@ -140,13 +140,26 @@
 - [ ] 뉴스/공시 연동
 - [ ] 실적 캘린더 (yfinance earningsDate / DART)
 
-### 상용화 배포
+### Step 12: v7.0 상용화 — Stripe 결제 + 인증 활성화 (2026-04-11)
+- [x] **COM-1** Stripe 패키지 추가 (`requirements.txt`)
+- [x] **COM-2** 구독 서비스 레이어 (`screener/services/subscription.py`) — Stripe ↔ Firestore ↔ Firebase claims 동기화
+- [x] **COM-3** Stripe API 라우터 (`screener/api/stripe_routes.py`) — checkout, webhook, subscription, cancel, billing-portal
+- [x] **COM-4** 미들웨어 업데이트 — webhook, auth-config, stripe-config PUBLIC_PATHS 추가
+- [x] **COM-5** 로그인 모달 — prompt() 제거, HTML 모달 (이메일/비밀번호 + Google 로그인)
+- [x] **COM-6** 가격 모달 — 월간 9,900원 / 연간 99,000원 카드 UI + 기능 비교
+- [x] **COM-7** 계정 관리 모달 — 구독 상태, 다음 결제일, 구독 해지, Stripe 고객 포털
+- [x] **COM-8** 티어 배지 — 헤더에 Free/Pro 표시 + 403 핸들러 가격 모달 연동
+- [x] **COM-9** 결제 완료 처리 — `?payment=success` 토스트 + `getIdToken(true)` 토큰 강제 갱신
+
+### 상용화 배포 (다음 단계)
 - [x] 클라우드 서버 배포 (Cloud Run)
+- [ ] Stripe Dashboard 설정 — 상품/가격 생성(KRW), webhook 엔드포인트 등록
+- [ ] Firebase Console — Google 로그인 프로바이더 활성화
+- [ ] Cloud Run 환경변수 — AUTH_ENABLED=true, STRIPE_*, FIREBASE_WEB_API_KEY
 - [ ] 도메인 + HTTPS 설정
-- [ ] 사용자 인증 (Firebase Auth / JWT)
+- [ ] 랜딩 페이지 / 서비스 소개
 - [ ] 인스톨러 (Inno Setup / NSIS)
 - [ ] 자동 업데이트 체계
-- [ ] Firestore Blaze 플랜 전환 (종량제)
 
 ---
 

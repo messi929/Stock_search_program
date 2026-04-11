@@ -1,6 +1,6 @@
 # 다음 작업 목록
 
-> 업데이트: 2026-04-04 (v5.4.1)
+> 업데이트: 2026-04-11 (v7.0 상용화)
 
 ---
 
@@ -309,36 +309,96 @@
 
 ---
 
-## 미진행 — 외부 의존 / 상용화
+## 완료 (v7.0: 상용화 — Stripe 결제 + 인증 시스템, 2026-04-11)
 
-### 외부 의존
+### 백엔드 Stripe 인프라
+- [x] **COM-1** `stripe>=8.0.0` 패키지 추가
+- [x] **COM-2** `screener/services/subscription.py` 신규 — 구독 서비스 레이어
+  - `get_or_create_stripe_customer()` — Firestore ↔ Stripe 고객 동기화
+  - `sync_subscription_to_firebase()` — Stripe 구독 → Firestore + Firebase custom claims
+  - `ensure_user_doc()` — 첫 로그인 시 Firestore users 문서 자동 생성
+  - `clear_subscription()` — 구독 해지/결제 실패 시 tier=free 초기화
+- [x] **COM-3** `screener/api/stripe_routes.py` 신규 — 5개 API 엔드포인트
+  - `POST /api/checkout` — Stripe Checkout Session 생성 (KRW 구독)
+  - `POST /api/webhooks/stripe` — Stripe 이벤트 수신 (서명 검증, claims 갱신)
+  - `GET /api/subscription` — 구독 상태 조회
+  - `POST /api/subscription/cancel` — 기간 종료 해지
+  - `POST /api/billing-portal` — Stripe 고객 포털 리다이렉트
+- [x] **COM-4** middleware.py — PUBLIC_PATHS에 webhook, auth-config, stripe-config 추가
+- [x] **COM-5** main.py — stripe_router 등록
+
+### 프론트엔드 상용화 UI
+- [x] **COM-6** 로그인 모달 전면 교체 — `prompt()` 제거, HTML 모달
+  - 이메일/비밀번호 입력 필드 (다크 테마)
+  - 로그인/회원가입 모드 토글
+  - Google 로그인 (GoogleAuthProvider)
+  - Firebase 에러코드별 한국어 메시지
+- [x] **COM-7** 가격 모달 — 월간(₩9,900)/연간(₩99,000) 2카드
+  - 기능 비교 리스트, "2개월 무료" 뱃지
+  - 클릭 → `POST /api/checkout` → Stripe 결제 페이지 리다이렉트
+- [x] **COM-8** 계정 관리 모달 — 이메일, 플랜, 구독 상세
+  - 다음 결제일, 해지 예정 표시
+  - Stripe 고객 포털 / 구독 해지 버튼
+- [x] **COM-9** 헤더 티어 배지 (Free/Pro) + CSS 스타일링
+- [x] **COM-10** 403 핸들러 개선 — "Pro 업그레이드" → `showPricingModal()` 연동
+- [x] **COM-11** 결제 완료 처리 — `?payment=success` 토스트 + `getIdToken(true)` 강제 갱신
+- [x] **COM-12** `initAuth()` 확장 — 로그인 후 자동 user doc 생성 + 구독 상태 로드
+
+### Firestore 스키마 추가
+- [x] **COM-13** `users/{firebase_uid}` 컬렉션 설계
+  - email, tier, created_at, stripe_customer_id, subscription(id/status/plan/period_end/cancel)
+
+### Webhook 이벤트 처리
+- [x] **COM-14** `checkout.session.completed` → tier=pro
+- [x] **COM-15** `customer.subscription.updated` → 상태 동기화
+- [x] **COM-16** `customer.subscription.deleted` → tier=free
+- [x] **COM-17** `invoice.payment_failed` → tier=free
+
+---
+
+## 다음 단계 — 서비스 런칭 준비
+
+### 🔴 필수 (런칭 전 완료)
+- [ ] **LAUNCH-1** Stripe Dashboard 설정
+  - 상품 생성 (Stock Screener Pro)
+  - 가격 생성: 월간 ₩9,900 / 연간 ₩99,000 (KRW, zero-decimal)
+  - Webhook 엔드포인트 등록: `https://{domain}/api/webhooks/stripe`
+  - 테스트 모드에서 카드(4242 4242 4242 4242)로 전체 플로우 검증
+- [ ] **LAUNCH-2** Firebase Console 설정
+  - Google 로그인 프로바이더 활성화
+  - 승인된 도메인 추가
+  - `FIREBASE_WEB_API_KEY` 확인
+- [ ] **LAUNCH-3** Cloud Run 환경변수 설정
+  - `AUTH_ENABLED=true`
+  - `STRIPE_SECRET_KEY`, `STRIPE_PUBLISHABLE_KEY`, `STRIPE_WEBHOOK_SECRET`
+  - `STRIPE_PRICE_MONTHLY`, `STRIPE_PRICE_YEARLY`
+  - `FIREBASE_WEB_API_KEY`, `FIREBASE_PROJECT_ID`
+- [ ] **LAUNCH-4** 도메인 + HTTPS 설정 (가이드: docs/DEPLOY_GUIDE.md)
+- [ ] **LAUNCH-5** Cloud Run 재배포 (stripe 패키지 포함)
+- [ ] **LAUNCH-6** E2E 테스트 — 회원가입 → Free 제한 확인 → 결제 → Pro 해금 → 해지
+
+### 🟡 권장 (런칭 직후)
+- [ ] **POST-1** 랜딩 페이지 — 서비스 소개 + 가격 안내 + CTA
+- [ ] **POST-2** 관심종목 클라우드 동기화 — Firestore `users/{uid}/watchlist`
+- [ ] **POST-3** 이메일 인증 + 비밀번호 재설정 플로우
+- [ ] **POST-4** 관리자 대시보드 — 사용자/구독/매출 현황
+
+### 🟢 향후 (안정화 후)
+- [ ] **FUTURE-1** 데스크톱 인스톨러 (Inno Setup)
+- [ ] **FUTURE-2** 자동 업데이트 체계
+- [ ] **FUTURE-3** KIS API 연동 (실시간 호가/체결)
+- [ ] **FUTURE-4** 뉴스/공시 연동
+- [ ] **FUTURE-5** 실적 캘린더 (yfinance earningsDate / DART)
+
+### 미진행 — 외부 의존
 - [ ] **V6-BE-1** pykrx 기관 유형별 분리 — 연기금 vs 투신 (pykrx 정상화 대기)
 - [ ] **V6-BE-2** 실적 캘린더 — yfinance earningsDate / DART API
 
-### 데이터 품질 (낮음, 정상 동작)
-- [ ] **T-J1** surge(급등예보) 0건 — 설계 의도대로 엄격 필터링 (정상)
-- [ ] **T-J2** turnaround(반등매수) 0건 — RSI+거래량 동시 충족 조건 (정상)
+### 데이터 품질 (낮은 우선순위)
 - [ ] **T-J8** US div_years 항상 0 — 미국 배당 연속 연수 수집 누락
-
-### 기타 개선 (보통)
 - [ ] **T-J12** schedule-status 모니터링 빈 값
 - [ ] **T-J13** sectors 엔드포인트 `name: 0` 잘못된 항목
 - [ ] **T-J16** schedule-status 타임스탬프 UTC→KST 불일치
-
-### 상용화
-- [ ] **T-21** 도메인 + HTTPS 설정 (가이드 작성 완료: docs/DEPLOY_GUIDE.md)
-- [ ] **T-22** 랜딩 페이지 / 다운로드 페이지
-- [ ] **T-C7** 결제 연동 (Stripe / 토스페이먼츠)
-- [ ] **T-C8** 관심종목 클라우드 동기화
-- [ ] **T-19** 데스크톱 인스톨러 (Inno Setup)
-- [ ] **T-20** 자동 업데이트 체계
-- [ ] **T-C8** 관심종목 클라우드 동기화 (Firebase Auth 연동)
-- [ ] **T-19** 데스크톱 인스톨러 (Inno Setup)
-- [ ] **T-20** 자동 업데이트 체계
-
-### 5단계: 수동 설정 (선택)
-- [ ] **T-11** Windows 작업 스케줄러 — `setup_scheduler.bat` (로컬 이중화 시)
-- [ ] **T-12** 텔레그램 봇 설정 — BotFather 토큰 + chat_id → `.env`
 
 ---
 
@@ -379,15 +439,27 @@
 
 ## 환경변수 (.env)
 ```
+# 서버 기본
 RUN_MODE=server
 COLLECT_MODE=readonly|full
 PORT=8501
 ADMIN_KEY=
+
+# Firebase
 FIREBASE_KEY_PATH=
 FIREBASE_CREDENTIALS=
 AUTH_ENABLED=false
 FIREBASE_WEB_API_KEY=
 FIREBASE_PROJECT_ID=
+
+# Stripe (v7.0 추가)
+STRIPE_SECRET_KEY=sk_...
+STRIPE_PUBLISHABLE_KEY=pk_...
+STRIPE_WEBHOOK_SECRET=whsec_...
+STRIPE_PRICE_MONTHLY=price_...
+STRIPE_PRICE_YEARLY=price_...
+
+# 기타
 CLOUD_RUN_URL=https://stock-screener-119320994983.asia-northeast3.run.app
 TELEGRAM_BOT_TOKEN=
 TELEGRAM_CHAT_ID=

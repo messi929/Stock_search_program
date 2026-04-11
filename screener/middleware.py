@@ -17,7 +17,8 @@ from loguru import logger
 AUTH_ENABLED = os.environ.get("AUTH_ENABLED", "false").lower() == "true"
 
 # 인증 불필요 경로
-PUBLIC_PATHS = {"/", "/api/status", "/api/categories", "/favicon.ico"}
+PUBLIC_PATHS = {"/", "/api/status", "/api/categories", "/favicon.ico",
+                "/api/auth-config", "/api/webhooks/stripe", "/api/stripe-config"}
 PUBLIC_PREFIXES = ("/static/",)
 
 # 무료 티어 허용 카테고리

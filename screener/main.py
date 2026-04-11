@@ -558,7 +558,9 @@ app.add_middleware(
 from screener.middleware import AuthMiddleware
 app.add_middleware(AuthMiddleware)
 
+from screener.api.stripe_routes import router as stripe_router
 app.include_router(router)
+app.include_router(stripe_router)
 
 static_dir = Path(__file__).parent / "static"
 app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
