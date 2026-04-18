@@ -1,6 +1,24 @@
 # 다음 작업 목록
 
-> 업데이트: 2026-04-13 (v7.4 — 미완/누락 체크리스트 + 전면 보완)
+> 업데이트: 2026-04-18 (v7.5 — Mailgun 자동화 + 레이아웃 정렬 + 휴장일 KR/US)
+
+---
+
+## 🚀 v7.5 배포 완료 (2026-04-18)
+
+Cloud Run: `stock-screener-1043976673827.asia-northeast3.run.app` · 커밋 4개 · STATUS=SUCCESS.
+
+### 구현 완료
+- **C8** 트라이얼 D-2 Mailgun 이메일 자동화 (코드 완료, 사용자 DNS/Scheduler 설정 대기)
+- **G15** Top 픽 섹션 리디자인 (메달 배지·텍스트 접기버튼·태그 색분리·hover 개선)
+- **UX-16** Top 픽·Trial/Guest 배너 **1280px 컨테이너 정렬** (카드 스타일 통일, `.info-banner` 클래스 신설)
+- **UX-17** **휴장일 3-line 안내** — 장 상태 / 📅 KR MM/DD(요일) 종가 / 📅 US MM/DD(요일) 종가 (KR KST 15:30·US ET 16:00 기준, 주말→금요일 되돌림. 공휴일 미반영)
+
+### 논의만 (구현 X)
+- **카드결제 재검토** — LS 재승인 대기 유지. 단기 Paddle 백업 + 중기 Toss Payments 병행 방향 정리.
+
+### 남은 사용자 작업
+- **C8 마무리**: Mailgun 가입 → 서브도메인 DNS 등록 → `gcloud secrets create mailgun-api-key` → `gcloud scheduler jobs create http trial-reminder-daily --schedule="0 10 * * *"` (상세: `DEPLOY_GUIDE.md §10`)
 
 ---
 
