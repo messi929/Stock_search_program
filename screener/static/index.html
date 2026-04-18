@@ -552,38 +552,61 @@ tbody tr{animation:fadeIn .2s ease;}
 }
 
 /* ── v6: Portfolio Risk ── */
-/* 🔥 오늘의 TOP 픽 (첫 진입용) */
-.top-picks{background:linear-gradient(135deg,rgba(49,130,246,.08),rgba(3,178,108,.04));border-bottom:1px solid var(--border);padding:14px 24px 16px;transition:max-height .3s,padding .3s;overflow:hidden;}
-.top-picks.collapsed{max-height:50px;padding-bottom:8px;}
-.tp-header{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:10px;}
-.tp-title{font-size:14px;font-weight:800;color:#fff;letter-spacing:-.2px;}
-.tp-sub{font-size:11px;color:var(--text3);margin-top:2px;}
-.tp-actions{display:flex;gap:6px;align-items:center;}
-.tp-btn{padding:5px 12px;background:var(--bg2);border:1px solid var(--border);color:var(--text2);border-radius:14px;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap;transition:all .12s;}
-.tp-btn:hover{border-color:var(--blue);color:var(--blue);}
-.tp-collapse{width:28px;height:28px;border-radius:50%;background:var(--bg2);border:1px solid var(--border);color:var(--text2);cursor:pointer;font-size:14px;font-weight:800;line-height:1;display:flex;align-items:center;justify-content:center;}
+/* 🔥 오늘의 TOP 픽 (v7.4 리디자인) */
+.top-picks{background:linear-gradient(135deg,rgba(49,130,246,.10) 0%,rgba(245,159,0,.04) 50%,rgba(3,178,108,.06) 100%);border-bottom:1px solid var(--border);padding:16px 24px 18px;transition:padding .25s;overflow:hidden;position:relative;}
+.top-picks::before{content:"";position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,var(--blue),var(--gold),var(--green));opacity:.6;}
+.top-picks.collapsed{padding:10px 24px;}
+.top-picks.collapsed .tp-list,.top-picks.collapsed .tp-sub{display:none;}
+.tp-header{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:12px;}
+.top-picks.collapsed .tp-header{margin-bottom:0;}
+.tp-title{font-size:15px;font-weight:800;color:#fff;letter-spacing:-.3px;display:flex;align-items:center;gap:7px;}
+.tp-title-badge{font-size:10px;font-weight:800;padding:2px 8px;border-radius:10px;background:rgba(245,159,0,.22);color:var(--gold);letter-spacing:.4px;}
+.tp-sub{font-size:11px;color:var(--text3);margin-top:3px;}
+.tp-actions{display:flex;gap:8px;align-items:center;}
+.tp-btn{padding:6px 14px;background:var(--bg2);border:1px solid var(--border);color:var(--text2);border-radius:16px;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap;transition:all .15s;}
+.tp-btn:hover{border-color:var(--blue);color:var(--blue);background:rgba(49,130,246,.08);}
+.tp-collapse{padding:6px 12px;background:transparent;border:1px solid var(--border);color:var(--text2);cursor:pointer;font-size:11px;font-weight:700;border-radius:16px;display:flex;align-items:center;gap:5px;transition:all .15s;}
 .tp-collapse:hover{border-color:var(--blue);color:var(--blue);}
-.top-picks.collapsed .tp-collapse{transform:rotate(180deg);}
-.tp-list{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:8px;}
-.top-picks.collapsed .tp-list{display:none;}
-.tp-card{background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:10px 12px;cursor:pointer;transition:all .15s;position:relative;overflow:hidden;min-width:0;}
-.tp-card:hover{border-color:var(--blue);transform:translateY(-1px);}
-.tp-card-rank{position:absolute;top:6px;right:8px;font-size:10px;font-weight:800;color:var(--text3);}
-.tp-card.gold .tp-card-rank{color:#f59f00;}
-.tp-card.silver .tp-card-rank{color:#cbd5e1;}
-.tp-card.bronze .tp-card-rank{color:#d97706;}
-.tp-card-tag{display:inline-block;font-size:9px;font-weight:800;padding:1px 6px;border-radius:6px;background:rgba(49,130,246,.15);color:var(--blue);margin-bottom:4px;letter-spacing:.3px;}
-.tp-card-name{font-size:13px;font-weight:800;color:#fff;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-bottom:3px;padding-right:18px;}
-.tp-card-meta{display:flex;justify-content:space-between;align-items:baseline;gap:6px;}
+.tp-collapse-icon{font-size:9px;transition:transform .25s;display:inline-block;}
+.top-picks.collapsed .tp-collapse-icon{transform:rotate(180deg);}
+.tp-list{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px;}
+.tp-card{background:linear-gradient(180deg,var(--bg2) 0%,rgba(15,23,42,.92) 100%);border:1px solid var(--border);border-radius:12px;padding:12px 12px 11px;cursor:pointer;transition:transform .18s,border-color .18s,box-shadow .18s;position:relative;overflow:hidden;min-width:0;}
+.tp-card::before{content:"";position:absolute;top:0;left:0;right:0;height:2px;background:var(--border);transition:background .18s;}
+.tp-card.gold::before{background:linear-gradient(90deg,#f59f00,#fbbf24);}
+.tp-card.silver::before{background:linear-gradient(90deg,#94a3b8,#cbd5e1);}
+.tp-card.bronze::before{background:linear-gradient(90deg,#d97706,#f59e0b);}
+.tp-card:hover{border-color:var(--blue);transform:translateY(-2px);box-shadow:0 6px 18px rgba(49,130,246,.18);}
+.tp-card:active{transform:translateY(0);}
+.tp-card-top{display:flex;justify-content:space-between;align-items:center;gap:6px;margin-bottom:7px;}
+.tp-card-rank{display:inline-flex;align-items:center;justify-content:center;min-width:22px;height:22px;padding:0 6px;font-size:11px;font-weight:800;background:var(--bg3);color:var(--text3);border-radius:7px;letter-spacing:-.3px;}
+.tp-card.gold .tp-card-rank{background:linear-gradient(135deg,#f59f00,#fbbf24);color:#1a1a1a;}
+.tp-card.silver .tp-card-rank{background:linear-gradient(135deg,#cbd5e1,#e2e8f0);color:#1a1a1a;}
+.tp-card.bronze .tp-card-rank{background:linear-gradient(135deg,#d97706,#f59e0b);color:#fff;}
+.tp-card-tag{display:inline-block;font-size:10px;font-weight:800;padding:2px 8px;border-radius:8px;letter-spacing:.3px;white-space:nowrap;}
+.tp-card-tag.rec{background:rgba(49,130,246,.18);color:#60a5fa;}
+.tp-card-tag.surge{background:rgba(239,68,68,.18);color:#f87171;}
+.tp-card-name{font-size:14px;font-weight:800;color:#fff;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-bottom:6px;}
+.tp-card-meta{display:flex;justify-content:space-between;align-items:baseline;gap:6px;margin-bottom:8px;}
 .tp-card-price{font-size:13px;font-weight:700;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-.tp-card-chg{font-size:11px;font-weight:800;white-space:nowrap;}
-.tp-card-chg.up{color:var(--red);}.tp-card-chg.down{color:var(--blue);}
-.tp-card-score{font-size:10px;color:var(--text3);margin-top:4px;display:flex;gap:6px;}
-.tp-card-score strong{color:var(--gold);}
+.tp-card-chg{font-size:11px;font-weight:800;white-space:nowrap;padding:2px 7px;border-radius:6px;}
+.tp-card-chg.up{background:rgba(239,68,68,.15);color:var(--red);}
+.tp-card-chg.down{background:rgba(49,130,246,.15);color:var(--blue);}
+.tp-card-chg.flat{background:var(--bg3);color:var(--text3);}
+.tp-card-score{font-size:10px;color:var(--text3);display:flex;gap:8px;align-items:center;padding-top:7px;border-top:1px solid rgba(100,116,139,.15);}
+.tp-card-score strong{color:var(--gold);font-size:11px;font-weight:800;}
 .tp-loading{padding:18px;text-align:center;color:var(--text3);font-size:12px;grid-column:1/-1;}
 @media(max-width:640px){
-  .top-picks{padding:12px 16px 14px;}
-  .tp-list{grid-template-columns:repeat(2,1fr);}
+  .top-picks{padding:12px 14px 14px;}
+  .top-picks.collapsed{padding:9px 14px;}
+  .tp-list{grid-template-columns:repeat(2,1fr);gap:8px;}
+  .tp-card{padding:10px 10px 9px;border-radius:10px;}
+  .tp-card-name{font-size:13px;}
+  .tp-card-price{font-size:12px;}
+  .tp-title{font-size:14px;}
+  .tp-btn{padding:5px 10px;font-size:10px;}
+  .tp-collapse{padding:5px 10px;font-size:10px;}
+  .tp-card-rank{min-width:20px;height:20px;font-size:10px;padding:0 5px;}
+  .tp-card-tag{font-size:9px;padding:2px 6px;}
 }
 
 /* 뷰 토글 (항상 표시) */
@@ -1068,12 +1091,14 @@ tbody tr{animation:fadeIn .2s ease;}
 <div class="top-picks" id="topPicks">
   <div class="tp-header">
     <div>
-      <div class="tp-title">🔥 오늘의 TOP 픽</div>
-      <div class="tp-sub">AI 종합점수 상위 · 클릭하면 상세 분석</div>
+      <div class="tp-title">🔥 오늘의 TOP 픽 <span class="tp-title-badge">AI</span></div>
+      <div class="tp-sub">종합점수 상위 · 클릭하면 상세 분석</div>
     </div>
     <div class="tp-actions">
       <button class="tp-btn" onclick="selectGroup('strategy');selectCategory('recommend');window.scrollTo({top:0,behavior:'smooth'})">전체 보기 →</button>
-      <button class="tp-collapse" onclick="toggleTopPicks()" title="접기/펼치기">−</button>
+      <button class="tp-collapse" onclick="toggleTopPicks()" aria-label="TOP 픽 접기/펼치기">
+        <span id="tpCollapseText">접기</span><span class="tp-collapse-icon">▼</span>
+      </button>
     </div>
   </div>
   <div class="tp-list" id="tpList"></div>
@@ -1820,12 +1845,19 @@ async function init(){const r=await fetch('/api/categories');categories=await r.
 function _initTopPicks(){
   const tp=document.getElementById('topPicks');
   if(!tp)return;
-  if(localStorage.getItem('topPicksCollapsed')==='1')tp.classList.add('collapsed');
+  if(localStorage.getItem('topPicksCollapsed')==='1'){
+    tp.classList.add('collapsed');
+    const txt=document.getElementById('tpCollapseText');
+    if(txt)txt.textContent='펼치기';
+  }
 }
 function toggleTopPicks(){
   const tp=document.getElementById('topPicks');
   tp.classList.toggle('collapsed');
-  localStorage.setItem('topPicksCollapsed',tp.classList.contains('collapsed')?'1':'0');
+  const collapsed=tp.classList.contains('collapsed');
+  const txt=document.getElementById('tpCollapseText');
+  if(txt)txt.textContent=collapsed?'펼치기':'접기';
+  localStorage.setItem('topPicksCollapsed',collapsed?'1':'0');
 }
 async function loadTopPicks(){
   const box=document.getElementById('tpList');
@@ -1845,19 +1877,24 @@ async function loadTopPicks(){
     if(!picks.length){box.innerHTML='<div class="tp-loading">데이터 준비 중 — 잠시 후 새로고침</div>';return;}
     box.innerHTML=picks.map((s,i)=>{
       const rankCls=i===0?'gold':i===1?'silver':i===2?'bronze':'';
-      const chg=s.change_pct>0?'up':s.change_pct<0?'down':'';
+      const rankLabel=i===0?'🥇':i===1?'🥈':i===2?'🥉':`#${i+1}`;
+      const tagCls=s._tag.includes('급등')?'surge':'rec';
+      const chg=s.change_pct>0?'up':s.change_pct<0?'down':'flat';
       const chgSign=s.change_pct>0?'+':'';
       const score=s.buy_score>0?`<span>종합 <strong>${s.buy_score.toFixed(0)}</strong></span>`:'';
       const preSurge=s.pre_surge_score>0?`<span>예보 <strong>${s.pre_surge_score}/5</strong></span>`:'';
+      const scoreRow=(score||preSurge)?`<div class="tp-card-score">${score}${preSurge}</div>`:'';
       return `<div class="tp-card ${rankCls}" onclick="showStockDetail('${s.ticker}')">
-        <div class="tp-card-rank">#${i+1}</div>
-        <div class="tp-card-tag">${s._tag}</div>
+        <div class="tp-card-top">
+          <span class="tp-card-rank">${rankLabel}</span>
+          <span class="tp-card-tag ${tagCls}">${s._tag}</span>
+        </div>
         <div class="tp-card-name">${s.name||s.ticker}</div>
         <div class="tp-card-meta">
           <span class="tp-card-price">${fmtPrice(s.close,s.market)}</span>
           <span class="tp-card-chg ${chg}">${chgSign}${s.change_pct.toFixed(2)}%</span>
         </div>
-        <div class="tp-card-score">${score}${preSurge}</div>
+        ${scoreRow}
       </div>`;
     }).join('');
     // showStockDetail이 lastSearchData에서 찾으므로 picks도 추가 (중복 제거)
