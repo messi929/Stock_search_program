@@ -189,9 +189,34 @@ def _row_to_item(row) -> StockItem:
     )
 
 
+@router.get("/all-stocks")
+async def get_all_stocks(q: str = "", limit: int = 30):
+    """포트폴리오 자동완성용 전체 종목 경량 목록 (ticker/name/close/market만)."""
+    df = _get_combined_df()
+    if df is None or df.empty:
+        return {"stocks": []}
+    if q:
+        ql = q.strip().lower()
+        if ql:
+            mask = df["ticker"].astype(str).str.lower().str.contains(ql, na=False) | \
+                   df["name"].astype(str).str.lower().str.contains(ql, na=False)
+            df = df[mask]
+    df = df.head(max(1, min(limit, 200)))
+    stocks = []
+    for _, row in df.iterrows():
+        stocks.append({
+            "ticker": str(row.get("ticker", "")),
+            "name": str(row.get("name", "") or row.get("ticker", "")),
+            "close": float(row.get("close", 0) or 0),
+            "market": str(row.get("market", "") or ""),
+        })
+    return {"stocks": stocks}
+
+
 @router.get("/categories")
 async def get_categories():
-    """카테고리 목록 (그룹별)."""
+    """카테고리 목록 (그룹별). Free 카테고리 먼저 + tier 표시."""
+    from screener.middleware import FREE_CATEGORIES
     current_phase = _data_store["loading_phase"]
     result = {}
     for group_key, group_info in GROUPS.items():
@@ -199,6 +224,7 @@ async def get_categories():
         for cat_key, cat_info in CATEGORIES.items():
             if cat_info["group"] == group_key:
                 required_phase = CATEGORY_PHASE.get(cat_key, 1)
+                tier = "free" if cat_key in FREE_CATEGORIES else "pro"
                 cats.append(CategoryInfo(
                     key=cat_key,
                     name=cat_info["name"],
@@ -207,7 +233,10 @@ async def get_categories():
                     icon=cat_info["icon"],
                     columns=cat_info["columns"],
                     ready=current_phase >= required_phase,
+                    tier=tier,
                 ))
+        # Free 먼저, Pro 나중 — 그룹 내 원래 순서 보존
+        cats.sort(key=lambda c: 0 if c.tier == "free" else 1)
         result[group_key] = {
             "name": group_info["name"],
             "icon": group_info["icon"],
@@ -469,23 +498,33 @@ async def export_stocks(
     today = datetime.now().strftime("%Y%m%d")
     filename = f"screener_{cat_name}_{today}"
 
+    # 한글 파일명 브라우저 호환 (RFC 5987)
+    from urllib.parse import quote
+    ascii_fallback = f"screener_{today}"
+
     if format == "xlsx":
         buf = io.BytesIO()
         export_df.to_excel(buf, index=False, engine="openpyxl")
         buf.seek(0)
+        fn_xlsx = quote(f"{filename}.xlsx")
         return StreamingResponse(
             buf,
             media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            headers={"Content-Disposition": f"attachment; filename={filename}.xlsx"},
+            headers={
+                "Content-Disposition": f"attachment; filename=\"{ascii_fallback}.xlsx\"; filename*=UTF-8''{fn_xlsx}",
+            },
         )
     else:
-        buf = io.StringIO()
-        export_df.to_csv(buf, index=False, encoding="utf-8-sig")
-        buf.seek(0)
+        # UTF-8 BOM + CSV (Excel 한글 호환)
+        csv_text = export_df.to_csv(index=False)
+        csv_bytes = b"\xef\xbb\xbf" + csv_text.encode("utf-8")
+        fn_csv = quote(f"{filename}.csv")
         return StreamingResponse(
-            io.BytesIO(buf.getvalue().encode("utf-8-sig")),
-            media_type="text/csv",
-            headers={"Content-Disposition": f"attachment; filename={filename}.csv"},
+            io.BytesIO(csv_bytes),
+            media_type="text/csv; charset=utf-8",
+            headers={
+                "Content-Disposition": f"attachment; filename=\"{ascii_fallback}.csv\"; filename*=UTF-8''{fn_csv}",
+            },
         )
 
 
@@ -805,69 +844,270 @@ async def get_market_sentiment():
 # v6 Phase 4-2: 포트폴리오 리스크 (상관관계)
 # ──────────────────────────────────────────────
 
+def _clean_label(s: str, fallback: str = "기타") -> str:
+    if not s:
+        return fallback
+    s = s.strip()
+    if not s or "\ufffd" in s or any(ord(c) < 0x20 for c in s):
+        return fallback
+    if not any("\uac00" <= c <= "\ud7a3" or c.isascii() for c in s):
+        return fallback
+    return s
+
+
+def _pf_sector_of(row_dict: dict) -> str:
+    raw_sector = str(row_dict.get("sector", "") or "")
+    themes_raw = str(row_dict.get("themes", "") or "")
+    first_theme = themes_raw.split(",")[0].strip() if themes_raw else ""
+    market = str(row_dict.get("market", "") or "")
+    is_etf = "ETF" in market.upper()
+    return _clean_label(raw_sector, "") or _clean_label(first_theme, "") or ("ETF" if is_etf else "기타")
+
+
+def _pf_grade(score: float) -> str:
+    if score >= 90: return "S"
+    if score >= 80: return "A"
+    if score >= 70: return "B"
+    if score >= 60: return "C"
+    if score >= 50: return "D"
+    return "F"
+
+
+def _pf_recommendations(
+    *, n_stocks: int, max_sector_pct: int, max_sector_name: str,
+    avg_corr: float, port_vol: float, mdd: float, market_split: dict,
+    top_weight_pct: int, top_weight_name: str,
+) -> list[dict]:
+    recs: list[dict] = []
+    if top_weight_pct >= 40:
+        recs.append({"level": "danger", "msg": f"🚨 {top_weight_name}이(가) 포트폴리오의 {top_weight_pct}%를 차지합니다. 한 종목 리스크가 큽니다."})
+    elif top_weight_pct >= 30:
+        recs.append({"level": "warning", "msg": f"⚠️ {top_weight_name} 비중 {top_weight_pct}% — 20% 내로 조정 권장"})
+    if max_sector_pct >= 60:
+        recs.append({"level": "warning", "msg": f"⚠️ {max_sector_name} 섹터에 {max_sector_pct}% 집중. 2~3개 섹터로 분산 시 변동성 20% 감소"})
+    elif max_sector_pct >= 40:
+        recs.append({"level": "info", "msg": f"💡 {max_sector_name} 섹터 비중 {max_sector_pct}% — 타 섹터 추가 고려"})
+    if n_stocks < 3:
+        recs.append({"level": "warning", "msg": f"📌 종목 {n_stocks}개는 분산이 부족합니다. 5~10개가 이상적"})
+    elif n_stocks < 5:
+        recs.append({"level": "info", "msg": f"💡 현재 {n_stocks}개 보유. 5~10개로 확장 시 개별 리스크 크게 감소"})
+    elif n_stocks > 15:
+        recs.append({"level": "info", "msg": f"💡 {n_stocks}개 보유는 관리가 어려울 수 있습니다. 핵심 10개로 집중도 좋은 선택"})
+    if avg_corr >= 0.7:
+        recs.append({"level": "warning", "msg": f"⚠️ 종목 간 평균 상관관계 {avg_corr:.2f} — 유사하게 움직이는 종목들입니다. 역상관 자산 추가 권장"})
+    elif avg_corr >= 0.5:
+        recs.append({"level": "info", "msg": f"💡 상관관계 {avg_corr:.2f} — 섹터 간 분산 추가로 안정성↑"})
+    if port_vol >= 35:
+        recs.append({"level": "danger", "msg": f"🚨 연간 변동성 {port_vol:.0f}% — 고위험 구성입니다. 안정 자산 편입 필요"})
+    elif port_vol >= 25:
+        recs.append({"level": "warning", "msg": f"⚠️ 변동성 {port_vol:.0f}% — 시장 평균(KOSPI ~18%)보다 높음"})
+    if mdd and mdd >= 25:
+        recs.append({"level": "warning", "msg": f"📉 최대 낙폭 -{mdd:.1f}% — 손절선 설정 또는 현금 비중 확대 고려"})
+    kr_pct = market_split.get("KR", 0)
+    if kr_pct == 100:
+        recs.append({"level": "info", "msg": "🌏 KR 100% — 글로벌 분산(US 20~30%)으로 통화·지역 리스크 감소"})
+    elif kr_pct == 0:
+        recs.append({"level": "info", "msg": "🇰🇷 국내 비중 0% — 국내 대형주로 환율 리스크 헤지 고려"})
+    if not recs:
+        recs.append({"level": "success", "msg": "🎯 균형 잡힌 포트폴리오입니다. 현재 구성이 훌륭해요."})
+    return recs
+
+
 @router.post("/portfolio/risk")
 async def portfolio_risk(body: dict):
-    """관심종목 상관관계 + 섹터 편중 분석."""
+    """포트폴리오 전문가 리스크 분석 — 건강도/추천/MDD/비중/상관관계/섹터.
+
+    body: {"tickers": [...]} 또는 {"holdings": [{ticker, buy_price, qty}, ...]}
+    holdings가 있으면 실제 평가금 기반 비중. 없으면 동일 비중.
+    """
     import asyncio
     import numpy as np
     from screener.db.repository import load_history_single
 
-    tickers = body.get("tickers", [])
+    holdings = body.get("holdings") or []
+    if holdings:
+        tickers = [str(h.get("ticker", "")) for h in holdings if h.get("ticker")]
+    else:
+        tickers = body.get("tickers", [])
     if not tickers or len(tickers) < 2:
         return {"error": "2개 이상 종목 필요"}
 
-    loop = asyncio.get_event_loop()
+    df = _get_combined_df()
 
-    # 각 종목 히스토리 로드
+    # 실제 평가금 기반 비중 계산
+    weights_map: dict[str, float] = {}
+    market_split = {"KR": 0.0, "US": 0.0}
+    current_values: dict[str, float] = {}
+    name_of: dict[str, str] = {}
+    sector_of: dict[str, str] = {}
+    if holdings and df is not None:
+        total_value = 0.0
+        for h in holdings:
+            t = str(h.get("ticker", ""))
+            qty = float(h.get("qty", 0) or 0)
+            row = df[df["ticker"] == t]
+            if row.empty or qty <= 0:
+                continue
+            close = float(row.iloc[0].get("close", 0) or 0)
+            val = close * qty
+            if val <= 0:
+                continue
+            current_values[t] = val
+            total_value += val
+            name_of[t] = str(row.iloc[0].get("name", "") or t)
+            sector_of[t] = _pf_sector_of(row.iloc[0].to_dict())
+            mk = str(row.iloc[0].get("market", "") or "")
+            if any(x in mk.upper() for x in ("US", "NASDAQ", "NYSE")):
+                market_split["US"] += val
+            else:
+                market_split["KR"] += val
+        if total_value > 0:
+            for t, v in current_values.items():
+                weights_map[t] = v / total_value
+            market_split = {k: round(v / total_value * 100) for k, v in market_split.items() if v > 0}
+    if not weights_map:
+        # fallback 동일 비중
+        for t in tickers:
+            weights_map[t] = 1.0 / len(tickers)
+            if df is not None:
+                row = df[df["ticker"] == t]
+                if not row.empty:
+                    name_of[t] = str(row.iloc[0].get("name", "") or t)
+                    sector_of[t] = _pf_sector_of(row.iloc[0].to_dict())
+        market_split = {}
+
+    loop = asyncio.get_event_loop()
     histories = {}
-    for t in tickers[:10]:  # 최대 10개
+    for t in tickers[:15]:
         hdf = await loop.run_in_executor(None, load_history_single, t)
         if hdf is not None and not hdf.empty:
             hdf = hdf.sort_values("date").set_index("date")
             histories[t] = hdf["close"].pct_change().dropna()
 
     if len(histories) < 2:
-        return {"error": "히스토리 데이터 부족"}
+        return {"error": "히스토리 데이터 부족", "tickers": tickers}
 
-    # 수익률 DataFrame 합치기
-    returns_df = pd.DataFrame(histories)
-    returns_df = returns_df.dropna()
-
+    returns_df = pd.DataFrame(histories).dropna()
     if len(returns_df) < 10:
-        return {"error": "공통 기간 데이터 부족"}
+        return {"error": "공통 기간 데이터 부족", "tickers": list(histories.keys())}
 
-    # 상관계수 행렬
-    corr_matrix = returns_df.corr().round(3).values.tolist()
+    hist_tickers = list(returns_df.columns)
+    # 비중 벡터 정렬
+    w = np.array([weights_map.get(t, 0) for t in hist_tickers])
+    w_sum = w.sum()
+    if w_sum <= 0:
+        w = np.array([1.0 / len(hist_tickers)] * len(hist_tickers))
+    else:
+        w = w / w_sum
 
-    # 포트폴리오 변동성 (동일 비중 가정)
-    n = len(histories)
-    weights = np.array([1.0 / n] * n)
-    cov_matrix = returns_df.cov().values
-    port_vol = round(float(np.sqrt(weights @ cov_matrix @ weights) * np.sqrt(250) * 100), 2)
+    # 포트폴리오 일일 수익률
+    port_returns = returns_df.values @ w
 
-    # 섹터 편중
-    df = _get_combined_df()
-    sector_counts = {}
-    if df is not None:
-        for t in tickers:
-            row = df[df["ticker"] == t]
-            if not row.empty:
-                sector = str(row.iloc[0].get("sector", "")) or str(row.iloc[0].get("themes", "기타"))[:10]
-                sector_counts[sector] = sector_counts.get(sector, 0) + 1
+    # 변동성 (연환산)
+    port_vol = round(float(np.std(port_returns) * np.sqrt(250) * 100), 2)
+    # 연환산 수익률 (단순 평균 기반)
+    port_mean_daily = float(np.mean(port_returns))
+    annualized_return = round(port_mean_daily * 250 * 100, 2)
+    # 샤프 비율 (리스크프리 3%)
+    rf = 0.03
+    sharpe = round((port_mean_daily * 250 - rf) / (np.std(port_returns) * np.sqrt(250) + 1e-9), 2)
+    # MDD
+    cum = np.cumprod(1 + port_returns)
+    running_max = np.maximum.accumulate(cum)
+    drawdown = (cum - running_max) / running_max
+    mdd = round(float(-drawdown.min()) * 100, 2)
 
-    total_t = max(len(tickers), 1)
-    sector_pct = {k: round(v / total_t * 100) for k, v in sector_counts.items()}
+    # 상관관계
+    corr_df = returns_df.corr().round(3)
+    corr_matrix = corr_df.values.tolist()
+    # 평균 상관계수 (대각 제외)
+    n = len(hist_tickers)
+    if n > 1:
+        triu = corr_df.values[np.triu_indices(n, k=1)]
+        avg_corr = round(float(np.mean(triu)), 3)
+    else:
+        avg_corr = 0.0
+
+    # 섹터 비중 (평가금 가중)
+    sector_values: dict[str, float] = {}
+    for t in tickers:
+        s = sector_of.get(t, "기타")
+        v = current_values.get(t, weights_map.get(t, 0))
+        sector_values[s] = sector_values.get(s, 0) + v
+    total_sv = sum(sector_values.values()) or 1
+    sector_pct = {k: round(v / total_sv * 100) for k, v in sector_values.items()}
     max_sector = max(sector_pct.items(), key=lambda x: x[1], default=("", 0))
 
+    # Top 비중 종목
+    top_weight_t = max(weights_map, key=weights_map.get) if weights_map else ""
+    top_weight_pct = int(round(weights_map.get(top_weight_t, 0) * 100))
+    top_weight_name = name_of.get(top_weight_t, top_weight_t)
+
+    # 건강도 점수 (0~100)
+    score = 100.0
+    if port_vol > 35: score -= 20
+    elif port_vol > 25: score -= 10
+    elif port_vol > 18: score -= 3
+    if max_sector[1] >= 60: score -= 20
+    elif max_sector[1] >= 40: score -= 10
+    if len(tickers) < 3: score -= 15
+    elif len(tickers) < 5: score -= 7
+    if avg_corr >= 0.7: score -= 15
+    elif avg_corr >= 0.5: score -= 7
+    if mdd >= 30: score -= 15
+    elif mdd >= 20: score -= 7
+    if top_weight_pct >= 40: score -= 15
+    elif top_weight_pct >= 30: score -= 7
+    if sharpe >= 1.5: score += 5
+    elif sharpe <= 0: score -= 10
+    score = max(0.0, min(100.0, score))
+    grade = _pf_grade(score)
+
+    recommendations = _pf_recommendations(
+        n_stocks=len(tickers),
+        max_sector_pct=max_sector[1],
+        max_sector_name=max_sector[0],
+        avg_corr=avg_corr,
+        port_vol=port_vol,
+        mdd=mdd,
+        market_split=market_split,
+        top_weight_pct=top_weight_pct,
+        top_weight_name=top_weight_name,
+    )
+
+    # 종목별 비중·섹터 정보 (프론트 차트용)
+    positions = []
+    for t in hist_tickers:
+        positions.append({
+            "ticker": t,
+            "name": name_of.get(t, t),
+            "sector": sector_of.get(t, "기타"),
+            "weight_pct": round(weights_map.get(t, 0) * 100, 1),
+        })
+    positions.sort(key=lambda x: x["weight_pct"], reverse=True)
+
+    # 리스크 경고 (기존 호환)
     risk_warning = ""
     if max_sector[1] >= 60:
         risk_warning = f"{max_sector[0]} 섹터 {max_sector[1]}% 집중 — 분산 권장"
 
     return {
-        "tickers": list(histories.keys()),
+        "tickers": hist_tickers,
+        "positions": positions,
         "correlation_matrix": corr_matrix,
         "portfolio_volatility": port_vol,
+        "annualized_return": annualized_return,
+        "sharpe_ratio": sharpe,
+        "max_drawdown": mdd,
+        "health_score": round(score),
+        "health_grade": grade,
+        "avg_correlation": avg_corr,
+        "top_weight_ticker": top_weight_t,
+        "top_weight_name": top_weight_name,
+        "top_weight_pct": top_weight_pct,
         "sector_concentration": sector_pct,
+        "market_split": market_split,
+        "recommendations": recommendations,
         "risk_warning": risk_warning,
     }
 

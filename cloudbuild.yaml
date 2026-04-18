@@ -31,7 +31,7 @@ steps:
       - '1'          # 콜드스타트 방지
       - '--max-instances'
       - '3'
-      - '--set-env-vars'
+      - '--update-env-vars'  # 기존 env vars 보존 (LS, Firebase 등 manually 설정된 값 유지)
       - 'RUN_MODE=server,COLLECT_MODE=readonly'
 
 images:

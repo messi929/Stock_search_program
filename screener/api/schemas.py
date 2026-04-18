@@ -93,6 +93,7 @@ class CategoryInfo(BaseModel):
     icon: str
     columns: list[str]
     ready: bool = True
+    tier: str = "free"  # "free" | "pro"
 
 
 class StatusResponse(BaseModel):

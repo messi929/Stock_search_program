@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>관리자 대시보드 · Stock Screener</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="icon" href="data:;base64,iVBORw0KGgo=">
+<style>
+:root{--bg:#0b0e14;--bg2:#141822;--bg3:#1c2130;--border:#2a2f3e;--text:#e4e8f0;--text2:#a8b0c2;--text3:#6b7380;--blue:#3182f6;--blue-bg:rgba(49,130,246,.12);--green:#03b26c;--red:#f04452;--gold:#f59f00;--radius:12px;--shadow:0 4px 20px rgba(0,0,0,.35);}
+*{margin:0;padding:0;box-sizing:border-box;}
+body{font-family:'Pretendard',-apple-system,BlinkMacSystemFont,sans-serif;background:var(--bg);color:var(--text);font-size:14px;line-height:1.5;}
+a{color:var(--blue);text-decoration:none;}
+button{font-family:inherit;cursor:pointer;}
+.top{background:var(--bg2);border-bottom:1px solid var(--border);padding:14px 24px;display:flex;justify-content:space-between;align-items:center;position:sticky;top:0;z-index:20;}
+.top h1{font-size:17px;font-weight:800;color:#fff;}
+.top h1 span{color:var(--blue);}
+.top .back{color:var(--text2);font-size:13px;}
+.container{max-width:1400px;margin:0 auto;padding:24px;}
+.gate{max-width:380px;margin:80px auto;padding:28px;background:var(--bg2);border:1px solid var(--border);border-radius:14px;}
+.gate h2{font-size:18px;font-weight:800;margin-bottom:6px;color:#fff;}
+.gate p{color:var(--text3);font-size:13px;margin-bottom:18px;}
+.gate input{width:100%;padding:10px 12px;background:var(--bg3);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px;margin-bottom:12px;}
+.gate button{width:100%;padding:10px;background:var(--blue);color:#fff;border:none;border-radius:8px;font-weight:700;}
+
+.stats{display:grid;grid-template-columns:repeat(6,1fr);gap:12px;margin-bottom:20px;}
+.stat{background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:14px 16px;}
+.stat-label{font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;}
+.stat-value{font-size:22px;font-weight:800;color:#fff;}
+.stat.warn .stat-value{color:var(--gold);}
+.stat.bad .stat-value{color:var(--red);}
+
+.toolbar{display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;align-items:center;}
+.chip{padding:6px 14px;background:var(--bg2);border:1px solid var(--border);border-radius:20px;color:var(--text2);font-size:12px;font-weight:600;transition:all .1s;}
+.chip.active{background:var(--blue);border-color:var(--blue);color:#fff;}
+.chip.warn.active{background:var(--gold);border-color:var(--gold);color:#000;}
+.chip.bad.active{background:var(--red);border-color:var(--red);color:#fff;}
+.search{flex:1;max-width:280px;padding:6px 12px;background:var(--bg2);border:1px solid var(--border);border-radius:20px;color:var(--text);font-size:13px;}
+.refresh{padding:6px 12px;background:var(--bg2);border:1px solid var(--border);border-radius:8px;color:var(--text2);font-size:12px;}
+
+table{width:100%;border-collapse:collapse;background:var(--bg2);border:1px solid var(--border);border-radius:12px;overflow:hidden;}
+th{text-align:left;padding:10px 14px;background:var(--bg3);font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;font-weight:700;border-bottom:1px solid var(--border);}
+td{padding:12px 14px;border-bottom:1px solid var(--border);font-size:13px;vertical-align:middle;}
+tr:last-child td{border-bottom:none;}
+tr:hover td{background:rgba(255,255,255,.02);}
+tr.susp{background:rgba(240,68,82,.06);}
+tr.suspd{background:rgba(240,68,82,.15);opacity:.7;}
+.badge{display:inline-block;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700;letter-spacing:.4px;}
+.b-pro{background:var(--blue-bg);color:var(--blue);}
+.b-free{background:var(--bg3);color:var(--text3);}
+.b-trial{background:rgba(245,159,0,.15);color:var(--gold);}
+.b-susp{background:rgba(240,68,82,.15);color:var(--red);}
+.b-flag{background:rgba(245,159,0,.15);color:var(--gold);}
+td .email{font-weight:700;color:#fff;}
+td .uid{font-size:10px;color:var(--text3);font-family:monospace;}
+td .act{display:flex;gap:4px;}
+td .act button{padding:4px 10px;border-radius:5px;border:1px solid var(--border);background:var(--bg3);color:var(--text2);font-size:11px;font-weight:600;transition:all .1s;}
+td .act button:hover{border-color:var(--blue);color:var(--blue);}
+td .act button.danger:hover{border-color:var(--red);color:var(--red);}
+
+/* Detail Modal */
+.modal-bg{display:none;position:fixed;inset:0;background:rgba(0,0,0,.8);z-index:100;align-items:flex-start;justify-content:center;padding:40px 20px;overflow-y:auto;}
+.modal-bg.show{display:flex;}
+.modal{background:var(--bg2);border:1px solid var(--border);border-radius:14px;width:100%;max-width:720px;max-height:90vh;overflow-y:auto;}
+.modal-head{padding:20px 24px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;position:sticky;top:0;background:var(--bg2);}
+.modal-head h2{font-size:17px;font-weight:800;color:#fff;}
+.modal-close{background:none;border:none;color:var(--text3);font-size:24px;line-height:1;}
+.modal-body{padding:20px 24px;}
+.row{display:grid;grid-template-columns:160px 1fr;gap:10px;padding:8px 0;border-bottom:1px solid var(--border);font-size:13px;}
+.row .k{color:var(--text3);font-size:11px;text-transform:uppercase;letter-spacing:.5px;padding-top:2px;}
+.row .v{color:var(--text);}
+.section-h{font-size:14px;font-weight:700;color:#fff;margin:20px 0 10px;padding-bottom:6px;border-bottom:1px solid var(--border);}
+.ll{font-size:12px;}
+.ll-row{padding:8px 10px;background:var(--bg3);border-radius:6px;margin-bottom:6px;display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;}
+.ll-ip{font-family:monospace;color:var(--gold);font-weight:700;min-width:110px;}
+.ll-ua{color:var(--text3);font-size:10px;flex:1;overflow:hidden;text-overflow:ellipsis;}
+.ll-ts{color:var(--text3);font-size:11px;white-space:nowrap;}
+.note{width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:10px;color:var(--text);font-family:inherit;font-size:13px;min-height:70px;resize:vertical;}
+.actbar{display:flex;gap:8px;flex-wrap:wrap;margin-top:16px;padding-top:16px;border-top:1px solid var(--border);}
+.actbar button{padding:8px 14px;border-radius:8px;border:1px solid var(--border);background:var(--bg3);color:var(--text);font-size:13px;font-weight:600;}
+.actbar button.primary{background:var(--blue);border-color:var(--blue);color:#fff;}
+.actbar button.danger{background:var(--red);border-color:var(--red);color:#fff;}
+.actbar button.warn{background:var(--gold);border-color:var(--gold);color:#000;}
+.empty{padding:40px;text-align:center;color:var(--text3);font-size:13px;}
+.toast{position:fixed;top:80px;right:20px;background:var(--bg2);border:1px solid var(--border);padding:12px 18px;border-radius:8px;z-index:200;animation:slide .25s ease;}
+@keyframes slide{from{transform:translateX(20px);opacity:0;}to{transform:none;opacity:1;}}
+@media(max-width:720px){
+  .stats{grid-template-columns:repeat(2,1fr);}
+  .row{grid-template-columns:1fr;gap:2px;}
+}
+</style>
+</head>
+<body>
+<div class="top">
+  <h1>🛠 Stock <span>Screener</span> · 관리자</h1>
+  <a class="back" href="/">← 앱으로</a>
+</div>
+
+<!-- 인증 게이트 -->
+<div id="gate" class="gate">
+  <h2>관리자 인증</h2>
+  <p>Firebase 관리자 로그인 또는 Admin Key가 필요합니다.</p>
+  <input type="text" id="adminKeyInput" placeholder="Admin Key (선택)" autocomplete="off">
+  <button onclick="tryAuth()">접속</button>
+  <p style="margin-top:14px;font-size:11px;">또는 <a href="/">메인 페이지</a>에서 관리자 계정으로 로그인 후 재방문</p>
+</div>
+
+<!-- 대시보드 -->
+<div id="dashboard" class="container" style="display:none;">
+  <div class="stats" id="stats"></div>
+
+  <div class="toolbar">
+    <button class="chip active" data-filter="all" onclick="setFilter('all')">전체</button>
+    <button class="chip warn" data-filter="suspicious" onclick="setFilter('suspicious')">🚨 의심</button>
+    <button class="chip bad" data-filter="suspended" onclick="setFilter('suspended')">⛔ 정지</button>
+    <button class="chip" data-filter="trial" onclick="setFilter('trial')">🎁 체험중</button>
+    <button class="chip" data-filter="pro" onclick="setFilter('pro')">💎 Pro</button>
+    <button class="chip" data-filter="free" onclick="setFilter('free')">Free</button>
+    <input class="search" id="searchBox" placeholder="이메일/UID로 검색…" oninput="applySearch()">
+    <button class="refresh" onclick="loadUsers()">↻ 새로고침</button>
+  </div>
+
+  <div id="usersWrap"></div>
+</div>
+
+<!-- 사용자 상세 모달 -->
+<div class="modal-bg" id="detailModal" onclick="if(event.target===this)closeDetail()">
+  <div class="modal">
+    <div class="modal-head">
+      <h2 id="dEmail">-</h2>
+      <button class="modal-close" onclick="closeDetail()">&times;</button>
+    </div>
+    <div class="modal-body" id="detailBody"></div>
+  </div>
+</div>
+
+<script>
+let ADMIN_KEY='',ALL_USERS=[],CURRENT_FILTER='all',CURRENT_SEARCH='';
+let FIRE_TOKEN='';
+
+async function loadFirebaseToken(){
+  try{
+    const r=await fetch('/api/auth-config');
+    if(!r.ok)return '';
+    const cfg=await r.json();
+    if(!cfg.apiKey)return '';
+    // SDK 동적 로드 (한 번만)
+    if(!window.firebase){
+      await new Promise((resolve,reject)=>{
+        const s=document.createElement('script');s.src='https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js';s.onload=resolve;s.onerror=reject;document.head.appendChild(s);
+      });
+      await new Promise((resolve,reject)=>{
+        const s=document.createElement('script');s.src='https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js';s.onload=resolve;s.onerror=reject;document.head.appendChild(s);
+      });
+    }
+    // 앱 초기화 (중복 방지)
+    if(!firebase.apps||!firebase.apps.length){
+      try{firebase.initializeApp({apiKey:cfg.apiKey,authDomain:cfg.authDomain,projectId:cfg.projectId});}
+      catch(e){if(!/already exists/i.test(e.message||''))console.error(e);}
+    }
+    return new Promise(resolve=>{
+      const unsub=firebase.auth().onAuthStateChanged(async user=>{
+        unsub&&unsub();
+        if(user){try{resolve(await user.getIdToken());}catch{resolve('');}}
+        else resolve('');
+      });
+    });
+  }catch(e){console.error('firebase token',e);return '';}
+}
+
+async function tryAuth(){
+  ADMIN_KEY=document.getElementById('adminKeyInput').value.trim();
+  FIRE_TOKEN=await loadFirebaseToken();
+  // 통계 호출로 권한 확인
+  const r=await fetch('/api/admin/stats',{headers:_headers()});
+  if(r.status===403||r.status===401){
+    alert('관리자 권한이 없습니다. ADMIN_EMAILS에 이메일이 등록되었는지, 또는 Admin Key가 올바른지 확인하세요.');
+    return;
+  }
+  if(!r.ok){alert('서버 오류: '+r.status);return;}
+  sessionStorage.setItem('adminKey',ADMIN_KEY);
+  document.getElementById('gate').style.display='none';
+  document.getElementById('dashboard').style.display='block';
+  await loadStats();
+  await loadUsers();
+}
+
+function _headers(){
+  const h={'Content-Type':'application/json'};
+  if(ADMIN_KEY)h['X-Admin-Key']=ADMIN_KEY;
+  if(FIRE_TOKEN)h['Authorization']='Bearer '+FIRE_TOKEN;
+  return h;
+}
+
+async function loadStats(){
+  const st=document.getElementById('stats');
+  try{
+    const r=await fetch('/api/admin/stats',{headers:_headers()});
+    if(r.status===403||r.status===401){
+      st.innerHTML='<div class="stat bad"><div class="stat-label">권한 없음</div><div class="stat-value">-</div></div>';
+      alert('관리자 권한이 만료되었거나 로그아웃 상태입니다. 재인증해주세요.');
+      document.getElementById('dashboard').style.display='none';
+      document.getElementById('gate').style.display='block';
+      return;
+    }
+    if(!r.ok){st.innerHTML=`<div class="stat bad"><div class="stat-label">통계 로드 실패 (${r.status})</div><div class="stat-value">-</div></div>`;return;}
+    const s=await r.json();
+    st.innerHTML=[
+      ['전체 사용자',s.total,''],
+      ['Pro',s.pro,''],
+      ['Free',s.free,''],
+      ['체험중',s.trial_active,''],
+      ['🚨 의심',s.suspicious,'warn'],
+      ['⛔ 정지',s.suspended,'bad'],
+    ].map(([l,v,c])=>`<div class="stat ${c}"><div class="stat-label">${l}</div><div class="stat-value">${v||0}</div></div>`).join('');
+  }catch(e){console.error(e);st.innerHTML='<div class="stat bad"><div class="stat-label">네트워크 오류</div><div class="stat-value">-</div></div>';}
+}
+
+async function loadUsers(){
+  const r=await fetch(`/api/admin/users?filter=${CURRENT_FILTER}&limit=300`,{headers:_headers()});
+  const d=await r.json();
+  ALL_USERS=d.users||[];
+  renderUsers();
+}
+
+function renderUsers(){
+  const q=CURRENT_SEARCH.toLowerCase();
+  const filtered=ALL_USERS.filter(u=>{
+    if(!q)return true;
+    return (u.email||'').toLowerCase().includes(q)||u.uid.toLowerCase().includes(q);
+  });
+  const wrap=document.getElementById('usersWrap');
+  if(!filtered.length){wrap.innerHTML='<div class="empty">해당 조건의 사용자가 없습니다.</div>';return;}
+  wrap.innerHTML=`<table><thead><tr>
+    <th>계정</th><th>티어</th><th>상태</th><th>가입일</th><th>체험종료</th><th>구독</th><th>액션</th>
+  </tr></thead><tbody>${filtered.map(u=>_userRow(u)).join('')}</tbody></table>`;
+}
+
+function _userRow(u){
+  const rowCls=u.suspended?'suspd':(u.suspicious?'susp':'');
+  const tierBadge=u.tier==='pro'?'<span class="badge b-pro">PRO</span>':'<span class="badge b-free">FREE</span>';
+  const trial=u.trial_ends_at&&new Date(u.trial_ends_at)>new Date()?'<span class="badge b-trial">체험중</span>':'';
+  const susp=u.suspended?'<span class="badge b-susp">정지</span>':'';
+  const flag=u.suspicious?'<span class="badge b-flag">의심</span>':'';
+  const sub=u.subscription_status?`${u.subscription_status}<br><span style="color:var(--text3);font-size:10px;">${u.subscription_plan||''}</span>`:'-';
+  return `<tr class="${rowCls}">
+    <td><div class="email">${u.email||'(이메일없음)'}</div><div class="uid">${u.uid}</div></td>
+    <td>${tierBadge}</td>
+    <td>${[trial,susp,flag].filter(Boolean).join(' ')||'-'}</td>
+    <td>${_fmtDate(u.created_at)}</td>
+    <td>${_fmtDate(u.trial_ends_at)}</td>
+    <td>${sub}</td>
+    <td><div class="act"><button onclick="openDetail('${u.uid}')">상세</button></div></td>
+  </tr>`;
+}
+
+function _fmtDate(iso){
+  if(!iso)return '-';
+  try{const d=new Date(iso);if(isNaN(d))return '-';return d.toISOString().slice(0,10);}catch{return '-';}
+}
+function _fmtDt(iso){
+  if(!iso)return '-';
+  try{const d=new Date(iso);if(isNaN(d))return iso;return d.toLocaleString('ko-KR');}catch{return iso;}
+}
+
+async function openDetail(uid){
+  document.getElementById('detailBody').innerHTML='<div class="empty">로딩 중…</div>';
+  document.getElementById('detailModal').classList.add('show');
+  try{
+    const r=await fetch(`/api/admin/users/${uid}`,{headers:_headers()});
+    const d=await r.json();
+    if(!d.user){document.getElementById('detailBody').innerHTML='<div class="empty">사용자를 찾을 수 없습니다.</div>';return;}
+    _renderDetail(d);
+  }catch{document.getElementById('detailBody').innerHTML='<div class="empty">로드 실패</div>';}
+}
+
+function _renderDetail(d){
+  const u=d.user;
+  document.getElementById('dEmail').textContent=u.email||u.uid;
+  const sessions=(d.active_sessions||[]).map(s=>`<div class="ll-row"><span class="ll-ip">${s.ip||'-'}</span><span class="ll-ua">${s.user_agent||'-'}</span><span class="ll-ts">${_fmtDt(s.last_seen)}</span></div>`).join('')||'<div class="empty">활성 세션 없음</div>';
+  const logins=(d.login_history||[]).map(l=>`<div class="ll-row"><span class="ll-ip">${l.ip||'-'}</span><span class="ll-ua">${l.user_agent||'-'}</span><span class="ll-ts">${_fmtDt(l.timestamp)}</span></div>`).join('')||'<div class="empty">로그인 이력 없음</div>';
+
+  document.getElementById('detailBody').innerHTML=`
+    <div class="row"><div class="k">UID</div><div class="v" style="font-family:monospace;font-size:11px;">${u.uid}</div></div>
+    <div class="row"><div class="k">이메일</div><div class="v">${u.email||'-'}</div></div>
+    <div class="row"><div class="k">티어</div><div class="v">${u.tier}</div></div>
+    <div class="row"><div class="k">가입일</div><div class="v">${_fmtDt(u.created_at)}</div></div>
+    <div class="row"><div class="k">체험 종료</div><div class="v">${_fmtDt(u.trial_ends_at)}</div></div>
+    <div class="row"><div class="k">구독</div><div class="v">${u.subscription_status||'-'} · ${u.subscription_plan||''}<br>다음 결제: ${_fmtDt(u.subscription_period_end)}</div></div>
+    <div class="row"><div class="k">정지</div><div class="v">${u.suspended?'⛔ 정지됨':'정상'}</div></div>
+    <div class="row"><div class="k">어뷰징 플래그</div><div class="v">${u.suspicious?'🚨 의심':'정상'} (30일 unique IP ${d.unique_ips_30d}개)</div></div>
+
+    <div class="section-h">📝 관리자 메모</div>
+    <textarea class="note" id="noteBox">${u.admin_note||''}</textarea>
+    <button class="refresh" style="margin-top:8px;" onclick="saveNote('${u.uid}')">메모 저장</button>
+
+    <div class="section-h">🔒 활성 세션 (${(d.active_sessions||[]).length})</div>
+    <div class="ll">${sessions}</div>
+
+    <div class="section-h">🕓 최근 로그인 (최대 30개)</div>
+    <div class="ll">${logins}</div>
+
+    <div class="actbar">
+      ${u.suspended?
+        `<button class="primary" onclick="unsuspend('${u.uid}')">정지 해제</button>`:
+        `<button class="danger" onclick="suspend('${u.uid}')">계정 정지</button>`}
+      <button class="warn" onclick="extendTrial('${u.uid}')">체험 7일 연장</button>
+    </div>
+  `;
+}
+
+function closeDetail(){document.getElementById('detailModal').classList.remove('show');}
+
+function setFilter(f){
+  CURRENT_FILTER=f;
+  document.querySelectorAll('.chip').forEach(c=>c.classList.toggle('active',c.dataset.filter===f));
+  loadUsers();
+}
+function applySearch(){CURRENT_SEARCH=document.getElementById('searchBox').value;renderUsers();}
+
+async function saveNote(uid){
+  const note=document.getElementById('noteBox').value;
+  await fetch(`/api/admin/users/${uid}/note`,{method:'POST',headers:_headers(),body:JSON.stringify({note})});
+  _toast('메모 저장됨');
+}
+async function suspend(uid){
+  const reason=prompt('정지 사유 (메모에 기록됩니다):','계정 공유 의심');
+  if(reason===null)return;
+  await fetch(`/api/admin/users/${uid}/suspend`,{method:'POST',headers:_headers(),body:JSON.stringify({reason})});
+  _toast('정지 처리됨');
+  closeDetail();loadStats();loadUsers();
+}
+async function unsuspend(uid){
+  if(!confirm('이 계정의 정지를 해제하시겠습니까?'))return;
+  await fetch(`/api/admin/users/${uid}/unsuspend`,{method:'POST',headers:_headers()});
+  _toast('해제됨');
+  closeDetail();loadStats();loadUsers();
+}
+async function extendTrial(uid){
+  const d=prompt('연장할 일수:','7');
+  if(!d)return;
+  await fetch(`/api/admin/users/${uid}/extend-trial`,{method:'POST',headers:_headers(),body:JSON.stringify({days:parseInt(d)})});
+  _toast('체험 연장됨');
+  openDetail(uid);loadStats();loadUsers();
+}
+
+function _toast(msg){
+  const t=document.createElement('div');t.className='toast';t.textContent=msg;document.body.appendChild(t);
+  setTimeout(()=>t.remove(),2200);
+}
+
+// 자동 재시도 — 저장된 키
+window.addEventListener('DOMContentLoaded',async()=>{
+  const saved=sessionStorage.getItem('adminKey');
+  if(saved!==null){document.getElementById('adminKeyInput').value=saved;}
+  // Firebase 자동 로그인 체크
+  FIRE_TOKEN=await loadFirebaseToken();
+  if(FIRE_TOKEN){
+    ADMIN_KEY=saved||'';
+    const r=await fetch('/api/admin/stats',{headers:_headers()});
+    if(r.ok){
+      document.getElementById('gate').style.display='none';
+      document.getElementById('dashboard').style.display='block';
+      await loadStats();await loadUsers();
+    }
+  }
+});
+</script>
+</body>
+</html>

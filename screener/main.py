@@ -15,7 +15,7 @@ from pathlib import Path
 import pandas as pd
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from loguru import logger
 
 from screener.api.routes import router, set_data
@@ -558,9 +558,15 @@ app.add_middleware(
 from screener.middleware import AuthMiddleware
 app.add_middleware(AuthMiddleware)
 
-from screener.api.stripe_routes import router as stripe_router
+from screener.api.lemon_routes import router as payment_router
+from screener.api.user_routes import router as user_router
+from screener.api.admin_routes import router as admin_router
+from screener.api.rank_page import router as rank_router
 app.include_router(router)
-app.include_router(stripe_router)
+app.include_router(payment_router)
+app.include_router(user_router)
+app.include_router(admin_router)
+app.include_router(rank_router)
 
 static_dir = Path(__file__).parent / "static"
 app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
@@ -575,6 +581,41 @@ async def index():
             "Pragma": "no-cache",
             "Expires": "0",
         },
+    )
+
+
+def _legal_page(filename: str):
+    return FileResponse(
+        str(static_dir / filename),
+        headers={"Cache-Control": "public, max-age=3600"},
+    )
+
+
+@app.get("/pricing")
+async def pricing():
+    return _legal_page("pricing.html")
+
+
+@app.get("/terms")
+async def terms():
+    return _legal_page("terms.html")
+
+
+@app.get("/privacy")
+async def privacy():
+    return _legal_page("privacy.html")
+
+
+@app.get("/refund")
+async def refund():
+    return _legal_page("refund.html")
+
+
+@app.get("/admin")
+async def admin_page():
+    return FileResponse(
+        str(static_dir / "admin.html"),
+        headers={"Cache-Control": "no-cache, no-store, must-revalidate"},
     )
 
 

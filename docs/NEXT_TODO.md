@@ -1,6 +1,68 @@
 # 다음 작업 목록
 
-> 업데이트: 2026-04-11 (v7.0 상용화)
+> 업데이트: 2026-04-13 (v7.4 — 미완/누락 체크리스트 + 전면 보완)
+
+---
+
+## 🎯 미완/누락 체크리스트 (매 배포 전 검증)
+
+**배포 직전에 이 섹션 읽고 각 항목 상태 확인. 완료한 것만 체크.**
+
+### A. 즉시 착수 (30분~1시간)
+- [x] **A1** 오프라인 감지 + 친화적 토스트 (`navigator.onLine`)
+- [x] **A2** 관심종목 정렬 옵션 (이름/등락률/점수/추가순)
+- [x] **A3** `.cat-desc` 시각 강화 (배경/보더/💡 아이콘)
+- [x] **A4** 포트폴리오 CSV export (모달 헤더 📥 CSV 버튼)
+
+### B. 중간 (반나절~1일)
+- [x] **B5** og:image 생성 — `/og/rank.svg?date=`·`/og/backtest.svg` (동적 SVG 1200x630)
+- [x] **B6** 모바일 필터 드로어 애니메이션 (하단 슬라이드업, 핸들바, 배경 오버레이)
+- [x] **B7** 리퍼럴 코드 시스템 — `/api/user/referral`·`/apply` (추천인 30일, 피추천인 14일)
+
+### C. 큰 작업 (1~2일)
+- [~] **C8** 트라이얼 D-2 이메일 알림
+  - [x] `/api/admin/trial-expiring?days=2` 조회 엔드포인트 완료
+  - [ ] SendGrid/Mailgun 연동 + Cloud Scheduler Job (사용자 작업 필요)
+- [x] **C9** 관리자 액션 로그 — `users/{uid}/audit_log` 서브컬렉션 + `GET /api/admin/users/{uid}/audit-log`
+
+### D. 기타 미완 (Phase 1~3 원안 대비)
+- [x] **D10** 카테고리 진입 가이드 강화 (A3로 통합 완료)
+- [x] **D11** 에러 UX 일관화 — 공통 fetch wrapper에 오프라인 감지 + 토큰 자동 갱신
+- [ ] **D12** 백테스트 snapshot 공유 URL (선택 — 후순위)
+
+### E. 권한 변경 (사용자 요청)
+- [x] **E13** **백테스트 Pro 해제 → 로그인 필수** — `PRO_ENDPOINTS`에서 제거, `LOGIN_REQUIRED_ENDPOINTS` 신설
+
+### F. 로직/UX 재조정 (사용자 피드백)
+- [x] **F14** **매수 포인트 임계값 재조정** — 카테고리 설계(≥30)와 정합, 네거티브 톤 제거
+  - 이전: 70+ 적극매수 / 50+ 매수후보 / 나머지 관망 권장 (Top 3도 대부분 관망)
+  - 현재: 60+ 💎 강력 매수 / 45+ 👍 매수 후보 / 30+ 📊 관심 종목 / <30 🔍 추가 분석
+
+### G. UI/UX 개선 (신규 발견)
+- [ ] **G15** **Top 픽 섹션 UI 리디자인** ← 사용자 피드백: "UI 별로 + 접기 버튼 별로"
+  - 접기/펼치기 버튼 UX 재검토 (지금 `−` 방식)
+  - 카드 디자인 세련되게 (순위 배지·시그널 태그)
+  - 모바일 2열 레이아웃 가독성
+  - 카드 hover·클릭 피드백 개선
+
+### F. 사용자 지적 — 향후 재검증 필요
+- 검증된 것
+  - ✅ 비로그인 localStorage 잔재
+  - ✅ 메모/태그 클라우드 동기화
+  - ✅ 모달 7종 로그아웃 시 자동 닫기
+  - ✅ `/api/portfolio/risk` PRO_ENDPOINTS 누락
+  - ✅ 토스트 위치 (오른쪽 → 중앙)
+  - ✅ 모달 그리드 공간 낭비
+  - ✅ 펀더멘탈 탭 빈 상태 안내
+  - ✅ 🔥 Top 픽 섹션 (Phase 1 누락분)
+
+### 체크리스트 운영 규칙
+1. 새 요구사항·허점 발견 시 **즉시 여기에 항목 추가**
+2. 배포 전 전체 훑고 해당 항목 체크
+3. 배포 후 완료 항목은 `v7.4 완료 섹션`으로 이동 (하단)
+4. 미완 항목은 남겨두고 다음 세션 계속
+
+---
 
 ---
 
@@ -356,32 +418,301 @@
 
 ---
 
+## 완료 (v7.1: Lemon Squeezy 전환 + 법적 페이지 + Pro UI 확장, 2026-04-12)
+
+### 배경
+한국 Stripe 정식 미지원 + 개인 개발자(사업자등록 없음) + 해외 고객 타겟 → **Lemon Squeezy (MoR)** 로 공급자 전환.
+Paddle 대비 Stripe식 URL 리다이렉트 방식이라 마이그레이션 공수 최소, Stripe가 2024년 LS 인수해 안정성↑.
+
+### 결제 공급자 교체
+- [x] **LS-1** `screener/api/stripe_routes.py` 삭제 → `screener/api/lemon_routes.py` 신규
+  - `POST /api/checkout` — LS Checkout URL 생성 (`custom_data.firebase_uid`)
+  - `POST /api/webhooks/lemonsqueezy` — HMAC-SHA256(body, secret) 서명 검증, X-Signature 헤더
+  - `GET /api/subscription` — Firestore에서 조회
+  - `POST /api/subscription/cancel` — `DELETE /subscriptions/{id}` (기간 종료 예약)
+  - `POST /api/billing-portal` — LS 고객 포털 URL 반환
+- [x] **LS-2** `screener/services/subscription.py` — LS webhook 구조로 재작성 (variant_id, renews_at, ends_at)
+  - 상태 매핑: `active`/`on_trial`/`cancelled` → pro 유지, `expired`/`payment_failed` → free 즉시 전환
+- [x] **LS-3** `screener/middleware.py` — PUBLIC_PATHS 갱신 (법적 페이지 + LS webhook)
+- [x] **LS-4** `screener/main.py` — stripe_router 제거, lemon_router 등록, /pricing·/terms·/privacy·/refund 라우트 추가
+- [x] **LS-5** `requirements.txt` — `stripe` 제거, `httpx` 추가
+- [x] **LS-6** `.env.example` — `STRIPE_*` → `LEMONSQUEEZY_*` (API_KEY, STORE_ID, VARIANT_MONTHLY, VARIANT_YEARLY, WEBHOOK_SECRET)
+- [x] **LS-7** `docs/DEPLOY_GUIDE.md` — LS 환경변수·배포 명령 갱신
+- [x] **LS-8** 프론트 엔드포인트 동일 유지 (`/api/checkout`, `/api/billing-portal`, `/api/subscription`) — 내부만 교체
+
+### 법적 페이지 4종 신규
+- [x] **LEGAL-1** `screener/static/pricing.html` — 요금제 (Free vs Pro)
+- [x] **LEGAL-2** `screener/static/terms.html` — 이용약관 (투자자문 아님 면책 포함)
+- [x] **LEGAL-3** `screener/static/privacy.html` — 개인정보처리방침 (GDPR + 개인정보보호법)
+- [x] **LEGAL-4** `screener/static/refund.html` — 환불정책 (14일 전액환불)
+- [x] **LEGAL-5** `screener/static/legal_common.css` — 법적 페이지 공통 스타일
+
+### 가격 최종 확정 (KRW, 전 세션의 USD 검토안 취소)
+- Monthly ₩79,000 / Yearly ₩700,000 (약 26% 할인)
+- `index.html` + `pricing.html` KRW 통일 — LS가 MoR로 통화 환산 처리
+
+### 카테고리 tier 노출 (Free/Pro 시각화)
+- [x] **TIER-1** `schemas.py` — `CategoryInfo.tier: str = "free"` 필드 추가
+- [x] **TIER-2** `routes.py` — `/categories`에서 `FREE_CATEGORIES`(surge, bluechip, recommend, watchlist, etf, foreign_inst) 기준 tier 세팅 + **Free 먼저 정렬** (그룹 내 원래 순서 보존)
+- [x] **TIER-3** `index.html` — `.chip.pro-locked` (dashed border, opacity 0.72) + `.chip-pro-badge` (PRO 라벨) 스타일
+
+### index.html 프론트 확장 (+489 / -33줄)
+- [x] **UI-1** Site Footer — 법적 링크 네비 + 브랜드 + 투자자문 면책문구
+- [x] **UI-2** Watchlist Insights Panel (`.wl-insights`) — 관심종목 상단 스코어·시그널 요약 카드
+- [x] **UI-3** Bulk Portfolio Modal (`#bulkPfModal`) — 관심종목을 현재가로 페이퍼 포트폴리오에 일괄 담기 (종목당 수량, 중복 스킵, 페이퍼 트레이딩 안내)
+- [x] **UI-4** Contact Modal (`#contactModal`) — 문의 이메일 복사
+- [x] **UI-5** Global Tooltip 강화 — 카테고리명·설명·컬럼 칩 3단 구조, word-break keep-all, max-width 320px
+- [x] **UI-6** 테이블 컬럼 헤더 ⓘ (`.th-info`) — 컬럼 의미 툴팁 호버
+- [x] **UI-7** info-tip popover (`.info-tip` + `.info-popover`) — 메트릭 설명 화살표 팝오버
+- [x] **UI-8** Header/userInfo 모바일 대응 — flex-wrap + row-gap + max-width 말줄임, regime-badge nowrap
+
+### 인프라
+- [x] **INFRA-1** `cloudbuild.yaml` — `--set-env-vars` → `--update-env-vars` (수동 설정 env 보존, 배포 시 LS/Firebase 키 덮어쓰기 방지)
+
+### 파일 집계
+- 신규 6 / 삭제 1 / 수정 10 (`.env.example`, `cloudbuild.yaml`, `docs/DEPLOY_GUIDE.md`, `requirements.txt`, `screener/api/routes.py`, `screener/api/schemas.py`, `screener/main.py`, `screener/middleware.py`, `screener/services/subscription.py`, `screener/static/index.html`)
+- 통계: +610 / -316
+
+---
+
+---
+
+## 완료 (v7.2: Trial + 세션/IP 추적 + 관리자 대시보드 + Phase A 악용 방지, 2026-04-12 후반)
+
+### 7일 무료 체험 (명시적 시작 방식)
+- [x] **TRIAL-1** `screener/services/subscription.py` — `ensure_user_doc()` 분리, `start_trial()` 신규 함수
+  - 가입 시점엔 tier=free 유지, 사용자가 "체험 시작" 명시 클릭 필요
+  - Firestore 필드 추가: `email_verified`, `normalized_email`, `trial_started`, `trial_ends_at`, `trial_claimed_at`, `trial_blocked_reason`, `suspended`, `suspicious`, `admin_note`, `signup_ip_hash`, `is_admin_role`
+- [x] **TRIAL-2** `POST /api/user/start-trial` — 악용 체크 후 Pro 승격, custom claims 갱신
+- [x] **TRIAL-3** `GET /api/user/profile` — `tier / trial_active / trial_ends_at / trial_days_left / can_start_trial / trial_blocked_reason` 반환
+- [x] **TRIAL-4** 프론트 트라이얼 배너 (상태별 5분기):
+  - 이메일 미인증 → 인증 안내 + 재발송 버튼
+  - 체험 가능 → "🎁 7일 무료 체험 시작" 버튼
+  - 체험 중 → D-day 카운트다운 + 구독 CTA
+  - 체험 만료 → 구독 유도
+  - 악용 차단 → 차단 사유 + 구독 유도
+- [x] **TRIAL-5** Pro 잠금 모달에 체험 시작 CTA 조건부 노출 (`showProLockModal` async)
+
+### 세션/IP 추적 (동시접속 제한 + 어뷰징 감지)
+- [x] **SEC-1** `screener/services/security.py` 신규
+  - `register_session()` — 동시접속 ≥`MAX_ACTIVE_SESSIONS`(기본 2) 시 오래된 세션 제거
+  - `heartbeat_session()` — 무효 세션 감지 시 클라이언트 로그아웃 지시
+  - `record_login()` — login_history 서브컬렉션 기록
+  - 30일 unique IP ≥4 경고, ≥5 suspicious 플래그
+- [x] **SEC-2** `POST /api/auth/session-start`·`heartbeat`·`session-end` 엔드포인트
+- [x] **SEC-3** 프론트 — 로그인 직후 session-start 호출, 5분마다 heartbeat, 경고/강제 로그아웃 토스트
+- [x] **SEC-4** `middleware.py` — `suspended=true` 계정 전면 차단 (403)
+
+### Phase A 악용 방지 (이메일 인증 + 중복/일회용 차단)
+- [x] **ABUSE-1** 회원가입 직후 `sendEmailVerification()` 자동 호출
+- [x] **ABUSE-2** 60초 간격 `user.reload()` — 인증 완료 감지 후 토큰 갱신
+- [x] **ABUSE-3** 일회용 메일 도메인 블랙리스트 (70+ 도메인 + 키워드 매칭: `tempmail`, `10minute`, `disposable`, `throwaway`…)
+- [x] **ABUSE-4** 이메일 정규화 (`normalize_email`) — Gmail 점/+alias 제거, googlemail→gmail
+- [x] **ABUSE-5** `normalized_email` 중복 체크 (이미 trial 받은 계정 방지)
+- [x] **ABUSE-6** `trial_ips` 컬렉션 — 24h 내 같은 IP(해시)에서 2번째 계정 trial 차단
+- [x] **ABUSE-7** `privacy.html` §1.4 IP 수집 목적 고지 추가
+
+### 관리자 대시보드 `/admin`
+- [x] **ADMIN-1** `screener/api/admin_routes.py` 신규 — prefix `/api/admin`
+  - `GET /users?filter=all|suspicious|suspended|trial|pro|free`
+  - `GET /users/{uid}` — 로그인이력(최근 30) + 활성세션 + 30일 unique IP
+  - `GET /stats` — 전체/pro/free/체험중/의심/정지 카운트
+  - `POST /users/{uid}/suspend` — 정지 + 모든 활성 세션 제거
+  - `POST /users/{uid}/unsuspend`
+  - `POST /users/{uid}/extend-trial` — 체험 연장 (1~90일)
+  - `POST /users/{uid}/note` — 관리자 메모
+- [x] **ADMIN-2** `screener/static/admin.html` 신규 — 인증 게이트 (Firebase + Admin Key 지원)
+- [x] **ADMIN-3** 접근 제어 — `ADMIN_EMAILS` 환경변수 일치 이메일 또는 `X-Admin-Key` 헤더
+- [x] **ADMIN-4** 관리자 이메일 자동 Pro 승격 (middleware + ensure_user_doc 통합)
+
+### 포트폴리오 UX 개선
+- [x] **PF-1** 관심종목 인사이트 각 row에 ✓/＋ 토글 버튼 (`wliTogglePortfolio`)
+- [x] **PF-2** 메인 테이블 row에 ＋/✓ 버튼 (관심종목 카테고리 한정)
+- [x] **PF-3** 개별 담기 모달 (`#addPfModal`) — 수량·매수가·예상 금액 실시간 계산
+- [x] **PF-4** 포트폴리오 추가 폼 전면 개편 — 종목명/코드 통합 검색 + datalist autocomplete + 현재가 자동 입력
+- [x] **PF-5** `GET /api/all-stocks?q=&limit=` — 경량 자동완성 전용 엔드포인트
+- [x] **PF-6** 비로그인 시 포트폴리오 모달 게이트 (로그인 모달로 리다이렉트)
+- [x] **PF-7** `refreshPortfolio` 방어 렌더 (summary/holdings undefined 가드, 403/upgrade 처리)
+- [x] **PF-8** `portfolio/risk` 섹터 라벨 sanitizer — mojibake 시 "기타"/"ETF" 폴백
+
+### 헤더/CTA/온보딩
+- [x] **UX-1** 헤더 `🔐 로그인` 파란 그라디언트 버튼 (기본 표시)
+- [x] **UX-2** 게스트 배너 "회원가입 후 7일 Pro 무료 체험" + 회원가입 CTA
+- [x] **UX-3** 로그아웃 후 `location.replace('/')` 강제 — 이전 세션 상태 완전 소거
+- [x] **UX-4** `_loadTrialBanner` / `loadSubscriptionStatus` race guard (expectedUser 비교)
+- [x] **UX-5** Pro-locked 칩 클릭 사전 차단 (`selectCategory` early return)
+- [x] **UX-6** `selectGroup` 그룹 전환 시 현재 카테고리가 잠금이면 첫 Free로 자동 선택
+- [x] **UX-7** `/api/scan` 403 응답 시 Free 카테고리로 자동 복귀
+
+### 인프라
+- [x] **INFRA-2** Secret Manager API 활성화 (`all-of-asset` 프로젝트)
+- [x] **INFRA-3** `firebase-key` 시크릿 생성 + Cloud Run SA `secretmanager.secretAccessor` 권한
+- [x] **INFRA-4** 환경변수 설정: `AUTH_ENABLED=true`, `FIREBASE_WEB_API_KEY`, `FIREBASE_PROJECT_ID`, `ADMIN_EMAILS`
+- [x] **INFRA-5** 시크릿 마운트: `FIREBASE_CREDENTIALS=firebase-key:latest`
+- [x] **INFRA-6** Cloud Run IAM `roles/run.invoker` allUsers 부여 (ingress 403 해결)
+
+### 정합성 버그 수정 (v7.2 후반 세션)
+- [x] **FIX-1** `user_routes.py` dead import 제거
+- [x] **FIX-2** `ensure_user_doc` — admin 이메일 신규 사용자 tier=pro/email_verified=true로 저장
+- [x] **FIX-3** `showProLockModal` 깜빡임 — fetch 완료 후 모달 오픈
+- [x] **FIX-4** `_syncRowPfBtn` — 포트폴리오 모달 열려있으면 자동 `refreshPortfolio`
+- [x] **FIX-5** `admin.html` `loadStats` 403/오류 명확화 + 게이트 복귀
+- [x] **FIX-6** `admin.html` Firebase SDK 중복 초기화 방어
+
+### 파일 변경 (v7.2 세션 누적)
+신규: `services/security.py`, `api/user_routes.py`, `api/admin_routes.py`, `static/admin.html`
+수정: `services/subscription.py`, `middleware.py`, `api/lemon_routes.py`, `api/routes.py`, `api/schemas.py`, `main.py`, `static/index.html`, `static/privacy.html`, `cloudbuild.yaml`, `docs/DEPLOY_GUIDE.md`
+
+---
+
+## 완료 (v7.3: 완성도 — 전문가 분석·SEO·UX 리뉴얼, 2026-04-12 후반)
+
+### 포트폴리오 전문가 분석 리뉴얼
+- [x] **PF-EX-1** `/api/portfolio/risk` 전면 확장 — `holdings` 받아 **평가금 가중 비중** 계산
+- [x] **PF-EX-2** 건강도 점수(0~100) + 등급(S/A/B/C/D/F) + 자동 조언
+- [x] **PF-EX-3** 연 변동성·연 수익률·샤프 비율·최대낙폭(MDD)·평균 상관계수·Top 종목 집중도
+- [x] **PF-EX-4** 섹터별·시장별 비중 (KR/US), 종목별 비중 정렬
+- [x] **PF-EX-5** 8개 룰 기반 자동 추천 (`recommendations`: success/info/warning/danger)
+- [x] **PF-EX-6** 프론트 SVG 도넛 차트 + 종목 비중 가중 바 + 상관관계 Top 4 + 시장 분할 카드
+- [x] **PF-EX-7** 건강도 등급 배지 (그라디언트 6색) + 진행바
+
+### 종목 상세 모달 고도화
+- [x] **SD-1** "🎯 이 종목의 매수 포인트" 상단 하이라이트 — 7개 자동 시그널 감지 로직
+- [x] **SD-2** 종목별 메모 입력 (localStorage, 400ms debounce 자동 저장)
+- [x] **SD-3** 종목별 태그 추가/제거 (localStorage, 20자 제한)
+
+### 알림 시그널 (4종)
+- [x] **AL-1** 🎯 관심종목 매수점수 진입 (50/70점, 중복 방지 — 벗어났다 다시 오를 때 재알림)
+- [x] **AL-2** 🚀 관심종목 급등 시그널 (예보 4+/돌파 3+/동반매수)
+- [x] **AL-3** 📊 관심종목 등락률 (±X%)
+- [x] **AL-4** 🔥 전체 급등주 발생 (일 1회)
+- [x] **AL-5** 토스트 + Browser Notification 동시. `alertSeen` localStorage 중복 필터
+
+### 데이터 신선도 배지
+- [x] **FR-1** KST 시간 기반 장 상태 자동 감지: 🟢 장중 (09:00~15:30) / 🟡 장전 / 🟠 장후 / ⚪ 장마감/휴장일
+- [x] **FR-2** 장중 30분+ 업데이트 없으면 경고 색상 전환
+- [x] **FR-3** 장중 pulse 애니메이션 배지
+
+### 모바일 카드뷰
+- [x] **MC-1** 테이블/카드 뷰 토글 버튼 (`setViewMode` localStorage 저장)
+- [x] **MC-2** 모바일(<=640px) 기본 카드뷰, 데스크톱 기본 표
+- [x] **MC-3** 카드 구성: 종목명·코드·시장·현재가·등락률·관심/담기·뱃지·메타 3개
+
+### CSV/Excel 개선
+- [x] **EX-1** UTF-8 BOM 명시 (Excel 한글 깨짐 방지)
+- [x] **EX-2** RFC 5987 파일명 인코딩 (`filename*=UTF-8''...`) + ASCII fallback 병기
+- [x] **EX-3** 컬럼명 한국어 매핑 (`_EXPORT_COLUMNS`) 검증
+
+### 백테스트 리포트 개선
+- [x] **BT-1** 적중률 진행바 + 50% 기준선 시각화
+- [x] **BT-2** "무작위 기준 대비 ±X%p" 상대 성과 텍스트
+
+### 🌊 섹터 자금흐름 트리맵
+- [x] **SF-1** Squarified 재귀 분할 트리맵 (SVG/div 기반)
+- [x] **SF-2** 사각형 크기 = 자금 규모, 색 = 방향, 투명도 = 강도
+- [x] **SF-3** 트리맵/그리드 뷰 토글 + 리사이즈 대응
+
+### 📰 SEO 공개 페이지 (`screener/api/rank_page.py` 신규)
+- [x] **SEO-1** `/rank` / `/rank/today` → 오늘 날짜 리다이렉트
+- [x] **SEO-2** `/rank/<YYYY-MM-DD>` — 5섹션 TOP 리포트 (종합추천/급등예보/돌파/오늘급등/동반매수)
+- [x] **SEO-3** `/backtest-report` — 시그널별 적중률 공개 리포트 + 점수별 성과 추적
+- [x] **SEO-4** `/sitemap.xml` — 검색엔진용 사이트맵
+- [x] **SEO-5** `/robots.txt` — 크롤링 허용/차단 경로
+- [x] **SEO-6** 완비된 메타 태그 (`og:*`, `twitter:*`, canonical, JSON-LD Article 구조화 데이터)
+- [x] **SEO-7** CDN 친화 `Cache-Control: public, max-age=600~1800`
+- [x] **SEO-8** 하단 CTA "무료로 시작하기" 본 앱 유도
+
+### 관심종목 고도화
+- [x] **WL-1** 종목별 태그 저장/삭제 UI
+- [x] **WL-2** 관심종목 카테고리 상단 태그 필터 칩 바 (자동 생성, 개수 표시)
+- [x] **WL-3** 태그 선택 시 관심종목 필터링
+
+### 🔥 홈 첫 진입 개선 (원래 Phase 1 항목이었으나 누락 → 별도 구현)
+- [x] **HOME-1** 헤더 직하 "오늘의 TOP 픽" 섹션 — 비로그인 포함 공개
+- [x] **HOME-2** 💎 AI 추천 TOP 3 + 🚀 급등 예보 TOP 2 병렬 조회
+- [x] **HOME-3** 카드 클릭 → 종목 상세 모달 (매수 포인트 하이라이트)
+- [x] **HOME-4** 순위 배지 (#1 금색 / #2 은색 / #3 동색)
+- [x] **HOME-5** "전체 보기 →" 버튼 → 종합 추천 카테고리 이동 + 상단 스크롤
+- [x] **HOME-6** 접기/펼치기 (`topPicksCollapsed` localStorage 기억)
+- [x] **HOME-7** 지역 전환(KR/US) 시 재로드
+
+### 🧹 기타 UX 정합성 수정
+- [x] **UX-8** 토스트 위치 오른쪽 → 상단 중앙 (가독성 개선)
+- [x] **UX-9** 뷰 토글 버튼 **항상 표시** (기존 ≤640px 제한 제거)
+- [x] **UX-10** 자동 카드뷰 기준 **≤900px** (좁은 태블릿/창 포함)
+- [x] **UX-11** 페이지당 종목 100→50 (모바일 스크롤 완화)
+- [x] **UX-12** 테이블 헤더 **sticky** + 가로 스크롤 그라디언트 힌트
+- [x] **UX-13** 관심종목 인사이트 **compact 리뉴얼** — 시그널 있는 종목만 표시, 접기 가능
+- [x] **UX-14** 모달 그리드 공간 낭비 개선 — label/value 간격 최적화
+- [x] **UX-15** 펀더멘탈 탭 — 값 있는 항목만 표시, 전부 없으면 명확한 안내
+
+### 🔐 로그인 게이트 강화
+- [x] **GATE-1** `getWatchlist`/`getPortfolio` 자체 로그인 가드 — 비로그인 시 무조건 빈 배열
+- [x] **GATE-2** 로그아웃 시 모든 사용자 데이터 localStorage 클리어
+- [x] **GATE-3** 로그아웃 시 열린 모달 7종 강제 닫기
+- [x] **GATE-4** 관심종목 카테고리 비로그인 상태 — 큰 로그인 유도 카드
+- [x] **GATE-5** 메모/태그 (`wlnote:*`, `wltag:*`) 클라우드 동기화 — `/api/user/meta`
+
+### ☁️ 클라우드 동기화 (POST-2 이행)
+- [x] **CLOUD-1** `/api/user/watchlist` (GET/POST) — `users/{uid}.watchlist`
+- [x] **CLOUD-2** `/api/user/holdings` (GET/POST) — `users/{uid}.holdings`
+- [x] **CLOUD-3** `/api/user/meta` (GET/POST) — `users/{uid}.wl_meta.{notes,tags}`
+- [x] **CLOUD-4** 로그인 시 자동 pull + 로컬 병합 (이전 세션 잔재 upload)
+- [x] **CLOUD-5** 변경 시 800ms debounce 자동 sync
+
+### 포트폴리오 UX 버그 수정
+- [x] **FIX-A** 로그인 안 하면 포트폴리오 모달 자체가 열리지 않음 (로그인 게이트)
+- [x] **FIX-B** `refreshPortfolio` 방어 렌더 (summary/holdings undefined 가드, 403/upgrade 처리)
+- [x] **FIX-C** 관심종목 인사이트 토글 후 포트폴리오 모달 자동 갱신 (`_syncRowPfBtn`)
+- [x] **FIX-D** 로그아웃 race 방지 (`location.replace('/')` 강제 + `expectedUser` 가드)
+- [x] **FIX-E** 관리자 프로필 일관성 (middleware + user_profile + subscription 통합)
+
+### 파일 변경 (v7.3 세션)
+신규: `api/rank_page.py` (랜딩/백테스트 리포트/sitemap/robots)
+수정: `static/index.html`(대폭), `api/routes.py` (portfolio/risk 확장, CSV BOM), `api/user_routes.py`, `services/subscription.py`, `middleware.py` (public paths), `main.py` (router 등록)
+
+---
+
 ## 다음 단계 — 서비스 런칭 준비
 
 ### 🔴 필수 (런칭 전 완료)
-- [ ] **LAUNCH-1** Stripe Dashboard 설정
-  - 상품 생성 (Stock Screener Pro)
-  - 가격 생성: 월간 ₩9,900 / 연간 ₩99,000 (KRW, zero-decimal)
-  - Webhook 엔드포인트 등록: `https://{domain}/api/webhooks/stripe`
-  - 테스트 모드에서 카드(4242 4242 4242 4242)로 전체 플로우 검증
-- [ ] **LAUNCH-2** Firebase Console 설정
-  - Google 로그인 프로바이더 활성화
-  - 승인된 도메인 추가
-  - `FIREBASE_WEB_API_KEY` 확인
-- [ ] **LAUNCH-3** Cloud Run 환경변수 설정
+- [ ] **LAUNCH-1** 법적 페이지 배포 (LS 승인 선결조건)
+  - `gcloud builds submit --config=cloudbuild.yaml`
+  - 접속 확인: `/pricing`, `/terms`, `/privacy`, `/refund`
+- [ ] **LAUNCH-2** Lemon Squeezy 설정
+  - https://lemonsqueezy.com/signup
+  - Store 생성 → Products → Variant 2개 (월 ₩79,000 / 연 ₩700,000 KRW)
+  - Settings → API → API Key 발급
+  - Settings → Webhooks → `/api/webhooks/lemonsqueezy` 등록 (Signing secret 복사)
+  - 승인 소요: 당일~1일
+  - 테스트 카드로 전체 플로우 검증
+- [ ] **LAUNCH-3** Firebase Console 설정
+  - Authentication → Sign-in method → Google 활성화
+  - 프로젝트 설정 → 웹 앱에서 `apiKey` 복사 (= `FIREBASE_WEB_API_KEY`)
+  - Authentication → Settings → Authorized domains에 Cloud Run URL 추가
+- [ ] **LAUNCH-4** Cloud Run 환경변수 + Secret 업데이트
   - `AUTH_ENABLED=true`
-  - `STRIPE_SECRET_KEY`, `STRIPE_PUBLISHABLE_KEY`, `STRIPE_WEBHOOK_SECRET`
-  - `STRIPE_PRICE_MONTHLY`, `STRIPE_PRICE_YEARLY`
-  - `FIREBASE_WEB_API_KEY`, `FIREBASE_PROJECT_ID`
-- [ ] **LAUNCH-4** 도메인 + HTTPS 설정 (가이드: docs/DEPLOY_GUIDE.md)
-- [ ] **LAUNCH-5** Cloud Run 재배포 (stripe 패키지 포함)
-- [ ] **LAUNCH-6** E2E 테스트 — 회원가입 → Free 제한 확인 → 결제 → Pro 해금 → 해지
+  - `FIREBASE_WEB_API_KEY`, `FIREBASE_PROJECT_ID=stock-search-program`
+  - `LEMONSQUEEZY_STORE_ID`, `LEMONSQUEEZY_VARIANT_MONTHLY`, `LEMONSQUEEZY_VARIANT_YEARLY`
+  - Secret: `lemon-ls-api-key`, `lemon-ls-webhook-secret`
+  - 상세 명령: docs/DEPLOY_GUIDE.md §4
+- [ ] **LAUNCH-5** 도메인 + HTTPS (선택, 가이드: docs/DEPLOY_GUIDE.md §3)
+- [ ] **LAUNCH-6** Cloud Run 재배포 (`httpx` 포함, `stripe` 제거된 requirements로)
+- [ ] **LAUNCH-7** E2E 테스트 — 회원가입 → Free 제한 → Pro 카테고리 chip 잠금 표시 → 결제 → 해금 → 관심종목 → Bulk 포트폴리오 담기 → 해지 → Free 복귀
+
+### 🟠 런칭 직전 — 마케팅/성장 (v7.3 이후 제안)
+- [ ] **GROW-1** Google Search Console 등록 + `/sitemap.xml` 제출 — 색인 시작
+- [ ] **GROW-2** 네이버 웹마스터 도구 등록 + `/sitemap.xml` 제출 — 한국 유입 (GROW-1보다 중요)
+- [ ] **GROW-3** Lemon Squeezy 승인 재신청 — 랜딩·백테스트 리포트·법적페이지 모두 준비됐으니 심사 통과 가능성↑
+- [ ] **GROW-4** 리퍼럴 코드 시스템 — 추천인/피추천인 체험 연장 (기존 trial 인프라 활용)
+- [ ] **GROW-5** 트라이얼 D-2 이메일 알림 — 전환율 핵심 (Firebase Functions or Cloud Scheduler + SendGrid/Mailgun)
+- [ ] **GROW-6** 트위터/오픈그래프 이미지 — `/rank/<date>` 공유 시 썸네일 노출 (og:image 생성)
 
 ### 🟡 권장 (런칭 직후)
-- [ ] **POST-1** 랜딩 페이지 — 서비스 소개 + 가격 안내 + CTA
-- [ ] **POST-2** 관심종목 클라우드 동기화 — Firestore `users/{uid}/watchlist`
-- [ ] **POST-3** 이메일 인증 + 비밀번호 재설정 플로우
-- [ ] **POST-4** 관리자 대시보드 — 사용자/구독/매출 현황
+- [x] **POST-1** 랜딩 페이지 — `/rank/<date>` + `/backtest-report`로 대체 구현 완료
+- [ ] **POST-2** 관심종목 클라우드 동기화 — Firestore `users/{uid}/watchlist` (localStorage → 크로스 디바이스)
+- [ ] **POST-3** 비밀번호 재설정 플로우 (`sendPasswordResetEmail`)
+- [x] **POST-4** 관리자 대시보드 — `/admin` 완료 (v7.2)
 
 ### 🟢 향후 (안정화 후)
 - [ ] **FUTURE-1** 데스크톱 인스톨러 (Inno Setup)
@@ -452,12 +783,12 @@ AUTH_ENABLED=false
 FIREBASE_WEB_API_KEY=
 FIREBASE_PROJECT_ID=
 
-# Stripe (v7.0 추가)
-STRIPE_SECRET_KEY=sk_...
-STRIPE_PUBLISHABLE_KEY=pk_...
-STRIPE_WEBHOOK_SECRET=whsec_...
-STRIPE_PRICE_MONTHLY=price_...
-STRIPE_PRICE_YEARLY=price_...
+# Lemon Squeezy (v7.1 — Stripe 대체)
+LEMONSQUEEZY_API_KEY=
+LEMONSQUEEZY_STORE_ID=
+LEMONSQUEEZY_VARIANT_MONTHLY=
+LEMONSQUEEZY_VARIANT_YEARLY=
+LEMONSQUEEZY_WEBHOOK_SECRET=
 
 # 기타
 CLOUD_RUN_URL=https://stock-screener-119320994983.asia-northeast3.run.app

@@ -16,16 +16,29 @@ from loguru import logger
 
 AUTH_ENABLED = os.environ.get("AUTH_ENABLED", "false").lower() == "true"
 
+# 관리자 이메일 (콤마 구분). 일치하는 사용자는 결제 없이 Pro 티어로 간주.
+ADMIN_EMAILS = {
+    e.strip().lower()
+    for e in os.environ.get("ADMIN_EMAILS", "").split(",")
+    if e.strip()
+}
+
 # 인증 불필요 경로
 PUBLIC_PATHS = {"/", "/api/status", "/api/categories", "/favicon.ico",
-                "/api/auth-config", "/api/webhooks/stripe", "/api/stripe-config"}
-PUBLIC_PREFIXES = ("/static/",)
+                "/api/auth-config",
+                "/api/webhooks/lemonsqueezy", "/api/lemon-config",
+                "/pricing", "/terms", "/privacy", "/refund", "/admin", "/rank",
+                "/backtest-report", "/sitemap.xml", "/robots.txt"}
+PUBLIC_PREFIXES = ("/static/", "/rank/", "/og/")
 
-# 무료 티어 허용 카테고리
-FREE_CATEGORIES = {"surge", "bluechip", "recommend", "watchlist", "etf"}
+# 무료 티어 허용 카테고리 (foreign_inst = 스마트머니/외국인·기관 수급)
+FREE_CATEGORIES = {"surge", "bluechip", "recommend", "watchlist", "etf", "foreign_inst"}
 
-# 유료 전용 엔드포인트
-PRO_ENDPOINTS = {"/api/export", "/api/backtest", "/api/portfolio", "/api/sectors"}
+# 유료 전용 엔드포인트 (Pro/Trial만 접근)
+PRO_ENDPOINTS = {"/api/export", "/api/portfolio", "/api/portfolio/risk", "/api/sectors", "/api/sector-flow"}
+
+# 로그인 필수 (Free/Pro 공통 — 비로그인만 차단). 백테스트는 Pro 아니지만 로그인 필요.
+LOGIN_REQUIRED_ENDPOINTS = {"/api/backtest"}
 
 # 무료 티어 결과 제한
 FREE_RESULT_LIMIT = 20
@@ -45,11 +58,12 @@ def verify_firebase_token(token: str) -> dict | None:
         decoded = auth.verify_id_token(token)
         uid = decoded.get("uid", "")
         email = decoded.get("email", "")
+        email_verified = bool(decoded.get("email_verified", False))
 
         # 커스텀 클레임에서 tier 읽기 (없으면 free)
         tier = decoded.get("tier", "free")
 
-        return {"uid": uid, "email": email, "tier": tier}
+        return {"uid": uid, "email": email, "email_verified": email_verified, "tier": tier}
     except Exception as e:
         logger.debug(f"토큰 검증 실패: {e}")
         return None
@@ -88,8 +102,33 @@ class AuthMiddleware(BaseHTTPMiddleware):
             # 미인증 → free 티어로 제한 접근 허용
             user = {"uid": "", "email": "", "tier": "free"}
 
+        # 정지된 계정 차단
+        if user.get("uid"):
+            try:
+                from screener.services.subscription import _users_ref
+                doc = _users_ref().document(user["uid"]).get()
+                if doc.exists and doc.to_dict().get("suspended"):
+                    return JSONResponse(
+                        status_code=403,
+                        content={"detail": "계정이 일시 정지되었습니다. 문의: messi929@naver.com", "suspended": True},
+                    )
+            except Exception:
+                pass
+
+        # 관리자 이메일은 Pro로 자동 승격
+        if user.get("email", "").lower() in ADMIN_EMAILS:
+            user["tier"] = "pro"
+            user["is_admin"] = True
+
         request.state.user = user
         tier = user["tier"]
+
+        # 로그인 필수 (비로그인만 차단)
+        if path in LOGIN_REQUIRED_ENDPOINTS and not user.get("uid"):
+            return JSONResponse(
+                status_code=401,
+                content={"detail": "로그인 후 이용 가능합니다.", "login_required": True},
+            )
 
         # Pro 전용 엔드포인트
         if path in PRO_ENDPOINTS and tier != "pro":
