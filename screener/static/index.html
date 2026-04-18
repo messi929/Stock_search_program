@@ -235,6 +235,10 @@ tbody tr{animation:fadeIn .2s ease;}
 
 /* ── Data Freshness ── */
 .freshness{font-size:12px;display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:10px;background:var(--bg3);font-weight:600;white-space:nowrap;}
+.freshness-block{display:inline-flex;flex-direction:column;gap:3px;align-items:flex-start;line-height:1.3;}
+.freshness-sub{font-size:11px;color:var(--text3);display:inline-flex;align-items:center;gap:4px;padding:1px 7px;border-radius:8px;background:var(--bg3);font-weight:600;white-space:nowrap;}
+.freshness-sub.us{background:rgba(139,92,246,.1);color:#a78bfa;}
+.freshness-sub.kr{background:rgba(49,130,246,.1);color:#60a5fa;}
 .freshness.fresh{color:var(--green);}
 .freshness.live{color:var(--green);background:rgba(3,178,108,.12);animation:pulseLive 2s ease-in-out infinite;}
 .freshness.stale{color:var(--gold);background:rgba(245,159,0,.1);}
@@ -552,61 +556,76 @@ tbody tr{animation:fadeIn .2s ease;}
 }
 
 /* ── v6: Portfolio Risk ── */
-/* 🔥 오늘의 TOP 픽 (v7.4 리디자인) */
-.top-picks{background:linear-gradient(135deg,rgba(49,130,246,.10) 0%,rgba(245,159,0,.04) 50%,rgba(3,178,108,.06) 100%);border-bottom:1px solid var(--border);padding:16px 24px 18px;transition:padding .25s;overflow:hidden;position:relative;}
-.top-picks::before{content:"";position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,var(--blue),var(--gold),var(--green));opacity:.6;}
-.top-picks.collapsed{padding:10px 24px;}
+/* 🔥 오늘의 TOP 픽 (v7.4 리디자인 · 컴팩트) */
+.top-picks{max-width:1280px;margin:12px auto 0;padding:10px 16px 12px;background:linear-gradient(135deg,rgba(49,130,246,.08) 0%,rgba(245,159,0,.03) 50%,rgba(3,178,108,.05) 100%);border:1px solid var(--border);border-radius:12px;transition:padding .25s;overflow:hidden;position:relative;}
+.top-picks::before{content:"";position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,var(--blue),var(--gold),var(--green));opacity:.55;}
+.top-picks.collapsed{padding:8px 16px;}
 .top-picks.collapsed .tp-list,.top-picks.collapsed .tp-sub{display:none;}
-.tp-header{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:12px;}
+.tp-header{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:8px;}
 .top-picks.collapsed .tp-header{margin-bottom:0;}
-.tp-title{font-size:15px;font-weight:800;color:#fff;letter-spacing:-.3px;display:flex;align-items:center;gap:7px;}
-.tp-title-badge{font-size:10px;font-weight:800;padding:2px 8px;border-radius:10px;background:rgba(245,159,0,.22);color:var(--gold);letter-spacing:.4px;}
-.tp-sub{font-size:11px;color:var(--text3);margin-top:3px;}
-.tp-actions{display:flex;gap:8px;align-items:center;}
-.tp-btn{padding:6px 14px;background:var(--bg2);border:1px solid var(--border);color:var(--text2);border-radius:16px;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap;transition:all .15s;}
+.tp-title{font-size:14px;font-weight:800;color:#fff;letter-spacing:-.3px;display:flex;align-items:center;gap:6px;}
+.tp-title-badge{font-size:9px;font-weight:800;padding:1px 7px;border-radius:10px;background:rgba(245,159,0,.22);color:var(--gold);letter-spacing:.4px;}
+.tp-sub{font-size:11px;color:var(--text3);margin-top:2px;}
+.tp-actions{display:flex;gap:6px;align-items:center;}
+.tp-btn{padding:5px 12px;background:var(--bg2);border:1px solid var(--border);color:var(--text2);border-radius:14px;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap;transition:all .15s;}
 .tp-btn:hover{border-color:var(--blue);color:var(--blue);background:rgba(49,130,246,.08);}
-.tp-collapse{padding:6px 12px;background:transparent;border:1px solid var(--border);color:var(--text2);cursor:pointer;font-size:11px;font-weight:700;border-radius:16px;display:flex;align-items:center;gap:5px;transition:all .15s;}
+.tp-collapse{padding:5px 11px;background:transparent;border:1px solid var(--border);color:var(--text2);cursor:pointer;font-size:11px;font-weight:700;border-radius:14px;display:flex;align-items:center;gap:5px;transition:all .15s;}
 .tp-collapse:hover{border-color:var(--blue);color:var(--blue);}
 .tp-collapse-icon{font-size:9px;transition:transform .25s;display:inline-block;}
 .top-picks.collapsed .tp-collapse-icon{transform:rotate(180deg);}
-.tp-list{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px;}
-.tp-card{background:linear-gradient(180deg,var(--bg2) 0%,rgba(15,23,42,.92) 100%);border:1px solid var(--border);border-radius:12px;padding:12px 12px 11px;cursor:pointer;transition:transform .18s,border-color .18s,box-shadow .18s;position:relative;overflow:hidden;min-width:0;}
+.tp-list{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:8px;}
+.tp-card{background:linear-gradient(180deg,var(--bg2) 0%,rgba(15,23,42,.92) 100%);border:1px solid var(--border);border-radius:10px;padding:9px 11px 8px;cursor:pointer;transition:transform .18s,border-color .18s,box-shadow .18s;position:relative;overflow:hidden;min-width:0;}
 .tp-card::before{content:"";position:absolute;top:0;left:0;right:0;height:2px;background:var(--border);transition:background .18s;}
 .tp-card.gold::before{background:linear-gradient(90deg,#f59f00,#fbbf24);}
 .tp-card.silver::before{background:linear-gradient(90deg,#94a3b8,#cbd5e1);}
 .tp-card.bronze::before{background:linear-gradient(90deg,#d97706,#f59e0b);}
-.tp-card:hover{border-color:var(--blue);transform:translateY(-2px);box-shadow:0 6px 18px rgba(49,130,246,.18);}
+.tp-card:hover{border-color:var(--blue);transform:translateY(-2px);box-shadow:0 4px 14px rgba(49,130,246,.18);}
 .tp-card:active{transform:translateY(0);}
-.tp-card-top{display:flex;justify-content:space-between;align-items:center;gap:6px;margin-bottom:7px;}
-.tp-card-rank{display:inline-flex;align-items:center;justify-content:center;min-width:22px;height:22px;padding:0 6px;font-size:11px;font-weight:800;background:var(--bg3);color:var(--text3);border-radius:7px;letter-spacing:-.3px;}
+.tp-card-top{display:flex;justify-content:space-between;align-items:center;gap:6px;margin-bottom:5px;}
+.tp-card-rank{display:inline-flex;align-items:center;justify-content:center;min-width:20px;height:20px;padding:0 5px;font-size:11px;font-weight:800;background:var(--bg3);color:var(--text3);border-radius:6px;letter-spacing:-.3px;}
 .tp-card.gold .tp-card-rank{background:linear-gradient(135deg,#f59f00,#fbbf24);color:#1a1a1a;}
 .tp-card.silver .tp-card-rank{background:linear-gradient(135deg,#cbd5e1,#e2e8f0);color:#1a1a1a;}
 .tp-card.bronze .tp-card-rank{background:linear-gradient(135deg,#d97706,#f59e0b);color:#fff;}
-.tp-card-tag{display:inline-block;font-size:10px;font-weight:800;padding:2px 8px;border-radius:8px;letter-spacing:.3px;white-space:nowrap;}
+.tp-card-tag{display:inline-block;font-size:10px;font-weight:800;padding:1px 7px;border-radius:7px;letter-spacing:.3px;white-space:nowrap;}
 .tp-card-tag.rec{background:rgba(49,130,246,.18);color:#60a5fa;}
 .tp-card-tag.surge{background:rgba(239,68,68,.18);color:#f87171;}
-.tp-card-name{font-size:14px;font-weight:800;color:#fff;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-bottom:6px;}
-.tp-card-meta{display:flex;justify-content:space-between;align-items:baseline;gap:6px;margin-bottom:8px;}
-.tp-card-price{font-size:13px;font-weight:700;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-.tp-card-chg{font-size:11px;font-weight:800;white-space:nowrap;padding:2px 7px;border-radius:6px;}
+.tp-card-name{font-size:13px;font-weight:800;color:#fff;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-bottom:4px;}
+.tp-card-meta{display:flex;justify-content:space-between;align-items:center;gap:6px;}
+.tp-card-price{font-size:12px;font-weight:700;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.tp-card-chg{font-size:11px;font-weight:800;white-space:nowrap;padding:1px 6px;border-radius:5px;}
 .tp-card-chg.up{background:rgba(239,68,68,.15);color:var(--red);}
 .tp-card-chg.down{background:rgba(49,130,246,.15);color:var(--blue);}
 .tp-card-chg.flat{background:var(--bg3);color:var(--text3);}
-.tp-card-score{font-size:10px;color:var(--text3);display:flex;gap:8px;align-items:center;padding-top:7px;border-top:1px solid rgba(100,116,139,.15);}
-.tp-card-score strong{color:var(--gold);font-size:11px;font-weight:800;}
-.tp-loading{padding:18px;text-align:center;color:var(--text3);font-size:12px;grid-column:1/-1;}
+.tp-card-score{font-size:10px;color:var(--text3);display:flex;gap:8px;align-items:center;margin-top:5px;padding-top:5px;border-top:1px solid rgba(100,116,139,.15);}
+.tp-card-score strong{color:var(--gold);font-size:10px;font-weight:800;}
+.tp-loading{padding:14px;text-align:center;color:var(--text3);font-size:12px;grid-column:1/-1;}
 @media(max-width:640px){
-  .top-picks{padding:12px 14px 14px;}
-  .top-picks.collapsed{padding:9px 14px;}
-  .tp-list{grid-template-columns:repeat(2,1fr);gap:8px;}
-  .tp-card{padding:10px 10px 9px;border-radius:10px;}
-  .tp-card-name{font-size:13px;}
-  .tp-card-price{font-size:12px;}
-  .tp-title{font-size:14px;}
-  .tp-btn{padding:5px 10px;font-size:10px;}
-  .tp-collapse{padding:5px 10px;font-size:10px;}
-  .tp-card-rank{min-width:20px;height:20px;font-size:10px;padding:0 5px;}
-  .tp-card-tag{font-size:9px;padding:2px 6px;}
+  .top-picks{margin:10px 14px 0;padding:9px 12px 11px;border-radius:10px;}
+  .top-picks.collapsed{padding:8px 12px;}
+  .tp-list{grid-template-columns:repeat(2,1fr);gap:6px;}
+  .tp-card{padding:8px 9px 7px;}
+  .tp-card-name{font-size:12px;}
+  .tp-card-price{font-size:11px;}
+  .tp-title{font-size:13px;}
+  .tp-btn{padding:4px 9px;font-size:10px;}
+  .tp-collapse{padding:4px 9px;font-size:10px;}
+  .tp-card-rank{min-width:18px;height:18px;font-size:10px;padding:0 4px;}
+  .tp-card-tag{font-size:9px;padding:1px 5px;}
+  .tp-sub{display:none;}
+}
+
+/* Info Banner (Trial / Guest) — top-picks와 동일 스타일 */
+.info-banner{max-width:1280px;margin:10px auto 0;padding:10px 16px;border-radius:12px;border:1px solid var(--border);text-align:center;font-size:13px;color:var(--text);position:relative;}
+.info-banner.trial{background:linear-gradient(90deg,rgba(245,159,0,.12),rgba(245,159,0,.04));border-color:rgba(245,159,0,.3);color:#fff;}
+.info-banner.guest{background:linear-gradient(90deg,var(--blue-bg),rgba(49,130,246,.04));border-color:rgba(49,130,246,.3);}
+.ib-cta{margin-left:10px;padding:5px 16px;border:none;border-radius:14px;font-size:12px;font-weight:700;cursor:pointer;transition:opacity .15s;}
+.ib-cta:hover{opacity:.88;}
+.ib-cta.gold{background:var(--gold);color:#000;}
+.ib-cta.blue{background:var(--blue);color:#fff;}
+.ib-close{margin-left:4px;padding:2px 8px;background:transparent;color:var(--text3);border:none;font-size:16px;cursor:pointer;line-height:1;}
+.ib-close:hover{color:var(--text);}
+@media(max-width:640px){
+  .info-banner{margin:8px 14px 0;padding:9px 12px;border-radius:10px;font-size:12px;}
 }
 
 /* 뷰 토글 (항상 표시) */
@@ -1105,14 +1124,14 @@ tbody tr{animation:fadeIn .2s ease;}
 </div>
 
 <!-- Trial / Guest Banner -->
-<div id="trialBanner" style="display:none;background:linear-gradient(90deg,rgba(245,159,0,.12),rgba(245,159,0,.04));border-bottom:1px solid rgba(245,159,0,.3);padding:10px 24px;text-align:center;font-size:13px;color:#fff;">
+<div id="trialBanner" class="info-banner trial" style="display:none;">
   <span id="trialBannerText"></span>
-  <button onclick="showPricingModal()" style="margin-left:10px;padding:4px 14px;background:var(--gold);color:#000;border:none;border-radius:14px;font-size:12px;font-weight:700;cursor:pointer;">지금 구독</button>
-  <button onclick="dismissTrialBanner()" style="margin-left:4px;padding:2px 8px;background:transparent;color:var(--text3);border:none;font-size:16px;cursor:pointer;" title="닫기">×</button>
+  <button onclick="showPricingModal()" class="ib-cta gold">지금 구독</button>
+  <button onclick="dismissTrialBanner()" class="ib-close" title="닫기">×</button>
 </div>
-<div id="guestBanner" style="display:none;background:linear-gradient(90deg,var(--blue-bg),rgba(49,130,246,.04));border-bottom:1px solid rgba(49,130,246,.3);padding:12px 24px;text-align:center;font-size:13px;color:var(--text);">
+<div id="guestBanner" class="info-banner guest" style="display:none;">
   👋 처음 오셨나요? <strong>회원가입 후 7일 Pro 무료 체험</strong>을 신청할 수 있습니다 — 카드 등록 불필요
-  <button onclick="showLoginModal()" style="margin-left:10px;padding:5px 16px;background:var(--blue);color:#fff;border:none;border-radius:14px;font-size:12px;font-weight:700;cursor:pointer;">회원가입</button>
+  <button onclick="showLoginModal()" class="ib-cta blue">회원가입</button>
 </div>
 
 <div class="container">
@@ -1512,6 +1531,42 @@ function showToast(msg,type='info',duration=3000){
 }
 
 // ── Data Freshness ──
+// 마지막 거래일(주말/공휴일 감지) — KR/US 구분
+function _lastWeekday(d){
+  // 주말이면 금요일까지 되돌림
+  const out=new Date(d);
+  while(out.getDay()===0||out.getDay()===6)out.setDate(out.getDate()-1);
+  return out;
+}
+function _formatMMDD(d){
+  const mm=String(d.getMonth()+1).padStart(2,'0');
+  const dd=String(d.getDate()).padStart(2,'0');
+  const dow=['일','월','화','수','목','금','토'][d.getDay()];
+  return `${mm}/${dd}(${dow})`;
+}
+function _getLastTradingDate(market){
+  // market: 'kr' | 'us'
+  const now=new Date();
+  if(market==='kr'){
+    // KST 기준 — 평일 15:30 이후면 오늘, 아니면 직전 거래일
+    const kst=new Date(now.getTime()+(now.getTimezoneOffset()+540)*60000);
+    const dow=kst.getDay(),mins=kst.getHours()*60+kst.getMinutes();
+    if(dow>=1&&dow<=5&&mins>=930)return kst;
+    const y=new Date(kst);y.setDate(y.getDate()-1);
+    return _lastWeekday(y);
+  }else{
+    // ET 기준 — 16:00 ET (장 마감) 이후면 오늘, 아니면 직전 거래일
+    // DST 대략: 3월 둘째 일요일 ~ 11월 첫째 일요일 (EDT -4h), 그 외 EST -5h
+    const month=now.getUTCMonth(); // 0=Jan
+    const etOffset=(month>=2&&month<=10)?-240:-300; // 단순화
+    const et=new Date(now.getTime()+(now.getTimezoneOffset()+etOffset)*60000);
+    const dow=et.getDay(),mins=et.getHours()*60+et.getMinutes();
+    if(dow>=1&&dow<=5&&mins>=16*60)return et;
+    const y=new Date(et);y.setDate(y.getDate()-1);
+    return _lastWeekday(y);
+  }
+}
+
 function formatFreshness(dateStr){
   if(!dateStr)return'';
   const last=new Date(dateStr),now=new Date(),diff=Math.floor((now-last)/60000);
@@ -1539,7 +1594,13 @@ function formatFreshness(dateStr){
 
   // 장중인데 30분 이상 업데이트 없으면 경고
   const alertCls=(isMarketHours&&diff>=30)?' stale':'';
-  return `<span class="freshness ${phaseCls}${alertCls}" title="마지막 수집: ${dateStr}">${phase} · ${fresh}</span>`;
+  const krDate=_formatMMDD(_getLastTradingDate('kr'));
+  const usDate=_formatMMDD(_getLastTradingDate('us'));
+  return `<span class="freshness-block" title="마지막 수집: ${dateStr}">
+    <span class="freshness ${phaseCls}${alertCls}">${phase} · ${fresh}</span>
+    <span class="freshness-sub kr">📅 KR ${krDate} 종가 기준</span>
+    <span class="freshness-sub us">📅 US ${usDate} 종가 기준</span>
+  </span>`;
 }
 
 // ── Stock Search ──
