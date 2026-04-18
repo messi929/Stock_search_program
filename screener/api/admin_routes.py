@@ -274,36 +274,114 @@ async def get_audit_log(request: Request, uid: str):
     return {"logs": logs}
 
 
+def _iter_trial_expiring(days: int):
+    """트라이얼 D-N일 이내 + 미결제 사용자 순회.
+    yields (doc_id, data_dict, trial_ends_at_utc, days_left)
+    """
+    now = datetime.now(timezone.utc)
+    cutoff = now + timedelta(days=max(1, min(days, 30)))
+    try:
+        cur = _users_ref().where("trial_started", "==", True).stream()
+    except Exception as e:
+        logger.error(f"trial_expiring query failed: {e}")
+        return
+    for d in cur:
+        dd = d.to_dict() or {}
+        te = dd.get("trial_ends_at")
+        if hasattr(te, "timestamp"):
+            te = datetime.fromtimestamp(te.timestamp(), tz=timezone.utc)
+        if not te:
+            continue
+        sub_status = (dd.get("subscription") or {}).get("status", "")
+        if not (now < te <= cutoff and dd.get("tier") == "pro" and sub_status not in ("active", "on_trial", "cancelled")):
+            continue
+        yield d.id, dd, te, max(0, (te - now).days)
+
+
 @router.get("/trial-expiring")
 async def trial_expiring(request: Request, days: int = 2):
-    """D-N일 이내 체험 만료 예정 사용자 조회. 이메일 알림 연동용.
-    Cloud Scheduler에서 주기적으로 이 엔드포인트 호출 → 각 사용자에게 메일 발송.
+    """D-N일 이내 체험 만료 예정 사용자 조회 (발송 없음)."""
+    if not _is_admin(request):
+        return _forbid()
+    users_out = [
+        {"uid": uid, "email": dd.get("email", ""), "trial_ends_at": te.isoformat(), "days_left": left}
+        for uid, dd, te, left in _iter_trial_expiring(days)
+    ]
+    return {"users": users_out, "count": len(users_out), "cutoff_days": days}
+
+
+def _trial_reminder_html(days_left: int, ends_at: datetime, pricing_url: str) -> str:
+    ends_str = ends_at.astimezone(timezone.utc).strftime("%Y-%m-%d")
+    urgency = "오늘 만료됩니다" if days_left == 0 else f"{days_left}일 남았습니다"
+    return f"""<!DOCTYPE html>
+<html lang="ko"><body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;max-width:600px;margin:0 auto;padding:40px 20px;color:#1e293b;background:#f8fafc;">
+<div style="background:white;padding:32px;border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,.08);">
+<h1 style="color:#2563eb;margin:0 0 16px;font-size:22px;">⏰ 체험판 {urgency}</h1>
+<p style="font-size:15px;line-height:1.7;">StockFinder Pro 체험판이 <b>{ends_str}</b>에 만료됩니다.</p>
+<p style="font-size:15px;line-height:1.7;">계속 Pro 기능(전문가 포트폴리오, 매수 포인트, 백테스트 등)을 사용하시려면 아래 버튼에서 결제를 진행해주세요.</p>
+<p style="margin:32px 0;text-align:center;">
+<a href="{pricing_url}" style="background:#2563eb;color:white;padding:14px 28px;text-decoration:none;border-radius:8px;font-weight:600;display:inline-block;">Pro 결제하기 →</a>
+</p>
+<p style="color:#64748b;font-size:13px;margin-top:40px;border-top:1px solid #e2e8f0;padding-top:16px;">
+체험판 만료 알림은 자동 발송되며, 사용자당 1회만 발송됩니다.
+</p></div></body></html>"""
+
+
+def _trial_reminder_text(days_left: int, ends_at: datetime, pricing_url: str) -> str:
+    ends_str = ends_at.astimezone(timezone.utc).strftime("%Y-%m-%d")
+    urgency = "오늘 만료됩니다" if days_left == 0 else f"{days_left}일 남았습니다"
+    return (
+        f"StockFinder Pro 체험판 {urgency}\n\n"
+        f"체험판 만료일: {ends_str}\n\n"
+        f"계속 Pro 기능을 사용하시려면 아래 링크에서 결제해주세요:\n{pricing_url}\n\n"
+        f"--\nStockFinder"
+    )
+
+
+@router.post("/send-trial-reminders")
+async def send_trial_reminders(request: Request, days: int = 2):
+    """D-N일 체험 만료 예정 사용자에게 Mailgun으로 리마인더 메일 발송.
+
+    Cloud Scheduler에서 매일 호출. x-admin-key 헤더로 인증.
+    사용자당 1회만 발송 (trial_reminder_sent_at 필드로 중복 방지).
     """
     if not _is_admin(request):
         return _forbid()
+    from screener.services.mailer import send_email, is_configured
+    if not is_configured():
+        return JSONResponse(status_code=503, content={"detail": "Mailgun 미설정"})
+
+    base_url = os.environ.get("CLOUD_RUN_URL", "").rstrip("/")
+    pricing_url = f"{base_url}/pricing" if base_url else "/pricing"
     now = datetime.now(timezone.utc)
-    cutoff = now + timedelta(days=max(1, min(days, 30)))
-    users_out = []
-    try:
-        cur = _users_ref().where("trial_started", "==", True).stream()
-        for d in cur:
-            dd = d.to_dict() or {}
-            te = dd.get("trial_ends_at")
-            if hasattr(te, "timestamp"):
-                te = datetime.fromtimestamp(te.timestamp(), tz=timezone.utc)
-            if not te:
-                continue
-            sub_status = (dd.get("subscription") or {}).get("status", "")
-            if now < te <= cutoff and dd.get("tier") == "pro" and sub_status not in ("active", "on_trial", "cancelled"):
-                users_out.append({
-                    "uid": d.id,
-                    "email": dd.get("email", ""),
-                    "trial_ends_at": te.isoformat(),
-                    "days_left": max(0, (te - now).days),
-                })
-    except Exception as e:
-        logger.error(f"trial_expiring query failed: {e}")
-    return {"users": users_out, "count": len(users_out), "cutoff_days": days}
+    sent, skipped = 0, 0
+    failed: list[str] = []
+
+    for uid, dd, te, days_left in _iter_trial_expiring(days):
+        email = (dd.get("email") or "").strip()
+        if not email:
+            continue
+        if dd.get("trial_reminder_sent_at"):
+            skipped += 1
+            continue
+        subject = f"[StockFinder] Pro 체험판 {days_left}일 남았습니다"
+        ok = send_email(
+            email,
+            subject,
+            _trial_reminder_html(days_left, te, pricing_url),
+            _trial_reminder_text(days_left, te, pricing_url),
+        )
+        if ok:
+            sent += 1
+            try:
+                _users_ref().document(uid).update({"trial_reminder_sent_at": now})
+            except Exception as e:
+                logger.debug(f"mark reminder failed for {uid}: {e}")
+        else:
+            failed.append(email)
+
+    logger.info(f"trial reminders: sent={sent} skipped={skipped} failed={len(failed)}")
+    return {"sent": sent, "skipped": skipped, "failed": failed, "cutoff_days": days}
 
 
 @router.get("/stats")

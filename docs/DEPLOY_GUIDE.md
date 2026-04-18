@@ -435,3 +435,79 @@ PUBLIC_PATHS = {"/", "/api/status", "/api/categories", "/favicon.ico",
                 "/backtest-report", "/sitemap.xml", "/robots.txt"}
 PUBLIC_PREFIXES = ("/static/", "/rank/")
 ```
+
+---
+
+## 10. 트라이얼 D-2 이메일 (Mailgun + Cloud Scheduler)
+
+**목적**: 체험판 만료 2일 전 유저에게 자동으로 결제 유도 메일 발송.
+
+### A. Mailgun 셋업
+
+1. https://mailgun.com 가입 → **Add New Domain** (서브도메인 권장: `mg.yourdomain.com`)
+2. 발급된 DNS 레코드를 도메인 관리자(Cloudflare/가비아 등)에 등록:
+   - TXT (SPF) — `v=spf1 include:mailgun.org ~all`
+   - TXT (DKIM) — Mailgun이 제공하는 `k1._domainkey` 값
+   - MX 2개 — `mxa.mailgun.org`, `mxb.mailgun.org` (priority 10)
+   - CNAME (tracking) — `email.mg.yourdomain.com → mailgun.org`
+3. Mailgun 콘솔에서 **Verify DNS Settings** → 모든 레코드 `✓`
+4. **Settings → API Keys → Private API Key** 복사
+5. 도메인이 **US/EU** region 중 어느 것인지 확인 (콘솔 좌상단 표시)
+
+### B. Secret Manager 등록
+
+```bash
+echo -n "key-xxxxxx" | gcloud secrets create mailgun-api-key --data-file=-
+# 이후 갱신:
+echo -n "key-xxxxxx" | gcloud secrets versions add mailgun-api-key --data-file=-
+```
+
+### C. Cloud Run 환경변수 업데이트
+
+```bash
+gcloud run services update stock-screener \
+  --region=asia-northeast3 \
+  --update-env-vars="MAILGUN_DOMAIN=mg.yourdomain.com,MAILGUN_FROM=StockFinder <noreply@mg.yourdomain.com>,MAILGUN_REGION=us" \
+  --update-secrets="MAILGUN_API_KEY=mailgun-api-key:latest"
+```
+
+### D. 테스트 호출
+
+```bash
+# 로컬에서 먼저 dry-run (조회만)
+curl -H "x-admin-key: $ADMIN_KEY" \
+  "https://stock-screener-119320994983.asia-northeast3.run.app/api/admin/trial-expiring?days=2"
+
+# 실제 발송 (POST)
+curl -X POST -H "x-admin-key: $ADMIN_KEY" \
+  "https://stock-screener-119320994983.asia-northeast3.run.app/api/admin/send-trial-reminders?days=2"
+# → {"sent": n, "skipped": m, "failed": [...], "cutoff_days": 2}
+```
+
+### E. Cloud Scheduler Job 생성 (매일 KST 10:00)
+
+```bash
+gcloud scheduler jobs create http trial-reminder-daily \
+  --location=asia-northeast3 \
+  --schedule="0 10 * * *" \
+  --time-zone="Asia/Seoul" \
+  --uri="https://stock-screener-119320994983.asia-northeast3.run.app/api/admin/send-trial-reminders?days=2" \
+  --http-method=POST \
+  --headers="x-admin-key=$(gcloud secrets versions access latest --secret=admin-key)" \
+  --attempt-deadline=60s
+```
+
+### F. 동작 보장
+
+- **중복 방지**: 사용자당 1회만 발송 (Firestore `users/{uid}.trial_reminder_sent_at` 필드)
+- **결제 완료 유저 제외**: `subscription.status ∈ (active, on_trial, cancelled)` 필터
+- **실패 복원**: Scheduler가 매일 재시도 → 일시 장애는 다음 날 자동 복구
+
+### G. 트러블슈팅
+
+| 증상 | 원인 | 해결 |
+|------|------|------|
+| 503 "Mailgun 미설정" | env 3개(API_KEY/DOMAIN/FROM) 중 하나 누락 | Cloud Run env 재확인 |
+| 발송 0건인데 유저는 있음 | `trial_reminder_sent_at` 이미 마킹됨 | Firestore에서 해당 필드 삭제 후 재테스트 |
+| 401 Unauthorized | API Key region 불일치 | `MAILGUN_REGION=eu` 로 변경 |
+| DNS 검증 실패 | TXT/MX 전파 지연 | 24시간 대기 후 Mailgun 재검증 |

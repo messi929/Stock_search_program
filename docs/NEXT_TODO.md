@@ -20,9 +20,12 @@
 - [x] **B7** 리퍼럴 코드 시스템 — `/api/user/referral`·`/apply` (추천인 30일, 피추천인 14일)
 
 ### C. 큰 작업 (1~2일)
-- [~] **C8** 트라이얼 D-2 이메일 알림
-  - [x] `/api/admin/trial-expiring?days=2` 조회 엔드포인트 완료
-  - [ ] SendGrid/Mailgun 연동 + Cloud Scheduler Job (사용자 작업 필요)
+- [x] **C8** 트라이얼 D-2 이메일 알림
+  - [x] `/api/admin/trial-expiring?days=2` 조회 엔드포인트
+  - [x] `POST /api/admin/send-trial-reminders` 발송 엔드포인트 (Mailgun, 중복방지)
+  - [x] `screener/services/mailer.py` Mailgun 래퍼
+  - [x] `DEPLOY_GUIDE.md §10` Cloud Scheduler + Mailgun 셋업 절차
+  - [ ] **사용자 작업**: Mailgun 가입 → DNS 등록 → Secret 등록 → Scheduler Job 생성
 - [x] **C9** 관리자 액션 로그 — `users/{uid}/audit_log` 서브컬렉션 + `GET /api/admin/users/{uid}/audit-log`
 
 ### D. 기타 미완 (Phase 1~3 원안 대비)
