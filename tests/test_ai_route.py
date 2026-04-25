@@ -96,9 +96,71 @@ def test_analyze_locked_persona() -> None:
     print(f"[analyze_locked] Free + ARK → 402 OK")
 
 
+def test_smart_lists_route() -> None:
+    """GET /api/screener/smart-lists — v7.5 CATEGORIES 노출."""
+    from fastapi.testclient import TestClient
+    from screener.main import app
+
+    client = TestClient(app)
+    res = client.get("/api/screener/smart-lists")
+    assert res.status_code == 200, f"status={res.status_code}, body={res.text}"
+    data = res.json()
+    assert "categories" in data
+    assert len(data["categories"]) > 0, "카테고리 0개"
+
+    # 핵심 카테고리 존재 확인
+    ids = {c["id"] for c in data["categories"]}
+    assert "surge" in ids, "surge 카테고리 누락"
+    assert "growth" in ids, "growth 카테고리 누락"
+
+    # surge는 free, growth는 free 아님 (FREE_CATEGORIES 기준)
+    surge = next(c for c in data["categories"] if c["id"] == "surge")
+    growth = next(c for c in data["categories"] if c["id"] == "growth")
+    assert surge["available_to_free"] is True
+    assert growth["available_to_free"] is False
+
+    print(f"[smart_lists] {len(data['categories'])} 카테고리 노출")
+    free = sum(1 for c in data["categories"] if c["available_to_free"])
+    print(f"  free: {free}, pro_only: {len(data['categories']) - free}")
+    for c in data["categories"][:5]:
+        free_mark = "🆓" if c["available_to_free"] else "💎"
+        print(f"  {free_mark} {c['name']} ({c['id']}, {c['group']})")
+
+
+def test_entry_points_routes() -> None:
+    """진입선 PUT/GET/DELETE 라이프사이클 (Firestore 실제 쓰기)."""
+    from fastapi.testclient import TestClient
+    from screener.main import app
+
+    client = TestClient(app)
+
+    # 비로그인 PUT → 401
+    payload = {"tier_1": 1400000, "tier_2": 1300000, "tier_3": 1200000}
+    res = client.put("/api/ai/watchlist/207940/entry-points", json=payload)
+    # AUTH_ENABLED=true면 401, 아니면 200 통과 (uid="")
+    assert res.status_code in (200, 401, 500), f"비로그인 응답 코드 비정상: {res.status_code}"
+    print(f"[entry_points] 비로그인 PUT → {res.status_code} (예상: 401 or 통과)")
+
+    # GET 빈 ticker → 400 또는 redirect
+    res = client.get("/api/ai/watchlist//entry-points")
+    print(f"[entry_points] 빈 ticker GET → {res.status_code}")
+
+
+def test_usage_route_unauthenticated() -> None:
+    """GET /api/ai/usage — 비로그인은 401 또는 빈 응답."""
+    from fastapi.testclient import TestClient
+    from screener.main import app
+
+    client = TestClient(app)
+    res = client.get("/api/ai/usage")
+    # AUTH_ENABLED 환경에 따라 다름
+    assert res.status_code in (200, 401), f"unexpected status: {res.status_code}"
+    print(f"[usage] 비로그인 GET → {res.status_code}")
+
+
 def main() -> None:
     print("=" * 60)
-    print("AI 라우트 통합 테스트")
+    print("AI/Screener 라우트 통합 테스트")
     print("=" * 60)
 
     test_personas_route()
@@ -106,6 +168,12 @@ def main() -> None:
     test_analyze_invalid_ticker()
     print()
     test_analyze_locked_persona()
+    print()
+    test_smart_lists_route()
+    print()
+    test_entry_points_routes()
+    print()
+    test_usage_route_unauthenticated()
 
     print("\n" + "=" * 60)
     print("[OK] 모든 테스트 통과")

@@ -17,11 +17,22 @@ from datetime import datetime, timezone
 from typing import AsyncGenerator, Optional
 
 from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import StreamingResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from loguru import logger
 from pydantic import BaseModel, Field
 
 router = APIRouter(prefix="/api/ai", tags=["axis-ai"])
+
+
+# ──────────────────────────────────────────────
+# 요금제 한도
+# ──────────────────────────────────────────────
+
+PLAN_LIMITS: dict[str, dict[str, int]] = {
+    "free": {"analyses": 20, "validations": 10, "discoveries": 5},
+    "pro": {"analyses": -1, "validations": -1, "discoveries": -1},
+    "premium": {"analyses": -1, "validations": -1, "discoveries": -1},
+}
 
 
 # ──────────────────────────────────────────────
@@ -339,4 +350,182 @@ async def validate(ticker: str, req: ValidateRequest, request: Request):
         "validated_at": datetime.now(timezone.utc).isoformat(),
         "elapsed_seconds": round(time.time() - t0, 2),
         **result.model_dump(),
+    }
+
+
+# ──────────────────────────────────────────────
+# /api/ai/watchlist/{ticker}/entry-points — 진입선/메타 영속화
+# ──────────────────────────────────────────────
+
+class EntryPointsPayload(BaseModel):
+    tier_1: int = Field(..., description="1차 관찰 구간 (원)")
+    tier_2: int = Field(..., description="2차 관찰 구간 (원)")
+    tier_3: int = Field(..., description="3차 관찰 구간 (원)")
+    technical_basis: list[str] = Field(default_factory=list)
+    persona_used: str = Field("manual", description="blackrock/ark/graham/manual")
+    source: str = Field("manual", description="manual | strategist")
+
+
+def _watchlist_meta_doc(uid: str, ticker: str):
+    """users/{uid}/watchlist_meta/{ticker} 문서 참조."""
+    from screener.db.firebase_client import get_db
+
+    return (
+        get_db()
+        .collection("users")
+        .document(uid)
+        .collection("watchlist_meta")
+        .document(ticker)
+    )
+
+
+@router.get("/watchlist/{ticker}/entry-points")
+async def get_entry_points(ticker: str, request: Request):
+    """저장된 진입선 조회. 없으면 entry_points=null."""
+    user = getattr(request.state, "user", None) or {}
+    uid = user.get("uid", "")
+    if not uid:
+        raise HTTPException(401, {"code": "UNAUTHORIZED", "message": "로그인 필요"})
+
+    if not ticker or len(ticker) > 10:
+        raise HTTPException(400, {"code": "INVALID_TICKER", "message": "유효한 종목 코드 필요"})
+
+    try:
+        doc = _watchlist_meta_doc(uid, ticker).get()
+        if not doc.exists:
+            return {"ticker": ticker, "entry_points": None}
+        data = doc.to_dict() or {}
+        return {
+            "ticker": ticker,
+            "entry_points": data.get("entry_points"),
+            "persona_used": data.get("persona_used", "manual"),
+            "source": data.get("source", "manual"),
+            "saved_at": data.get("saved_at"),
+        }
+    except Exception as e:
+        logger.warning(f"entry_points 조회 실패 (uid={uid}, ticker={ticker}): {e}")
+        return {"ticker": ticker, "entry_points": None, "error": str(e)}
+
+
+@router.put("/watchlist/{ticker}/entry-points")
+async def save_entry_points(ticker: str, payload: EntryPointsPayload, request: Request):
+    """진입선 저장 (Strategist 결과 또는 사용자 수동 설정)."""
+    user = getattr(request.state, "user", None) or {}
+    uid = user.get("uid", "")
+    if not uid:
+        raise HTTPException(401, {"code": "UNAUTHORIZED", "message": "로그인 필요"})
+
+    if not ticker or len(ticker) > 10:
+        raise HTTPException(400, {"code": "INVALID_TICKER", "message": "유효한 종목 코드 필요"})
+
+    if payload.source not in ("manual", "strategist"):
+        raise HTTPException(400, {"code": "INVALID_SOURCE", "message": "source는 manual|strategist"})
+
+    try:
+        from firebase_admin import firestore
+
+        _watchlist_meta_doc(uid, ticker).set(
+            {
+                "ticker": ticker,
+                "entry_points": {
+                    "tier_1": payload.tier_1,
+                    "tier_2": payload.tier_2,
+                    "tier_3": payload.tier_3,
+                    "technical_basis": payload.technical_basis,
+                },
+                "persona_used": payload.persona_used,
+                "source": payload.source,
+                "saved_at": firestore.SERVER_TIMESTAMP,
+            },
+            merge=True,
+        )
+        return {"ok": True, "ticker": ticker}
+    except Exception as e:
+        logger.exception(f"entry_points 저장 실패: {e}")
+        raise HTTPException(500, {"code": "STORAGE_ERROR", "message": str(e)})
+
+
+@router.delete("/watchlist/{ticker}/entry-points")
+async def delete_entry_points(ticker: str, request: Request):
+    """진입선 삭제 (관심 종목에서 빼지 않고 진입선 메타만 삭제)."""
+    user = getattr(request.state, "user", None) or {}
+    uid = user.get("uid", "")
+    if not uid:
+        raise HTTPException(401, {"code": "UNAUTHORIZED", "message": "로그인 필요"})
+
+    try:
+        _watchlist_meta_doc(uid, ticker).delete()
+        return {"ok": True, "ticker": ticker}
+    except Exception as e:
+        logger.warning(f"entry_points 삭제 실패: {e}")
+        raise HTTPException(500, {"code": "STORAGE_ERROR", "message": str(e)})
+
+
+# ──────────────────────────────────────────────
+# /api/ai/usage — 월 사용량 조회
+# ──────────────────────────────────────────────
+
+@router.get("/usage")
+async def get_usage(request: Request):
+    """현재 월의 Axis AI 사용량 + 플랜 한도 비교.
+
+    cost_tracker가 기록한 users/{uid}/ai_usage/{YYYY-MM-DD} 문서를 합산.
+    Strategist 호출수 = analyses, Validator(단독) 호출 = validations, discoverer = discoveries.
+    """
+    user = getattr(request.state, "user", None) or {}
+    uid = user.get("uid", "")
+    tier = (user.get("tier") or "free").lower()
+
+    if not uid:
+        raise HTTPException(401, {"code": "UNAUTHORIZED", "message": "로그인 필요"})
+
+    month_prefix = datetime.now().strftime("%Y-%m")
+    used = {"analyses": 0, "validations": 0, "discoveries": 0}
+
+    try:
+        from screener.db.firebase_client import get_db
+
+        usage_col = (
+            get_db()
+            .collection("users")
+            .document(uid)
+            .collection("ai_usage")
+        )
+        # YYYY-MM-DD 문서 ID라 간단한 prefix 비교
+        for doc in usage_col.stream():
+            if not doc.id.startswith(month_prefix):
+                continue
+            data = doc.to_dict() or {}
+            agents = data.get("agents", {})
+            # Strategist 호출이 분석 1회를 의미 (Strategist는 파이프라인 끝)
+            used["analyses"] += int(agents.get("strategist", {}).get("calls", 0) or 0)
+            used["validations"] += int(agents.get("validator", {}).get("calls", 0) or 0)
+            used["discoveries"] += int(agents.get("discover", {}).get("calls", 0) or 0)
+    except Exception as e:
+        logger.warning(f"사용량 조회 실패 (uid={uid}): {e}")
+
+    limits = PLAN_LIMITS.get(tier, PLAN_LIMITS["free"])
+
+    def _summary(used_n: int, limit: int) -> dict:
+        if limit == -1:
+            return {"used": used_n, "limit": -1, "remaining": -1}
+        return {"used": used_n, "limit": limit, "remaining": max(0, limit - used_n)}
+
+    # 다음 달 1일 KST 기준 reset
+    now_utc = datetime.now(timezone.utc)
+    next_year = now_utc.year + (1 if now_utc.month == 12 else 0)
+    next_month = 1 if now_utc.month == 12 else now_utc.month + 1
+    reset_at = datetime(next_year, next_month, 1, 0, 0, 0, tzinfo=timezone.utc).isoformat()
+
+    return {
+        "user_uid": uid,
+        "plan": tier,
+        "month": month_prefix,
+        "usage": {
+            "analyses": _summary(used["analyses"], limits["analyses"]),
+            "validations": _summary(used["validations"], limits["validations"]),
+            "discoveries": _summary(used["discoveries"], limits["discoveries"]),
+        },
+        "reset_at": reset_at,
+        "upgrade_url": "/pricing",
     }

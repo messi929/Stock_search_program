@@ -563,12 +563,14 @@ from screener.api.user_routes import router as user_router
 from screener.api.admin_routes import router as admin_router
 from screener.api.rank_page import router as rank_router
 from api.routes.ai import router as axis_ai_router
+from api.routes.screener import router as axis_screener_router
 app.include_router(router)
 app.include_router(payment_router)
 app.include_router(user_router)
 app.include_router(admin_router)
 app.include_router(rank_router)
 app.include_router(axis_ai_router)
+app.include_router(axis_screener_router)
 
 static_dir = Path(__file__).parent / "static"
 app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
