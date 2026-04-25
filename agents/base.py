@@ -131,17 +131,27 @@ class BaseAgent(ABC):
     ) -> tuple[BaseModel, dict]:
         """Claude 호출 + JSON 파싱 + Pydantic 검증.
 
+        Sonnet 4.6 등 일부 모델은 assistant prefill을 지원하지 않으므로,
+        prefill 없이 user message에 강한 JSON 출력 지시를 추가하여 호환성 확보.
+        extract_json()이 ```json 코드 블록과 raw JSON 모두 처리.
+
         Returns:
             (parsed_model, raw_result) — raw_result는 usage/cached 등 메타.
         """
+        json_instruction = (
+            "\n\n# JSON 출력 지시 (필수)\n"
+            "반드시 `{` 로 시작하여 `}` 로 끝나는 단일 JSON 객체만 출력하세요. "
+            "코드 블록 펜스(```json) 금지, 설명 텍스트 금지, JSON 외 문자 절대 금지."
+        )
+
+        message = user_message + json_instruction
         last_err: Exception | None = None
         for attempt in range(max_retries + 1):
-            # JSON prefill로 응답을 { 로 시작하도록 강제 → 파싱 안정성↑
             result = await self.call_claude(
-                user_message=user_message,
+                user_message=message,
                 max_tokens=max_tokens,
                 uid=uid,
-                prefill="{",
+                prefill=None,
             )
             try:
                 json_str = extract_json(result["content"])
@@ -154,9 +164,9 @@ class BaseAgent(ABC):
                     f"[{self.agent_name}] JSON 파싱 실패 (시도 {attempt + 1}/{max_retries + 1}): {e}"
                 )
                 if attempt < max_retries:
-                    user_message = (
-                        f"{user_message}\n\n"
-                        f"⚠️ 직전 응답 JSON 파싱 실패. 반드시 {schema.__name__} 스키마에 정확히 맞춰 JSON만 출력하세요."
+                    message = (
+                        f"{message}\n\n"
+                        f"⚠️ 직전 응답 JSON 파싱 실패. {schema.__name__} 스키마에 정확히 맞춰 JSON만 출력하세요."
                     )
         raise ValueError(f"[{self.agent_name}] JSON 파싱 재시도 후에도 실패: {last_err}")
 
