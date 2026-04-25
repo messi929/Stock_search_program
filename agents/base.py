@@ -153,20 +153,43 @@ class BaseAgent(ABC):
                 uid=uid,
                 prefill=None,
             )
+            json_str = extract_json(result["content"])
+
+            # 1차: 표준 json
+            data = None
             try:
-                json_str = extract_json(result["content"])
                 data = json.loads(json_str)
+            except json.JSONDecodeError as e:
+                # 2차: json-repair (LLM 응답에 흔한 escape 누락/trailing comma 복구)
+                try:
+                    from json_repair import repair_json
+                    repaired = repair_json(json_str)
+                    data = json.loads(repaired)
+                    logger.info(f"[{self.agent_name}] json-repair 복구 성공")
+                except Exception as repair_err:
+                    last_err = e
+                    logger.warning(
+                        f"[{self.agent_name}] JSON 파싱 실패 (시도 {attempt + 1}/{max_retries + 1}): "
+                        f"json={e} / repair={repair_err}"
+                    )
+                    if attempt < max_retries:
+                        message = (
+                            f"{message}\n\n"
+                            f"⚠️ 직전 응답 JSON 파싱 실패. 모든 string value 내부의 큰 따옴표는 \\\", "
+                            f"줄바꿈은 \\n으로 escape하세요. {schema.__name__} 스키마에 정확히 맞춘 JSON만 출력."
+                        )
+                    continue
+
+            try:
                 model = schema.model_validate(data)
                 return model, result
-            except (json.JSONDecodeError, ValueError) as e:
+            except ValueError as e:
                 last_err = e
-                logger.warning(
-                    f"[{self.agent_name}] JSON 파싱 실패 (시도 {attempt + 1}/{max_retries + 1}): {e}"
-                )
+                logger.warning(f"[{self.agent_name}] Pydantic 검증 실패: {e}")
                 if attempt < max_retries:
                     message = (
                         f"{message}\n\n"
-                        f"⚠️ 직전 응답 JSON 파싱 실패. {schema.__name__} 스키마에 정확히 맞춰 JSON만 출력하세요."
+                        f"⚠️ 스키마 검증 실패: {e}. {schema.__name__} 정확히 따라 재출력."
                     )
         raise ValueError(f"[{self.agent_name}] JSON 파싱 재시도 후에도 실패: {last_err}")
 
