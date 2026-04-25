@@ -100,8 +100,9 @@ class BaseAgent(ABC):
         temperature: float = 1.0,
         uid: str = "",
         prefill: str | None = None,
+        system: str | None = None,
     ) -> dict:
-        """Claude 호출 헬퍼. prefill이 지정되면 응답이 그것으로 시작하도록 강제."""
+        """Claude 호출 헬퍼. system override로 페르소나별 동적 프롬프트 가능."""
         messages: list[dict] = [{"role": "user", "content": user_message}]
         if prefill is not None:
             messages.append({"role": "assistant", "content": prefill})
@@ -109,7 +110,7 @@ class BaseAgent(ABC):
         result = await self.claude.complete(
             agent=self.agent_name,
             model=self.model,
-            system=self.system_prompt,
+            system=system if system is not None else self.system_prompt,
             messages=messages,
             max_tokens=max_tokens,
             temperature=temperature,
@@ -128,6 +129,7 @@ class BaseAgent(ABC):
         max_tokens: int = 4096,
         uid: str = "",
         max_retries: int = 1,
+        system: str | None = None,
     ) -> tuple[BaseModel, dict]:
         """Claude 호출 + JSON 파싱 + Pydantic 검증.
 
@@ -152,6 +154,7 @@ class BaseAgent(ABC):
                 max_tokens=max_tokens,
                 uid=uid,
                 prefill=None,
+                system=system,
             )
             json_str = extract_json(result["content"])
 
