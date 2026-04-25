@@ -15,6 +15,14 @@
 from __future__ import annotations
 
 import asyncio
+import sys
+
+# Windows cp949 콘솔에서도 한국어/이모지/em-dash 안전하게 출력
+try:
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+except Exception:
+    pass
 
 from dotenv import load_dotenv
 
@@ -94,16 +102,36 @@ async def test_three_personas_differ() -> None:
     assert results["blackrock"].summary != results["graham"].summary
     print("\n[differentiation] 3 페르소나 perspective/summary 모두 다름 (PASS)")
 
+    # forbidden_words 필터 검증 — 3 페르소나 모두 (LEGAL: 필터 후 클린)
+    total_found = 0
+    for persona, r in results.items():
+        serialized = r.model_dump_json()
+        filtered, found = StrategistAgent.filter_forbidden(serialized)
+        _, found_again = StrategistAgent.filter_forbidden(filtered)
+        assert not found_again, f"[{persona}] 필터 후에도 잔존: {found_again}"
+        total_found += len(found)
+        if found:
+            print(f"  [{persona}] 원본 {len(found)}개 → 필터 후 0개: {found}")
+    if total_found == 0:
+        print("[forbidden_check] 3 페르소나 모두 원본부터 클린 (PASS)")
+    else:
+        print(f"[forbidden_check] 총 {total_found}개 발견 → 모두 필터링 (PASS)")
+
 
 async def test_user_principles_alignment() -> None:
-    """사용자 원칙이 user_principles_alignment에 키로 들어가야 함."""
+    """사용자 원칙이 user_principles_alignment에 키로 들어가야 함.
+    Test 1과 동일 input 사용 → default_cache 히트로 추가 비용 0원."""
     research, analyst, validator = await _build_pipeline_inputs("207940")
 
-    principles = ["이미 오른 것 피한다", "장기 보유", "변동성 낮은 것"]
+    # Test 1과 동일 input (캐시 히트용)
     user = UserProfile(
         investing_experience="1-5y",
-        investment_principles=principles,
+        holding_period="1-2y",
+        volatility_tolerance="20",
+        interested_sectors=["바이오", "반도체"],
+        investment_principles=["이미 오른 것 피한다", "장기 보유"],
     )
+    principles = user.investment_principles
 
     result = await StrategistAgent().run(
         StrategistInput(
@@ -122,31 +150,8 @@ async def test_user_principles_alignment() -> None:
     )
     print(f"[principles] {matched}/{len(principles)} 매칭")
     for k, v in result.user_principles_alignment.items():
-        print(f"  • {k}: {v[:60] if isinstance(v, str) else v}")
-
-
-async def test_forbidden_words_filtered() -> None:
-    """LEGAL: 모든 string 필드에 금지 단어가 들어가도 필터 후 클린."""
-    research, analyst, validator = await _build_pipeline_inputs("207940")
-
-    result = await StrategistAgent().run(
-        StrategistInput(
-            research_output=research,
-            analyst_output=analyst,
-            validator_output=validator,
-            user_profile=UserProfile(),
-            persona="blackrock",
-            query="",
-        )
-    )
-    serialized = result.model_dump_json()
-    filtered, found = StrategistAgent.filter_forbidden(serialized)
-    _, found_again = StrategistAgent.filter_forbidden(filtered)
-    assert not found_again
-    if found:
-        print(f"[forbidden_check] 원본 {len(found)}개 → 필터 후 0개 (PASS): {found}")
-    else:
-        print(f"[forbidden_check] 원본부터 클린 (PASS)")
+        v_str = v[:60] if isinstance(v, str) else str(v)
+        print(f"  - {k}: {v_str}")
 
 
 async def main() -> None:
@@ -157,8 +162,6 @@ async def main() -> None:
     await test_three_personas_differ()
     print()
     await test_user_principles_alignment()
-    print()
-    await test_forbidden_words_filtered()
 
     print("\n" + "=" * 60)
     print("[OK] 모든 테스트 통과")
