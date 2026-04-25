@@ -500,7 +500,7 @@ async def get_usage(request: Request):
             # Strategist 호출이 분석 1회를 의미 (Strategist는 파이프라인 끝)
             used["analyses"] += int(agents.get("strategist", {}).get("calls", 0) or 0)
             used["validations"] += int(agents.get("validator", {}).get("calls", 0) or 0)
-            used["discoveries"] += int(agents.get("discover", {}).get("calls", 0) or 0)
+            used["discoveries"] += int(agents.get("discoverer", {}).get("calls", 0) or 0)
     except Exception as e:
         logger.warning(f"사용량 조회 실패 (uid={uid}): {e}")
 
@@ -528,4 +528,65 @@ async def get_usage(request: Request):
         },
         "reset_at": reset_at,
         "upgrade_url": "/pricing",
+    }
+
+
+# ──────────────────────────────────────────────
+# /api/ai/discover — 자연어 종목 발견 (rename of /recommend)
+# ──────────────────────────────────────────────
+
+class DiscoverFiltersBody(BaseModel):
+    market: Optional[list[str]] = None
+    min_market_cap: Optional[float] = None
+    max_market_cap: Optional[float] = None
+    sectors: Optional[list[str]] = None
+
+
+class DiscoverRequestBody(BaseModel):
+    query: str = Field(..., min_length=2)
+    max_results: int = Field(5, ge=1, le=10)
+    exclude_tickers: list[str] = Field(default_factory=list)
+    filters: Optional[DiscoverFiltersBody] = None
+
+
+@router.post("/discover")
+async def discover(req: DiscoverRequestBody, request: Request):
+    """자연어 쿼리 → 관찰 가치 종목 (Claude Sonnet, ~35원/호출).
+
+    LEGAL: 응답에 "추천" 단어 사용 금지. "관찰 가치", "참고" 표현으로.
+    """
+    user = getattr(request.state, "user", None) or {}
+    uid = user.get("uid", "")
+
+    # 컨텍스트 dict → DiscovererInput
+    from agents.discoverer import (
+        DiscoverFilters,
+        DiscovererAgent,
+        DiscovererInput,
+    )
+
+    filters = None
+    if req.filters:
+        filters = DiscoverFilters(**req.filters.model_dump(exclude_none=True))
+
+    try:
+        agent_input = DiscovererInput(
+            query=req.query,
+            max_results=req.max_results,
+            exclude_tickers=req.exclude_tickers,
+            filters=filters,
+        )
+    except Exception as e:
+        raise HTTPException(400, {"code": "INVALID_INPUT", "message": str(e)})
+
+    t0 = time.time()
+    try:
+        result = await DiscovererAgent().run(agent_input, uid=uid)
+    except Exception as e:
+        logger.exception(f"[ai/discover] 실패: {e}")
+        raise HTTPException(500, {"code": "AI_ERROR", "message": str(e)})
+
+    return {
+        "elapsed_seconds": round(time.time() - t0, 2),
+        **result.model_dump(),
     }
