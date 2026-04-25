@@ -111,4 +111,76 @@ KAKAO_BIZ_TEMPLATE_ID    # 비즈 알림톡 템플릿 (Week 6)
 
 ---
 
-**최종 업데이트**: 2026-04-25 (Week 1 Day 3-4 완료 시점)
+**최종 업데이트**: 2026-04-26 (Week 3 Day 5 staging 배포 완료)
+
+---
+
+## 🚀 Staging 배포 (Week 3 Day 5)
+
+### Cloud Run 서비스
+- **이름**: `axis-staging` (v7.5 `stock-screener`와 분리된 신규 서비스)
+- **URL**: `https://axis-staging-1043976673827.asia-northeast3.run.app`
+- **리전**: `asia-northeast3` (서울)
+- **GCP 프로젝트**: `all-of-asset`
+- **이미지**: `gcr.io/all-of-asset/axis-staging` (Cloud Build 자동)
+- **자원**: 1Gi RAM / 1 vCPU / min=0 / max=2
+- **인증**: `--allow-unauthenticated` (staging public)
+
+### 시크릿 (Secret Manager)
+- `anthropic-api-key:1` — `ANTHROPIC_API_KEY` env로 마운트
+- `firebase-key:latest` — `FIREBASE_CREDENTIALS` env로 마운트 (v7.5와 공유)
+
+### 환경 변수
+```
+RUN_MODE=server
+COLLECT_MODE=readonly
+AUTH_ENABLED=true
+FIREBASE_PROJECT_ID=stock-search-program
+FIREBASE_WEB_API_KEY=AIzaSyDIAvNnqr4_RAB7AkLbhNdHJ9yKycoYiz4
+ADMIN_EMAILS=messi929@naver.com
+```
+
+### Dockerfile 변경
+```diff
+- COPY screener/ screener/
++ COPY screener/ screener/
++ COPY api/ api/
++ COPY agents/ agents/
++ COPY personas/ personas/
++ COPY utils/ utils/
++ COPY data/ data/
+```
+v7.5 빌드는 `screener/` 만 복사했으나 Axis 5개 디렉토리 추가 필요.
+
+### 배포 명령
+```bash
+gcloud run deploy axis-staging \
+  --source=. \
+  --region=asia-northeast3 \
+  --project=all-of-asset \
+  --allow-unauthenticated \
+  --memory=1Gi --cpu=1 --timeout=600 \
+  --min-instances=0 --max-instances=2 --port=8080 \
+  --update-secrets="ANTHROPIC_API_KEY=anthropic-api-key:latest,FIREBASE_CREDENTIALS=firebase-key:latest" \
+  --set-env-vars="RUN_MODE=server,COLLECT_MODE=readonly,AUTH_ENABLED=true,FIREBASE_PROJECT_ID=stock-search-program,FIREBASE_WEB_API_KEY=...,ADMIN_EMAILS=messi929@naver.com"
+```
+
+### 검증 결과 (2026-04-26)
+- ✓ `GET /api/ai/personas` → 3 페르소나 (블랙록 free, ARK/Graham pro)
+- ✓ `GET /api/screener/smart-lists` → 17 카테고리
+- ✓ `GET /api/status` → 3505 종목, 265 테마, phase 3 (v7.5 데이터 정상)
+- ✓ `POST /api/ai/analyze {ticker:207940, persona:blackrock, stream:false}`
+  - HTTP 200, elapsed 93.64s
+  - validator PASS, fresh=4, Contrarian 4건, blind_spots 0
+  - strategist entry 1,375K/1,300K/1,225K, follow-ups 5개
+  - user_principles_alignment 자동 분석 작동
+  - 면책 문구 정상 첨부
+
+### 비용 (1회 분석)
+- Research 9원 + Analyst 38원 + Validator 41원 + Strategist Opus 373원 = **약 461원**
+- ROADMAP 추정 215원 대비 2배 (Strategist Opus 비중 큼)
+- 다음 호출부터 system prompt cache_control 적용으로 ~10~20% 절감 예상
+
+### v7.5 운영 영향
+- v7.5 `stock-screener` 서비스는 그대로 운영 중 (별도 URL 유지)
+- Axis main 머지는 Week 6 베타 직전에 검토 (TOP 픽 등 v7.5 UI와 LEGAL 충돌 정리 후)
