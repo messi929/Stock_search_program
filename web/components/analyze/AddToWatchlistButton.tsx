@@ -3,13 +3,11 @@
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
-import { useUpdateWatchlist, useWatchlist } from "@/hooks/useWatchlist";
+import { useAddToWatchlist, useWatchlist } from "@/hooks/useWatchlist";
 
 /**
- * 관심 종목 추가 — v7.5 /api/user/watchlist 사용 (단순 ticker 배열).
- *
- * Race: POST가 전체 목록 덮어쓰기라 다른 탭과 충돌 가능성 있음 (MVP 수용).
- * 클릭 시점의 현재 목록을 읽어 Set으로 dedupe 후 전송.
+ * 관심 종목 추가 — useAddToWatchlist (mutation 시점에 캐시에서 fresh list 읽음).
+ * 다중 클릭/멀티 행 race 차단됨.
  */
 export function AddToWatchlistButton({
   ticker,
@@ -19,20 +17,19 @@ export function AddToWatchlistButton({
   size?: "default" | "sm" | "lg";
 }) {
   const { data, isLoading } = useWatchlist();
-  const update = useUpdateWatchlist();
+  const add = useAddToWatchlist();
 
-  const current = data?.watchlist ?? [];
-  const already = current.includes(ticker);
+  const list = data?.watchlist ?? [];
+  const already = list.includes(ticker);
 
   const handle = async () => {
-    if (already) {
-      toast.info("이미 관심 종목에 있습니다.");
-      return;
-    }
-    const merged = Array.from(new Set([...current, ticker]));
     try {
-      await update.mutateAsync(merged);
-      toast.success("관심 종목에 추가됨");
+      const res = await add.mutateAsync(ticker);
+      if (res.alreadyPresent) {
+        toast.info("이미 관심 종목에 있습니다.");
+      } else {
+        toast.success("관심 종목에 추가됨");
+      }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "추가 실패";
       toast.error(msg);
@@ -51,11 +48,11 @@ export function AddToWatchlistButton({
     <Button
       type="button"
       onClick={handle}
-      disabled={isLoading || update.isPending}
+      disabled={isLoading || add.isPending}
       size={size}
       variant="outline"
     >
-      {update.isPending ? "추가 중..." : "⭐ 관심 종목 추가"}
+      {add.isPending ? "추가 중..." : "⭐ 관심 종목 추가"}
     </Button>
   );
 }
