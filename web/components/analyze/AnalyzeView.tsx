@@ -12,9 +12,12 @@
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
+import { AddToWatchlistButton } from "@/components/analyze/AddToWatchlistButton";
 import { AnalystCard } from "@/components/analyze/AnalystCard";
 import { ResearchCard } from "@/components/analyze/ResearchCard";
+import { SaveEntryPointsButton } from "@/components/analyze/SaveEntryPointsButton";
 import { StrategistCard } from "@/components/analyze/StrategistCard";
+import { ValidateButton } from "@/components/analyze/ValidateButton";
 import { ValidatorCard } from "@/components/analyze/ValidatorCard";
 import { Disclaimer } from "@/components/legal/Disclaimer";
 import { Card, CardContent } from "@/components/ui/card";
@@ -143,16 +146,30 @@ export function AnalyzeView({ ticker }: { ticker: string }) {
   return (
     <div className="space-y-6 max-w-5xl">
       {/* Header */}
-      <header className="flex items-start justify-between gap-4 flex-wrap">
-        <div>
-          <h1 className="text-2xl font-bold font-mono">{ticker}</h1>
-          {analyst && (
-            <p className="text-sm text-muted-foreground mt-1">
-              {analyst.name} · {analyst.technical.current_price.toLocaleString()}원
-            </p>
-          )}
+      <header className="space-y-4">
+        <div className="flex items-start justify-between gap-4 flex-wrap">
+          <div>
+            <h1 className="text-2xl font-bold font-mono">{ticker}</h1>
+            {analyst && (
+              <p className="text-sm text-muted-foreground mt-1">
+                {analyst.name} · {analyst.technical.current_price.toLocaleString()}원
+              </p>
+            )}
+          </div>
+          <PersonaTabs current={persona} />
         </div>
-        <PersonaTabs current={persona} />
+
+        {/* Action buttons — 모바일에서 flex-wrap */}
+        <div className="flex flex-wrap items-start gap-2">
+          <AddToWatchlistButton ticker={ticker} />
+          <ValidateButton
+            ticker={ticker}
+            research={research}
+            analyst={analyst}
+            onResult={setValidator}
+          />
+          <SaveEntryPointsButton ticker={ticker} strategist={strategist} />
+        </div>
       </header>
 
       {/* Overall status */}
