@@ -590,3 +590,92 @@ async def discover(req: DiscoverRequestBody, request: Request):
         "elapsed_seconds": round(time.time() - t0, 2),
         **result.model_dump(),
     }
+
+
+# ──────────────────────────────────────────────
+# /api/ai/profile — Axis 사용자 프로파일 (온보딩)
+# ──────────────────────────────────────────────
+
+class AxisProfileBody(BaseModel):
+    investing_experience: Optional[str] = None  # "beginner" | "1-5y" | "5y+"
+    holding_period: Optional[str] = None  # "1m" | "6m" | "1-2y" | "3y+"
+    volatility_tolerance: Optional[str] = None  # "10" | "20" | "30"
+    interested_sectors: list[str] = Field(default_factory=list)
+    investment_principles: list[str] = Field(default_factory=list)
+    preferred_persona: Optional[str] = None  # "blackrock" | "ark" | "graham"
+
+
+@router.get("/profile")
+async def get_axis_profile(request: Request):
+    """현재 사용자의 Axis 프로파일 조회. 온보딩 완료 여부도 반환."""
+    user = getattr(request.state, "user", None) or {}
+    uid = user.get("uid", "")
+    if not uid:
+        raise HTTPException(401, {"code": "UNAUTHORIZED", "message": "로그인 필요"})
+
+    try:
+        from screener.db.firebase_client import get_db
+
+        doc = get_db().collection("users").document(uid).get()
+        if not doc.exists:
+            return {"profile": None, "onboarded": False}
+        data = doc.to_dict() or {}
+        profile = data.get("axis_profile")
+        return {
+            "profile": profile,
+            "onboarded": bool(profile and profile.get("onboarded_at")),
+        }
+    except Exception as e:
+        logger.warning(f"profile 조회 실패 (uid={uid}): {e}")
+        raise HTTPException(500, {"code": "STORAGE_ERROR", "message": str(e)})
+
+
+@router.put("/profile")
+async def save_axis_profile(payload: AxisProfileBody, request: Request):
+    """Axis 프로파일 저장. 입력값을 화이트리스트 검증 후 admin SDK로 영속화."""
+    user = getattr(request.state, "user", None) or {}
+    uid = user.get("uid", "")
+    if not uid:
+        raise HTTPException(401, {"code": "UNAUTHORIZED", "message": "로그인 필요"})
+
+    valid_experience = {"beginner", "1-5y", "5y+", None}
+    valid_period = {"1m", "6m", "1-2y", "3y+", None}
+    valid_volatility = {"10", "20", "30", None}
+    valid_persona = {"blackrock", "ark", "graham", None}
+
+    if payload.investing_experience not in valid_experience:
+        raise HTTPException(400, {"code": "INVALID_EXPERIENCE", "message": "investing_experience 값 오류"})
+    if payload.holding_period not in valid_period:
+        raise HTTPException(400, {"code": "INVALID_PERIOD", "message": "holding_period 값 오류"})
+    if payload.volatility_tolerance not in valid_volatility:
+        raise HTTPException(400, {"code": "INVALID_VOLATILITY", "message": "volatility_tolerance 값 오류"})
+    if payload.preferred_persona not in valid_persona:
+        raise HTTPException(400, {"code": "INVALID_PERSONA", "message": "preferred_persona 값 오류"})
+
+    # 길이 제한 (DOS 방지)
+    sectors = [str(s)[:40] for s in payload.interested_sectors[:20]]
+    principles = [str(p)[:200] for p in payload.investment_principles[:10]]
+
+    try:
+        from firebase_admin import firestore as fb_firestore
+
+        from screener.db.firebase_client import get_db
+
+        get_db().collection("users").document(uid).set(
+            {
+                "axis_profile": {
+                    "investing_experience": payload.investing_experience,
+                    "holding_period": payload.holding_period,
+                    "volatility_tolerance": payload.volatility_tolerance,
+                    "interested_sectors": sectors,
+                    "investment_principles": principles,
+                    "preferred_persona": payload.preferred_persona,
+                    "onboarded_at": fb_firestore.SERVER_TIMESTAMP,
+                }
+            },
+            merge=True,
+        )
+        return {"ok": True}
+    except Exception as e:
+        logger.exception(f"profile 저장 실패: {e}")
+        raise HTTPException(500, {"code": "STORAGE_ERROR", "message": str(e)})

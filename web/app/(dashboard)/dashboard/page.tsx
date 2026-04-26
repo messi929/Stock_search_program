@@ -2,6 +2,8 @@
 
 import Link from "next/link";
 
+import { MarketStatus } from "@/components/dashboard/MarketStatus";
+import { WatchlistPreview } from "@/components/dashboard/WatchlistPreview";
 import { Disclaimer } from "@/components/legal/Disclaimer";
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -28,6 +30,12 @@ export default function DashboardHome() {
           오늘도 신중한 분석으로 시작합니다.
         </p>
       </header>
+
+      {/* Market status (v7.5 backend) */}
+      <MarketStatus />
+
+      {/* Watchlist preview */}
+      <WatchlistPreview />
 
       {/* Profile summary */}
       <Card>
@@ -81,7 +89,7 @@ export default function DashboardHome() {
             <div className="text-left w-full">
               <div className="font-semibold">📊 스마트 리스트</div>
               <div className="text-xs text-muted-foreground mt-1">
-                17 카테고리 / 매수 신호·가치주·모멘텀
+                17 카테고리 / 관찰 시그널·가치주·모멘텀
               </div>
             </div>
           </Link>

@@ -20,13 +20,9 @@ export class APIError extends Error {
   }
 }
 
-export async function apiCall<T>(
-  path: string,
-  options: RequestInit = {},
-): Promise<T> {
-  const token = await auth.currentUser?.getIdToken();
-
-  const response = await fetch(`${API_BASE}${path}`, {
+async function _doFetch(path: string, options: RequestInit, forceRefresh: boolean): Promise<Response> {
+  const token = await auth.currentUser?.getIdToken(forceRefresh);
+  return fetch(`${API_BASE}${path}`, {
     ...options,
     headers: {
       "Content-Type": "application/json; charset=utf-8",
@@ -34,6 +30,19 @@ export async function apiCall<T>(
       ...options.headers,
     },
   });
+}
+
+export async function apiCall<T>(
+  path: string,
+  options: RequestInit = {},
+): Promise<T> {
+  // 1차 시도 — 캐시된 토큰
+  let response = await _doFetch(path, options, false);
+
+  // 401이고 로그인 상태면 토큰 강제 refresh 후 1회 재시도 (코드 검증 #3)
+  if (response.status === 401 && auth.currentUser) {
+    response = await _doFetch(path, options, true);
+  }
 
   if (!response.ok) {
     let code = "UNKNOWN";
@@ -98,12 +107,21 @@ export async function apiStream(
       const block = buffer.slice(0, blockEnd);
       buffer = buffer.slice(blockEnd + 2);
       let eventName = "message";
-      let dataBuf = "";
+      const dataLines: string[] = [];
       for (const line of block.split("\n")) {
-        if (line.startsWith("event: ")) eventName = line.slice(7).trim();
-        else if (line.startsWith("data: ")) dataBuf += line.slice(6);
+        // SSE spec: 코멘트(:로 시작)는 무시
+        if (line.startsWith(":")) continue;
+        if (line.startsWith("event:")) {
+          eventName = line.slice(6).trimStart();
+        } else if (line.startsWith("data:")) {
+          // spec: "data:value" 또는 "data: value"; 선행 공백 1개만 trim
+          const v = line.slice(5);
+          dataLines.push(v.startsWith(" ") ? v.slice(1) : v);
+        }
+        // 코드 검증 #4: 멀티라인 data: 는 \n으로 join (SSE spec)
       }
-      if (dataBuf) {
+      if (dataLines.length > 0) {
+        const dataBuf = dataLines.join("\n");
         try {
           onEvent(eventName, JSON.parse(dataBuf));
         } catch {
