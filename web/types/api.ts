@@ -194,6 +194,19 @@ export type DiscoverResponse = {
   elapsed_seconds: number;
 };
 
+// ─── /api/all-stocks (v7.5) ────────────────
+// 종목명·티커 LIKE 검색 — 자동완성 용도
+export type StockSearchHit = {
+  ticker: string;
+  name: string;
+  close: number;
+  market: string;
+};
+
+export type StockSearchResponse = {
+  stocks: StockSearchHit[];
+};
+
 // ─── /api/screener/smart-lists ─────────────
 export type SmartListCategory = {
   id: string;
@@ -210,6 +223,55 @@ export type SmartListsResponse = {
   categories: SmartListCategory[];
   user_plan: string;
   scan_endpoint: string;
+};
+
+// ─── /api/ai/screeners/custom ──────────────
+// 백엔드 화이트리스트(api/routes/ai.py CUSTOM_FILTER_SCHEMA)와 1:1
+export type CustomScreenerFilters = {
+  market?: "ALL" | "KR" | "US" | string;
+  per_min?: number;
+  per_max?: number;
+  pbr_min?: number;
+  pbr_max?: number;
+  div_yield_min?: number;
+  roe_min?: number;
+  roe_max?: number;
+  market_cap_min?: number;
+  market_cap_max?: number;
+  volume_ratio_min?: number;
+  trading_value_min?: number;
+  change_pct_min?: number;
+  change_pct_max?: number;
+  rsi_min?: number;
+  rsi_max?: number;
+  golden_cross?: boolean;
+  ma_aligned?: boolean;
+};
+
+export type CustomScreener = {
+  id: string;
+  name: string;
+  filters: CustomScreenerFilters;
+  sort_by: string;
+  sort_asc: boolean;
+  created_at: string | null;
+  updated_at: string | null;
+};
+
+export type CustomScreenersResponse = {
+  screeners: CustomScreener[];
+};
+
+// ─── /api/ai/notifications/preferences ─────
+export type NotificationPreferences = {
+  daily_briefing_enabled: boolean;
+  entry_point_alerts_enabled: boolean;
+  email_override: string | null;
+};
+
+export type NotificationPreferencesResponse = {
+  preferences: NotificationPreferences;
+  user_email: string | null;
 };
 
 // ─── /api/ai/usage ─────────────────────────

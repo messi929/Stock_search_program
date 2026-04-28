@@ -37,3 +37,15 @@ Desktop.ini
 
 # Assets (icons)
 assets/
+
+# Claude Code 로컬 세션 데이터
+.claude/
+
+# 임시 출력
+ERROR
+
+# Frontend
+web/node_modules/
+web/.next/
+web/.env.local
+web/tsconfig.tsbuildinfo

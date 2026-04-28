@@ -22,13 +22,21 @@ export default function DashboardHome() {
 
   return (
     <div className="space-y-6 max-w-5xl">
-      <header>
-        <h1 className="text-2xl font-bold">
-          안녕하세요{user?.displayName ? `, ${user.displayName}` : ""} 👋
-        </h1>
-        <p className="text-sm text-muted-foreground mt-1">
-          오늘도 신중한 분석으로 시작합니다.
-        </p>
+      <header className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold">
+            안녕하세요{user?.displayName ? `, ${user.displayName}` : ""} 👋
+          </h1>
+          <p className="text-sm text-muted-foreground mt-1">
+            오늘도 신중한 분석으로 시작합니다.
+          </p>
+        </div>
+        <Link
+          href="/settings/notifications"
+          className="text-sm text-muted-foreground hover:text-foreground shrink-0"
+        >
+          🔔 알림 설정
+        </Link>
       </header>
 
       {/* Market status (v7.5 backend) */}
@@ -117,10 +125,6 @@ export default function DashboardHome() {
           </Link>
         </div>
       </section>
-
-      <p className="text-sm text-muted-foreground">
-        ⚠️ 다른 페이지(관심 종목·스크리너·분석)는 Week 4 Day 4-5에서 구현됩니다.
-      </p>
 
       <Disclaimer />
     </div>

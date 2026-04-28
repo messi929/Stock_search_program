@@ -21,6 +21,8 @@ interface ScanResponse {
   category: string;
   stocks: Array<Record<string, unknown>>;
   total: number;
+  message?: string;
+  last_update?: string;
 }
 
 export function useScan(category: string | undefined, limit = 50) {

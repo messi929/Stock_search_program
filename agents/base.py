@@ -31,14 +31,50 @@ DISCLAIMER = (
     "   특정 종목의 매매를 권유하지 않습니다."
 )
 
-# 응답 후처리 시 검출할 금지 단어 — 발견되면 [필터링됨]으로 치환 + 로그
+# 응답 후처리 시 검출할 금지 패턴 — 정규식으로 한국어 활용형 커버.
+# 발견되면 [필터링됨]으로 치환 + 로그.
+#
+# 각 항목: (정규식, 표시 라벨)
+# 라벨은 logger.warning + scripts/legal_check.py 결과 출력용.
+FORBIDDEN_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
+    # "추천" 활용형 (단, "비추천"·"非추천" 제외)
+    (
+        re.compile(
+            r"(?<![비非])"
+            r"추천(합니다|드립니다|드려요|해요|한다|됩니다|되었|되며|받|드린|받았|드림)"
+        ),
+        "추천",
+    ),
+    # 명령형 매매 권유
+    (re.compile(r"사세요"), "사세요"),
+    (re.compile(r"매수하세요"), "매수하세요"),
+    (re.compile(r"매도하세요"), "매도하세요"),
+    # 시그널 어구
+    (re.compile(r"매수\s*신호"), "매수 신호"),
+    (re.compile(r"매도\s*신호"), "매도 신호"),
+    (re.compile(r"진입\s*신호"), "진입 신호"),
+    # 유망 어구
+    (re.compile(r"유망(합니다|한|주\b|할 것)"), "유망"),
+    # 확정 어조 ("확실히 오릅" / "반드시 매수" / "분명히 수익" 등)
+    (
+        re.compile(r"(확실히|반드시|분명히)\s*(오릅|오를|상승|수익|매수|이익)"),
+        "확정 어조",
+    ),
+    # 당위 어조
+    (re.compile(r"(사야|팔아야)\s*(합니다|한다)"), "당위 어조"),
+)
+
+
+# 호환 유지 — 외부에서 FORBIDDEN_WORDS를 import하는 코드용 (단순 단어 리스트).
+# 신규 코드는 FORBIDDEN_PATTERNS 사용 권장.
 FORBIDDEN_WORDS: tuple[str, ...] = (
     "추천합니다", "추천드립니다", "추천드려요",
+    "추천해요", "추천한다", "추천됩니다",
     "사세요", "매수하세요", "매도하세요",
     "매수 신호", "매도 신호", "진입 신호",
-    "유망합니다", "유망주",
-    "목표가", "매수가", "적정가",
+    "유망합니다", "유망주", "유망한",
     "사야 합니다", "팔아야 합니다",
+    "사야 한다", "팔아야 한다",
 )
 
 
@@ -203,10 +239,13 @@ class BaseAgent(ABC):
 
     @staticmethod
     def filter_forbidden(text: str) -> tuple[str, list[str]]:
-        """금지 단어 검출 + 치환. (필터링된 텍스트, 발견된 단어 리스트) 반환."""
+        """금지 패턴 검출 + 치환. (필터링된 텍스트, 발견된 라벨 리스트) 반환.
+
+        정규식 기반 — 한국어 활용형 커버. 매칭된 부분 전체를 [필터링됨]으로 치환.
+        """
         found: list[str] = []
-        for word in FORBIDDEN_WORDS:
-            if word in text:
-                found.append(word)
-                text = text.replace(word, "[필터링됨]")
+        for pattern, label in FORBIDDEN_PATTERNS:
+            if pattern.search(text):
+                found.append(label)
+                text = pattern.sub("[필터링됨]", text)
         return text, found

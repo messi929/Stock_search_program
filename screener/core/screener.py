@@ -268,6 +268,16 @@ CATEGORIES = {
         "columns": ["rsi", "vs_high_52w", "volume_ratio", "change_pct", "pbr", "market_cap"],
         "requires_phase": 3,
     },
+    # Axis 전용: 사용자 지정 필터 (커스텀 스크리너) — 빈 preset
+    # /api/scan?category=custom&per_min=...&pbr_max=... 형태로 사용자 필터만 적용됨.
+    # CATEGORY_PHASE에 등록 안 함 = phase 1 (모든 phase에서 사용 가능)
+    "custom": {
+        "name": "커스텀 스크리너", "group": "strategy",
+        "desc": "사용자가 직접 조건을 조합하는 스크리너 (Pro)",
+        "icon": "sliders",
+        "filter": ScreenerFilter(),  # 빈 preset — 모든 필터는 query param에서
+        "columns": ["per", "pbr", "roe", "rsi", "change_pct", "volume_ratio", "market_cap"],
+    },
 }
 
 # 그룹 정보

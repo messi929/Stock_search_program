@@ -177,7 +177,7 @@ async def analyze(req: AnalyzeRequest, request: Request):
 
 
 def _build_full_response(final: dict, elapsed: float) -> dict:
-    """non-streaming 모드 응답 dict 구성."""
+    """non-streaming 모드 응답 dict 구성. LEGAL: 모든 문자열 필터 통과."""
     from agents.base import DISCLAIMER
 
     research = final.get("research_output")
@@ -185,7 +185,7 @@ def _build_full_response(final: dict, elapsed: float) -> dict:
     validator = final.get("validator_output")
     strategist = final.get("strategist_output")
 
-    return {
+    payload = {
         "ticker": final.get("ticker"),
         "persona": final.get("persona"),
         "research": research.model_dump() if research else None,
@@ -199,11 +199,49 @@ def _build_full_response(final: dict, elapsed: float) -> dict:
         },
         "disclaimer": DISCLAIMER,
     }
+    return _wrap_legal(payload, "/api/ai/analyze")
+
+
+def _sanitize_response(obj, _findings: Optional[list[str]] = None):
+    """LEGAL: 응답 직렬화 직전 모든 string 필드를 filter_forbidden 통과.
+
+    재귀: dict, list, str → 처리. 그 외 타입 (int/float/bool/None)은 그대로.
+    Caller가 _findings 리스트를 넘기면 발견된 단어 누적 (로깅 용도).
+    """
+    from agents.base import BaseAgent
+
+    if isinstance(obj, str):
+        cleaned, found = BaseAgent.filter_forbidden(obj)
+        if found and _findings is not None:
+            _findings.extend(found)
+        return cleaned
+    if isinstance(obj, dict):
+        return {k: _sanitize_response(v, _findings) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [_sanitize_response(item, _findings) for item in obj]
+    return obj
+
+
+def _wrap_legal(payload: dict, route: str) -> dict:
+    """non-streaming 응답을 LEGAL 필터 통과 후 반환. 필터링 발생 시 warning 로그."""
+    findings: list[str] = []
+    cleaned = _sanitize_response(payload, findings)
+    if findings:
+        logger.warning(
+            f"[LEGAL] route={route} forbidden words filtered: {sorted(set(findings))}"
+        )
+    return cleaned
 
 
 def _sse(event: str, data: dict) -> str:
-    """SSE 단일 이벤트 직렬화."""
-    return f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False, default=str)}\n\n"
+    """SSE 단일 이벤트 직렬화 — LEGAL 필터 자동 적용."""
+    findings: list[str] = []
+    cleaned = _sanitize_response(data, findings)
+    if findings:
+        logger.warning(
+            f"[LEGAL] sse event={event} forbidden words filtered: {sorted(set(findings))}"
+        )
+    return f"event: {event}\ndata: {json.dumps(cleaned, ensure_ascii=False, default=str)}\n\n"
 
 
 async def _stream_analysis(
@@ -345,12 +383,15 @@ async def validate(ticker: str, req: ValidateRequest, request: Request):
         uid=uid,
     )
 
-    return {
-        "ticker": ticker,
-        "validated_at": datetime.now(timezone.utc).isoformat(),
-        "elapsed_seconds": round(time.time() - t0, 2),
-        **result.model_dump(),
-    }
+    return _wrap_legal(
+        {
+            "ticker": ticker,
+            "validated_at": datetime.now(timezone.utc).isoformat(),
+            "elapsed_seconds": round(time.time() - t0, 2),
+            **result.model_dump(),
+        },
+        "/api/ai/validate",
+    )
 
 
 # ──────────────────────────────────────────────
@@ -586,10 +627,13 @@ async def discover(req: DiscoverRequestBody, request: Request):
         logger.exception(f"[ai/discover] 실패: {e}")
         raise HTTPException(500, {"code": "AI_ERROR", "message": str(e)})
 
-    return {
-        "elapsed_seconds": round(time.time() - t0, 2),
-        **result.model_dump(),
-    }
+    return _wrap_legal(
+        {
+            "elapsed_seconds": round(time.time() - t0, 2),
+            **result.model_dump(),
+        },
+        "/api/ai/discover",
+    )
 
 
 # ──────────────────────────────────────────────
@@ -678,4 +722,323 @@ async def save_axis_profile(payload: AxisProfileBody, request: Request):
         return {"ok": True}
     except Exception as e:
         logger.exception(f"profile 저장 실패: {e}")
+        raise HTTPException(500, {"code": "STORAGE_ERROR", "message": str(e)})
+
+
+# ──────────────────────────────────────────────
+# /api/ai/screeners/custom — 커스텀 스크리너 CRUD (Pro 전용)
+# ──────────────────────────────────────────────
+
+# 화이트리스트: 사용자가 저장 가능한 필터 키 + 타입.
+# v7.5 ScreenerFilter dataclass 필드 중 안전한 서브셋만 허용.
+# (LEGAL: surge_only/pre_surge_only 등 권유성 의미가 강한 플래그는 제외)
+CUSTOM_FILTER_SCHEMA: dict[str, type] = {
+    "market": str,           # "ALL" | "KR" | "US"
+    "per_min": float,
+    "per_max": float,
+    "pbr_min": float,
+    "pbr_max": float,
+    "div_yield_min": float,
+    "roe_min": float,
+    "roe_max": float,
+    "market_cap_min": float,
+    "market_cap_max": float,
+    "volume_ratio_min": float,
+    "trading_value_min": float,
+    "change_pct_min": float,
+    "change_pct_max": float,
+    "rsi_min": float,
+    "rsi_max": float,
+    "golden_cross": bool,
+    "ma_aligned": bool,
+}
+
+ALLOWED_SORT_KEYS = {
+    "buy_score", "change_pct", "volume_ratio", "rsi", "per", "pbr", "roe",
+    "market_cap", "div_yield", "vs_high_52w", "trading_value",
+}
+
+
+class CustomScreenerPayload(BaseModel):
+    """저장/업데이트 페이로드."""
+    name: str = Field(..., min_length=1, max_length=40)
+    filters: dict = Field(default_factory=dict)
+    sort_by: str = Field("buy_score")
+    sort_asc: bool = Field(False)
+
+
+def _custom_screeners_col(uid: str):
+    """users/{uid}/custom_screeners collection."""
+    from screener.db.firebase_client import get_db
+
+    return (
+        get_db()
+        .collection("users")
+        .document(uid)
+        .collection("custom_screeners")
+    )
+
+
+def _require_pro(request: Request) -> str:
+    """uid 추출 + Pro/Premium 확인. 실패 시 HTTPException."""
+    user = getattr(request.state, "user", None) or {}
+    uid = user.get("uid", "")
+    if not uid:
+        raise HTTPException(401, {"code": "UNAUTHORIZED", "message": "로그인 필요"})
+    tier = (user.get("tier") or "free").lower()
+    if tier not in ("pro", "premium"):
+        raise HTTPException(
+            402,
+            {"code": "PRO_REQUIRED", "message": "커스텀 스크리너는 Pro 이상 전용입니다."},
+        )
+    return uid
+
+
+def _validate_filters(filters: dict) -> dict:
+    """화이트리스트 키 + 타입 검증. 잘못된 키/타입은 422 응답."""
+    if not isinstance(filters, dict):
+        raise HTTPException(
+            422, {"code": "INVALID_FILTERS", "message": "filters는 객체여야 합니다."}
+        )
+
+    # 알 수 없는 키 거부 (저장 화이트리스트 외 항목 차단)
+    unknown = [k for k in filters.keys() if k not in CUSTOM_FILTER_SCHEMA]
+    if unknown:
+        raise HTTPException(
+            422,
+            {
+                "code": "UNKNOWN_FILTER",
+                "message": f"허용되지 않은 필터: {', '.join(unknown)}",
+            },
+        )
+
+    cleaned: dict = {}
+    for key, expected_type in CUSTOM_FILTER_SCHEMA.items():
+        if key not in filters:
+            continue
+        v = filters[key]
+        if v is None:
+            continue
+        try:
+            if expected_type is bool:
+                if isinstance(v, str):
+                    cleaned[key] = v.lower() == "true"
+                else:
+                    cleaned[key] = bool(v)
+            elif expected_type is float:
+                cleaned[key] = float(v)
+            elif expected_type is int:
+                cleaned[key] = int(v)
+            elif expected_type is str:
+                s = str(v).strip()
+                if s:
+                    cleaned[key] = s
+        except (ValueError, TypeError):
+            raise HTTPException(
+                422,
+                {
+                    "code": "INVALID_FILTER_VALUE",
+                    "message": f"'{key}' 값 형식이 잘못되었습니다.",
+                },
+            )
+
+    # 범위 역전 검증 (min > max)
+    range_pairs = [
+        ("per_min", "per_max", "PER"),
+        ("pbr_min", "pbr_max", "PBR"),
+        ("roe_min", "roe_max", "ROE"),
+        ("market_cap_min", "market_cap_max", "시총"),
+        ("change_pct_min", "change_pct_max", "등락률"),
+        ("rsi_min", "rsi_max", "RSI"),
+    ]
+    for min_k, max_k, label in range_pairs:
+        if min_k in cleaned and max_k in cleaned:
+            if cleaned[min_k] > cleaned[max_k]:
+                raise HTTPException(
+                    422,
+                    {
+                        "code": "INVERTED_RANGE",
+                        "message": f"{label} 최소값이 최대값보다 큽니다.",
+                    },
+                )
+    return cleaned
+
+
+def _doc_to_screener(doc) -> dict:
+    data = doc.to_dict() or {}
+    created = data.get("created_at")
+    updated = data.get("updated_at")
+    return {
+        "id": doc.id,
+        "name": data.get("name", ""),
+        "filters": data.get("filters") or {},
+        "sort_by": data.get("sort_by", "buy_score"),
+        "sort_asc": bool(data.get("sort_asc", False)),
+        "created_at": (
+            created.isoformat() if hasattr(created, "isoformat") else None
+        ),
+        "updated_at": (
+            updated.isoformat() if hasattr(updated, "isoformat") else None
+        ),
+    }
+
+
+@router.get("/screeners/custom")
+async def list_custom_screeners(request: Request):
+    """사용자가 저장한 커스텀 스크리너 목록."""
+    uid = _require_pro(request)
+    try:
+        docs = _custom_screeners_col(uid).order_by("updated_at", direction="DESCENDING").stream()
+        screeners = [_doc_to_screener(d) for d in docs]
+        return {"screeners": screeners}
+    except Exception as e:
+        logger.exception(f"커스텀 스크리너 목록 조회 실패: {e}")
+        raise HTTPException(500, {"code": "STORAGE_ERROR", "message": str(e)})
+
+
+@router.post("/screeners/custom")
+async def create_custom_screener(payload: CustomScreenerPayload, request: Request):
+    """신규 저장. 사용자당 최대 20개. 동시 POST 차단을 위해 Firestore 트랜잭션 사용."""
+    uid = _require_pro(request)
+
+    if payload.sort_by not in ALLOWED_SORT_KEYS:
+        raise HTTPException(
+            422,
+            {"code": "INVALID_SORT", "message": f"'{payload.sort_by}' 정렬 키는 허용되지 않습니다."},
+        )
+    cleaned_filters = _validate_filters(payload.filters)
+
+    try:
+        from firebase_admin import firestore as fb_firestore
+        from screener.db.firebase_client import get_db
+
+        col = _custom_screeners_col(uid)
+        doc_ref = col.document()
+        doc_data = {
+            "name": payload.name.strip(),
+            "filters": cleaned_filters,
+            "sort_by": payload.sort_by,
+            "sort_asc": bool(payload.sort_asc),
+            "created_at": fb_firestore.SERVER_TIMESTAMP,
+            "updated_at": fb_firestore.SERVER_TIMESTAMP,
+        }
+
+        @fb_firestore.transactional
+        def _save_with_quota_check(transaction):
+            # 트랜잭션 내에서 카운트 + 쓰기 → 동시 호출 시 race 차단
+            existing = list(col.limit(21).stream(transaction=transaction))
+            if len(existing) >= 20:
+                raise HTTPException(
+                    409,
+                    {"code": "QUOTA_EXCEEDED", "message": "최대 20개까지 저장 가능합니다."},
+                )
+            transaction.set(doc_ref, doc_data)
+
+        transaction = get_db().transaction()
+        _save_with_quota_check(transaction)
+        return {"ok": True, "id": doc_ref.id}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception(f"커스텀 스크리너 저장 실패: {e}")
+        raise HTTPException(500, {"code": "STORAGE_ERROR", "message": str(e)})
+
+
+@router.delete("/screeners/custom/{screener_id}")
+async def delete_custom_screener(screener_id: str, request: Request):
+    """삭제."""
+    uid = _require_pro(request)
+    if not screener_id or len(screener_id) > 64:
+        raise HTTPException(400, {"code": "INVALID_ID", "message": "유효한 ID 필요"})
+    try:
+        _custom_screeners_col(uid).document(screener_id).delete()
+        return {"ok": True}
+    except Exception as e:
+        logger.exception(f"커스텀 스크리너 삭제 실패: {e}")
+        raise HTTPException(500, {"code": "STORAGE_ERROR", "message": str(e)})
+
+
+# ──────────────────────────────────────────────
+# /api/ai/notifications/preferences — 알림 설정 (MVP)
+# ──────────────────────────────────────────────
+# v1.1 발송 잡(Mailgun + Cloud Scheduler) 도입 전, 사용자 opt-in만 미리 수집.
+# 토글 데이터는 users/{uid}.notification_preferences 필드에 저장.
+
+class NotificationPreferences(BaseModel):
+    """알림 채널별 토글. 모두 default false (opt-in)."""
+    daily_briefing_enabled: bool = Field(False, description="매일 07:00 KST 시황 브리핑")
+    entry_point_alerts_enabled: bool = Field(False, description="watchlist 진입선 도달 알림")
+    email_override: Optional[str] = Field(None, description="기본 Firebase email 외 수신 주소 (옵션)")
+
+
+def _default_preferences() -> dict:
+    return {
+        "daily_briefing_enabled": False,
+        "entry_point_alerts_enabled": False,
+        "email_override": None,
+    }
+
+
+@router.get("/notifications/preferences")
+async def get_notification_preferences(request: Request):
+    """알림 설정 조회. 미설정이면 기본값(전부 off)."""
+    user = getattr(request.state, "user", None) or {}
+    uid = user.get("uid", "")
+    if not uid:
+        raise HTTPException(401, {"code": "UNAUTHORIZED", "message": "로그인 필요"})
+
+    try:
+        from screener.db.firebase_client import get_db
+
+        doc = get_db().collection("users").document(uid).get()
+        prefs = (doc.to_dict() or {}).get("notification_preferences") if doc.exists else None
+        return {
+            "preferences": prefs or _default_preferences(),
+            "user_email": user.get("email"),
+        }
+    except Exception as e:
+        logger.warning(f"notification preferences 조회 실패 (uid={uid}): {e}")
+        raise HTTPException(500, {"code": "STORAGE_ERROR", "message": str(e)})
+
+
+@router.put("/notifications/preferences")
+async def save_notification_preferences(
+    payload: NotificationPreferences, request: Request
+):
+    """알림 설정 저장. email_override는 형식 검증만 (실제 발송은 v1.1)."""
+    user = getattr(request.state, "user", None) or {}
+    uid = user.get("uid", "")
+    if not uid:
+        raise HTTPException(401, {"code": "UNAUTHORIZED", "message": "로그인 필요"})
+
+    # 간단한 이메일 형식 검증
+    email_override: Optional[str] = None
+    if payload.email_override is not None:
+        s = payload.email_override.strip()
+        if s:
+            if "@" not in s or "." not in s.split("@")[-1] or len(s) > 200:
+                raise HTTPException(
+                    422,
+                    {"code": "INVALID_EMAIL", "message": "이메일 형식이 올바르지 않습니다."},
+                )
+            email_override = s
+
+    try:
+        from firebase_admin import firestore as fb_firestore
+        from screener.db.firebase_client import get_db
+
+        get_db().collection("users").document(uid).set(
+            {
+                "notification_preferences": {
+                    "daily_briefing_enabled": bool(payload.daily_briefing_enabled),
+                    "entry_point_alerts_enabled": bool(payload.entry_point_alerts_enabled),
+                    "email_override": email_override,
+                    "updated_at": fb_firestore.SERVER_TIMESTAMP,
+                }
+            },
+            merge=True,
+        )
+        return {"ok": True}
+    except Exception as e:
+        logger.exception(f"notification preferences 저장 실패: {e}")
         raise HTTPException(500, {"code": "STORAGE_ERROR", "message": str(e)})

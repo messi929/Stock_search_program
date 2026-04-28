@@ -1,8 +1,8 @@
-# Axis 진행 사항 — Week 1~5 완료 (2026-04-26 기준)
+# Axis 진행 사항 — Week 1~6 완료 (2026-04-29 기준)
 
 > **브랜치**: `feature/axis-ai-layer` (main의 v7.5와 분리 운영)
-> **현재 위치**: Week 5 종료 / Week 6(베타 런칭 준비) 대기
-> **누적 커밋**: 19건
+> **현재 위치**: Week 6 종료 / 베타 런칭 준비 완료 (사용자 액션만 남음)
+> **누적 커밋**: 19건 + Week 6 5일치 작업 (1 커밋 예정)
 
 ---
 
@@ -99,6 +99,23 @@ START → fanout → (research || analyst 병렬) → validator
 | 1 | `1d16ba0` | `/analyze/[ticker]` SSE 스트리밍 + 4 에이전트 카드 |
 | 2-3 | `e0e1070` | ⭐ 검증 버튼 + 관찰 구간 저장 + 관심 종목 추가 |
 | 4-5 | `574c0dd` | Free 페르소나 가드 + `/watchlist/add` 3 탭 + race 차단 3건 |
+
+---
+
+### Week 6 — 베타 런칭 준비 (5 Day, 1 커밋 예정)
+
+| Day | 작업 |
+|-----|------|
+| 1 | `/screener/[id]` 결과 페이지 + LEGAL grade 변환 (buy_grade → score_tier 중립) + 권유성 토큰 sanitizer |
+| 2 | 커스텀 스크리너 (Pro) — v7.5에 `custom` 카테고리 추가, Axis CRUD 3라우트(Pro 게이트, Firestore 트랜잭션, 화이트리스트 18필드, 범위역전 422), `/screener/custom` 페이지 |
+| 3 MVP | `/settings/notifications` 토글 UI + GET/PUT preferences. Mailgun 발송·Cloud Scheduler 잡·카카오 비즈는 v1.1로 이관 (NEXT_STEPS.md) |
+| 4 | **3중 LEGAL 보호** ⭐ — (A) `_sanitize_response` 재귀 + 4 진입점(analyze/validate/discover/SSE) 자동 통과, (B) `scripts/legal_check.py` 정규식 패턴 + 라인 어노테이션, (C) `/terms` `/privacy` 공개 페이지. 활용형(추천해요/한다/됩니다) 전부 커버 + 비추천 negative lookbehind |
+| 5 | 랜딩 Closed Beta 배지 + 베타 신청 섹션, `/pricing` (3-tier + FAQ), `BETA_GUIDE.md`, `NEXT_PUBLIC_BETA_FORM_URL` env, **종목명·티커 LIKE 검색 자동완성** (SearchTab 전면 교체, IME 처리, ↑↓ 키보드, /api/all-stocks 재활용) |
+
+**Week 6 reviewer 차단 통계**:
+- Day 1: 9건 → 7건 적용 (LEGAL 2, a11y 3, 타입 2)
+- Day 2: 14건 → 3건 적용 (HIGH 1 quota race, MEDIUM 2 invalid value 422, MEDIUM 3 inverted range)
+- Day 4: 13건 → 8건 적용 (BLOCKER 1 missing words, HIGH 3 substring/quotes, MEDIUM 4 whitelist/LS/contact/추천 단어)
 
 ---
 
@@ -269,5 +286,5 @@ ROADMAP 기준:
 
 ---
 
-**최종 업데이트**: 2026-04-26 (Week 5 종료 시점, 19 commits)
-**다음 세션 시작점**: Week 6 Day 1 (`/screener/[id]` 결과 페이지 + 알림 시스템)
+**최종 업데이트**: 2026-04-29 (Week 6 종료, 20 commits 예정)
+**다음 세션 시작점**: 베타 런칭 (사용자 작업) — 베타 폼 생성 / Vercel 배포 / 도메인 / Anthropic 잔액 / 공지. 자세한 단계는 `NEXT_STEPS.md` Day 5 참고.

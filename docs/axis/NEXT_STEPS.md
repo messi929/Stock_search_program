@@ -75,10 +75,32 @@ gcloud run deploy axis-staging \
 - 신규 백엔드 라우트 필요: `POST/GET /api/ai/screeners/custom`
 
 ### Day 3 — 알림 시스템
-- 진입선 도달 알림: Cloud Scheduler 주기적 잡 (예: 매시간) → 모든 사용자 watchlist_meta 스캔 → 매칭 시 Mailgun (또는 카카오 비즈)
-- 일일 시황 브리핑: 매일 07:00 KST → Research Agent 1회 호출 → 모든 활성 사용자에게
-- 알림 채널 토글 UI: `/settings/notifications` 페이지
-- 카카오 비즈 알림톡: REST API 연동 (별도 작업)
+**Day 3 MVP 진행 (W6 D3)**: 사용자 토글 UI(`/settings/notifications`) + 백엔드 저장만 완료. Opt-in 미리 수집 → v1.1에서 발송 시스템 켜면 즉시 발송.
+
+**🔮 v1.1 이관 (Day 3 풀 구현)**:
+- **Mailgun 발송 통합**
+  - `MAILGUN_API_KEY`, `MAILGUN_DOMAIN` Cloud Run secret 등록
+  - `utils/mailgun_client.py` — 템플릿 발송 래퍼 (HTML/Text 분기, 헤더 면책)
+  - 인증 도메인 (axis.kr / allofasset.com) DNS SPF/DKIM 설정
+- **일일 시황 브리핑 잡** (`jobs/daily_briefing.py`)
+  - Cloud Run Job + Cloud Scheduler `0 22 * * *` (UTC = 07:00 KST)
+  - Research Agent 1회 호출 → 결과 캐싱 → opt-in 사용자 모두에게 발송
+  - 1일 1회 실행, 사용자 N명 = Haiku 9원 + Mailgun N건 (~$0.0008/건)
+- **진입선 도달 알림 잡** (`jobs/entry_point_check.py`)
+  - Cloud Run Job + Cloud Scheduler 매시간 (장중만 09-15 KST)
+  - 모든 opt-in 사용자의 `users/{uid}/watchlist_meta` 스캔
+  - 현재가 vs 저장된 tier_1/2/3 비교 → 도달 시 1회 발송 + `notified_at` 마킹 (중복 차단)
+  - Claude 호출 0회 (순수 가격 비교)
+- **카카오 비즈 알림톡** (한국 사용자 친화)
+  - 사업자 등록 후 카카오톡 채널 개설 + 발신 프로필 등록
+  - 알림톡 템플릿 심사 (1-2주, 권유성 단어 검수 필요)
+  - REST API 연동: `utils/kakao_biz_client.py`
+  - Mailgun과 채널 토글 (사용자가 둘 다 선택 가능)
+- **개인화** (v1.2+)
+  - 관심 종목별 페르소나 매칭 알림
+  - 시황 브리핑에 사용자 보유 섹터 우선 노출
+
+**작업량 추산**: Mailgun + 일일 시황 1.5h, 진입선 알림 1.5h, 카카오 비즈 4-6h (사업자 인증 별도)
 
 ### Day 4 — 법적 안전장치 sweep
 - 위 [B] `scripts/legal_check.py` 구현 + CI 통합
@@ -88,12 +110,29 @@ gcloud run deploy axis-staging \
 - E2E 시나리오 재실행
 
 ### Day 5 — 베타 런칭
-- 랜딩 카피 다듬기 (현재 placeholder 톤)
-- 베타 신청 폼 (Notion form 또는 Google Form 임베드)
-- axis-staging → 정식 도메인으로 cutover (Cloud Run custom domain)
-- Vercel production 배포
-- X / 투자 커뮤니티 / 스레드 공지
-- 모니터링: Cloud Logging + Sentry (옵션)
+
+**Day 5 코드 완료 (W6 D5)**:
+- 랜딩 "Closed Beta" 배지 + Feature #4 v1.1 솔직 표시 + 베타 섹션
+- /pricing 페이지 (3-tier + FAQ, 결제 placeholder)
+- `NEXT_PUBLIC_BETA_FORM_URL` env 변수 → 외부 폼 임베드
+- `docs/axis/BETA_GUIDE.md` — 테스터 안내문 (피드백 보상 포함)
+
+**🔧 사용자 작업 (런칭 전 필수)**:
+1. **베타 신청 폼 생성** — Google Forms / Tally / Notion 중 택1
+   - 질문 권장: 이메일·이름·투자경력·관심 분야·어떤 점이 궁금한지
+   - 생성 후 `web/.env.local`에 `NEXT_PUBLIC_BETA_FORM_URL` 입력
+2. **Vercel production 배포**
+   - `vercel link` → 프로젝트 연결
+   - 환경 변수 등록: `NEXT_PUBLIC_FIREBASE_*`, `NEXT_PUBLIC_API_BASE_URL`, `NEXT_PUBLIC_BETA_FORM_URL`
+   - `vercel --prod` 또는 GitHub 연동 자동 배포
+3. **도메인 연결** — `axis.kr` 또는 `allofasset.com` (Cloudflare/Vercel)
+4. **Cloud Run custom domain** (선택) — `api.axis.kr`로 백엔드 매핑
+5. **Firebase Auth 도메인 화이트리스트** — Vercel 도메인 + custom 도메인 추가
+6. **Anthropic API 잔액 확인** — 베타 100명 × 평균 5회 분석 = ~225,000원/월 예상
+7. **모니터링**:
+   - Cloud Logging (이미 활성)
+   - (옵션) Sentry 프론트엔드 통합 — `@sentry/nextjs`
+8. **공지** — X (`@axis_kr` 계정 생성), 투자 커뮤니티, 스레드
 
 ---
 

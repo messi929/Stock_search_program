@@ -27,8 +27,13 @@ async def smart_lists(request: Request) -> dict:
     # Free tier가 접근 가능한 카테고리 (v7.5 middleware 기준 동일)
     FREE_CATEGORIES = {"surge", "bluechip", "recommend", "watchlist", "etf", "foreign_inst"}
 
+    # 그리드에서 노출하지 않을 내부용 카테고리
+    HIDDEN_CATEGORIES = {"custom"}
+
     items: list[dict] = []
     for cat_id, meta in CATEGORIES.items():
+        if cat_id in HIDDEN_CATEGORIES:
+            continue
         items.append(
             {
                 "id": cat_id,
