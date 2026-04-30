@@ -49,3 +49,8 @@ web/node_modules/
 web/.next/
 web/.env.local
 web/tsconfig.tsbuildinfo
+
+# Playwright/테스트 산출물 (스크린샷·스냅샷)
+.playwright-mcp/
+web/.playwright-mcp/
+*.png
