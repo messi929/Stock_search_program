@@ -208,9 +208,9 @@ class DiscovererAgent(BaseAgent):
         if df.empty:
             return []
 
-        # 상위 buy_score 80개 (Claude 토큰 예산 고려)
+        # 상위 buy_score 40개 (NEXT_STEPS.md:148 — 80→40으로 input 50% 절감)
         if "buy_score" in df.columns:
-            df = df.nlargest(80, "buy_score")
+            df = df.nlargest(40, "buy_score")
 
         cols = [
             c

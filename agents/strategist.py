@@ -225,10 +225,12 @@ class StrategistAgent(BaseAgent):
         user_message = self._build_user_message(input_data)
 
         # 3) Claude Opus 호출
+        # max_tokens 2560 → 1500 — 응답 시간 단축 (NEXT_STEPS.md:146).
+        # 실측 ~2200 토큰 출력 시 truncated될 수 있으므로 schema 단순화 시 추가 축소 가능.
         result, raw = await self.call_claude_json(
             user_message=user_message,
             schema=StrategistResult,
-            max_tokens=2560,
+            max_tokens=1500,
             uid=uid,
             system=full_system,
         )
