@@ -29,3 +29,9 @@ export const app: FirebaseApp =
 
 export const auth: Auth = getAuth(app);
 export const db: Firestore = getFirestore(app);
+
+// Playwright/관리자 검증용 — 콘솔에서 auth.signInWithCustomToken(token) 호출 가능.
+// 보안 무영향: 커스텀 토큰 발급은 service account 권한 필요.
+if (typeof window !== "undefined") {
+  (window as unknown as { __axis_auth?: Auth }).__axis_auth = auth;
+}
