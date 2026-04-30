@@ -1,7 +1,38 @@
 # Axis 다음 할 일 (Week 6 + 미해결 항목)
 
 > **작성**: 2026-04-26 (Week 5 종료 시점)
-> **참조**: `docs/axis/PROGRESS.md` (Week 1~5 진척), `docs/axis/ROADMAP.md` (원본 6주 일정)
+> **갱신**: 2026-04-30 (라운드 1~3 워크스루 + fix 적용)
+> **참조**: [PROGRESS.md](PROGRESS.md), [ROADMAP.md](ROADMAP.md), **[REDESIGN.md](REDESIGN.md)** ⭐ post-beta 분석 시간 단축 계획
+
+---
+
+## 🆕 2026-04-30 세션 결과 요약
+
+### ✅ 완료된 것 (라운드 1~3)
+- Vercel 프로덕션 배포 (`axis-web-five.vercel.app`)
+- Cloud Run `axis-staging` 재배포 + revision 00008-mlw 라이브
+- 관리자 권한 부여 (`wogus711929@gmail.com`을 ADMIN_EMAILS에 추가)
+- 미인증 워크스루 7개 페이지 검증 완료
+- 인증 워크스루 (Firebase 커스텀 토큰 + `window.__axis_auth` 우회)
+- 발견된 P0 7건 + P1 4건 모두 fix:
+  - `/analyze` 인덱스 페이지 신설 (검색 + 인기 종목 8)
+  - 대시보드 NAV 4개 중 2개 404 → 모두 정상 라우트로 교체
+  - `?next=` 파라미터로 로그인 후 원래 페이지 복귀 + open-redirect 차단
+  - 한국어 404 페이지 (`web/app/not-found.tsx`)
+  - 푸터 탭 타겟 17~20px → 44px
+  - 로그인 약관 링크 클릭 가능
+  - WatchlistPreview Free 5/Pro 30 자동 분기
+  - LEGAL: 스크리너 카테고리 6건 권유성 표현 → 중립 변환 (`web/lib/legal-labels.ts`)
+  - ValidateButton 라벨 분기 (분석 후/완료/검증 중)
+  - 종목명 즉시 표시 (analyst 응답 전 useStockSearch fallback)
+  - Strategist max_tokens 2560 → 1500
+  - Discoverer 후보 80 → 40
+- 도구: `scripts/_mint_admin_token.py` (Firebase 커스텀 토큰 발급)
+
+### ⚠️ 측정 결과 (라운드 3)
+- 분석 시간 84.74초 (fresh) / 60.07초 (캐시) — ROADMAP 5~10초 추정의 8~17배
+- **근본 원인**: Validator가 critical path에 직렬로 끼어 있음 (Research+Analyst는 이미 병렬)
+- **해결 계획**: [REDESIGN.md](REDESIGN.md) Option A (Validator 수동 분리, 84s → ~55s)
 
 ---
 
@@ -9,53 +40,57 @@
 
 | # | 작업 | 예상 시간 | 비용 |
 |---|------|----------|------|
-| 1 | `web/.env.local` Firebase 값 채움 — `MESSAGING_SENDER_ID`, `APP_ID` (Firebase 콘솔 → 프로젝트 설정 → "내 앱"에서 확인) | 5분 | 0원 |
-| 2 | axis-staging 재배포 (W3 D4 + W4-5 백엔드 변경 반영) | 5-10분 | 0원 |
-| 3 | (선택) Vercel 배포 — Next.js 프론트 외부 노출, `axis.kr` 또는 `allofasset.com` 도메인 연결 | 30분 | $0 (Hobby) |
+| 1 | ~~`web/.env.local` Firebase 값 채움~~ | ✅ 완료 | — |
+| 2 | ~~axis-staging 재배포~~ | ✅ 완료 (revision 00008-mlw) | — |
+| 3 | ~~Vercel 배포~~ | ✅ 완료 (`axis-web-five.vercel.app`) | — |
+| 4 | **Tally / Google Forms 베타 신청 폼 생성 + `NEXT_PUBLIC_BETA_FORM_URL` 등록** | 10분 | 0원 |
+| 5 | (선택) `axis.kr` 또는 `allofasset.com` 커스텀 도메인 연결 | 30분 | 도메인비 |
+| 6 | Anthropic 콘솔 잔액 확인 (베타 100명 × 5회 ≈ 225,000원/월) | 1분 | — |
 
-### 재배포 명령어 (참고)
+### axis-staging 재배포 (Buildpacks 회피)
+**중요**: `gcloud run deploy --source=.`이 어쩐 일로 Buildpacks를 골라 web/(Next.js) 빌드 시도 → 실패하므로 분리 명령 사용:
 ```bash
+# 1) Dockerfile로 명시 빌드
+gcloud builds submit . \
+  --tag asia-northeast3-docker.pkg.dev/all-of-asset/cloud-run-source-deploy/axis-staging/axis-staging:$(date +%Y%m%d-%H%M%S) \
+  --region=asia-northeast3 --project=all-of-asset
+
+# 2) deploy
 gcloud run deploy axis-staging \
-  --source=. \
-  --region=asia-northeast3 \
-  --project=all-of-asset \
-  --update-secrets="ANTHROPIC_API_KEY=anthropic-api-key:latest,FIREBASE_CREDENTIALS=firebase-key:latest" \
-  --set-env-vars="RUN_MODE=server,COLLECT_MODE=readonly,AUTH_ENABLED=true,FIREBASE_PROJECT_ID=stock-search-program,FIREBASE_WEB_API_KEY=AIzaSyDIAvNnqr4_RAB7AkLbhNdHJ9yKycoYiz4,ADMIN_EMAILS=messi929@naver.com"
+  --image=<위 builds submit가 출력한 IMAGES URL> \
+  --region=asia-northeast3 --project=all-of-asset
 ```
+TODO: `scripts/deploy-axis-staging.sh` 작성 ([REDESIGN.md §8.1](REDESIGN.md))
 
 ---
 
-## 🛡️ 빈 LEGAL/정책 항목 (Week 6 Day 4 일괄 처리)
+## 🛡️ 빈 LEGAL/정책 항목
 
-### A. API 응답 자동 필터링 미적용
+### A. API 응답 자동 필터링 미적용 ⏳ 미해결
 **현재**: `BaseAgent.filter_forbidden()` 메서드 존재하지만 자동 호출 X. 시스템 프롬프트에 의존.
 **해결**: `api/routes/ai.py`의 응답 빌더에 자동 후처리 추가
 - `_build_full_response()` (analyze) — 모든 string 필드 traversal + filter
 - `discover` 응답 — 동일
 - `validate` 응답 — Contrarian/blind_spots 필터
-**예상 작업량**: 1시간
+**예상 작업량**: 1시간 (REDESIGN.md §6.1)
 
-### B. `scripts/legal_check.py` 미구현
+### B. `scripts/legal_check.py` 미구현 ⏳ 미해결
 **LEGAL.md 명시**: 배포 전 코드/문서에서 금지 단어 자동 검출하여 CI 차단.
 **해결**: 신규 작성 — `agents/`, `personas/`, `api/`, `web/app/`, `web/components/` 검색.
 - 시스템 프롬프트 안의 "금지 단어 리스트 자체"는 화이트리스트 처리 (정의 vs 사용 구분)
 - 실패 시 exit 1
-**예상 작업량**: 30분
+**예상 작업량**: 30분 (REDESIGN.md §6.2)
 
-### C. `/terms`, `/privacy` 페이지 누락
-**현재**: 랜딩 footer에 링크 있지만 페이지 없음 → 404.
-**해결**: `web/app/terms/page.tsx`, `web/app/privacy/page.tsx` 작성
-- 내용은 `docs/axis/LEGAL.md`의 "이용약관 핵심 조항" + "개인정보 처리방침 핵심" 활용
-- v7.5 main 브랜치에 이미 같은 라우트 존재할 가능성 → 백엔드 라우트 충돌 체크 필요
-**예상 작업량**: 1시간
+### C. `/terms`, `/privacy` 페이지 ✅ 완료
+**상태**: Week 6에서 신규 작성 + 배포 완료. 라운드 1 워크스루에서 정상 렌더 확인.
 
-### D. 카카오 OAuth 미구현
-**현재**: 로그인 페이지에 "준비 중" 비활성 버튼.
-**해결**: 두 가지 경로
-1. 비활성 유지 + Google만 (베타 단계 충분)
-2. Firebase Custom Token + 카카오 REST API 연동 (별도 백엔드 라우트 + frontend 처리)
-**예상 작업량**: 1번은 0분, 2번은 4-6시간
-**추천**: 베타에서는 1번 유지. 정식 런칭 시 2번 검토.
+### D. 카카오 OAuth 미구현 — 베타 skip (현행 유지)
+**현재**: 로그인 페이지 "준비 중" 비활성 버튼.
+**결정**: 베타 동안은 Google만. 정식 런칭 시 재검토.
+
+### E. v7.5 카테고리 권유성 라벨 ✅ 부분 완료
+**현재**: `web/lib/legal-labels.ts` 신설 — 스크리너 카테고리 6건 ("매수"/"추천") 중립 변환 완료.
+**남은 부분**: `buy_grade="적극매수"/"매수"` API 응답 시점 변환 (REDESIGN.md §6.3)
 
 ---
 
@@ -136,24 +171,24 @@ gcloud run deploy axis-staging \
 
 ---
 
-## 💸 비용 최적화 (Week 6 또는 v1.1 검토)
+## 💸 비용 최적화 — 진행 상황 + 남은 옵션
 
-### 현재 1쿼리 비용 (실측)
-- Strategist Opus 370원이 전체 비용의 80% 차지
-- ROADMAP 추정 215원 vs 실측 453원 (2.1배)
+### 라운드 3에서 적용
+- ✅ Strategist max_tokens 2560 → 1500
+- ✅ Discoverer 후보 80 → 40
+- ✅ 시스템 프롬프트 caching 이미 작동 중 (`utils/claude_client.py:198-208`)
+- 결과: 분석 시간 91.92초 → 84.74초 (~8% 단축, 비용 효과는 다음 청구에서 확인)
 
-### 검토할 최적화
-1. **Strategist 응답 토큰 축소** — 현재 max_tokens 2560 + 출력 ~2200 토큰. 1500으로 줄이면 ~250원
-2. **시스템 프롬프트 caching 효과** — Opus는 1024+ tokens부터 cache. 현재 cache_w 2834 → 다음 호출부터 cache_r 적용되어 input 90% 절감 (호출당 ~30원 절감)
-3. **Discoverer 후보 80→40** — input 11,400 → 6,000 토큰. 호출당 70원 → ~50원
-4. **Sonnet → Haiku 다운그레이드 검토** — Validator의 Contrarian만 Haiku로? 정밀도 trade-off
-5. **Pro Tier 9,900원 vs 비용 검증** — 평균 사용량 50회/월 가정 시 22,650원 비용 → **현재 적자**. 토큰 최적화 필수.
+### 남은 큰 옵션 (REDESIGN.md 참고)
+1. **Validator를 critical path에서 분리** (REDESIGN.md Option A) — 시간 84s→55s + 호출 1회 절감 (~25원/쿼리)
+2. **Strategist Opus → Sonnet 다운그레이드** (REDESIGN.md Option C) — 호출당 370원→50원 (~87% 절감), 품질 검증 필수
+3. **Sonnet → Haiku 다운그레이드 검토** (Validator의 Contrarian만) — 정밀도 trade-off
 
-### 손익분기 재검토
+### 손익분기 재검토 (라운드 3 시점)
 - Pro 20명 × 9,900 = 198,000원/월
 - 현재 비용 ~22,650원/Pro × 20 = 453,000원/월 → **적자 -255,000원**
-- 토큰 50% 절감 시 비용 ~11,300원 × 20 = 226,000원 → **여전히 적자 -28,000원**
-- 결론: **Pro 가격 19,900원 또는 Premium tier 활성화 필요**
+- Option C(Sonnet) 채택 시 비용 ~150원/쿼리 × 50회 × 20명 = 150,000원/월 → **흑자 +48,000원**
+- 결론: 베타 후 Option A·C 평가 필수, 가격 정책(Pro 19,900 / Premium 활성화)도 병행 검토
 
 ---
 
@@ -161,14 +196,14 @@ gcloud run deploy axis-staging \
 
 머지 전 정리할 항목:
 
-| v7.5 요소 | LEGAL 충돌 | 처리 옵션 |
+| v7.5 요소 | LEGAL 충돌 | 처리 상태 |
 |----------|-----------|----------|
-| "🏆 오늘의 TOP 픽" 섹션 | 추천 리스트로 비춰질 위험 | "관찰 가치 종목" 으로 리네이밍 |
-| "매수 포인트" 하이라이트 | "매수 신호" 직접 사용 | "관찰 시그널" 또는 "참고 구간" |
-| `buy_grade="적극매수"/"매수"` 라벨 | "매수" 단어 | API 응답 시점에 score_tier로 변환 |
-| 카테고리 이름 "급등 예보", "성장주 매수" | 권유성 어조 | "급등 관찰", "성장 관찰" 검토 |
+| "🏆 오늘의 TOP 픽" 섹션 | 추천 리스트로 비춰질 위험 | ⏳ 머지 시 "관찰 가치 종목" 리네이밍 |
+| "매수 포인트" 하이라이트 | "매수 신호" 직접 사용 | ⏳ 머지 시 "관찰 시그널" 변환 |
+| `buy_grade="적극매수"/"매수"` 라벨 | "매수" 단어 | ⏳ API 응답 wrap 함수 (REDESIGN.md §6.3) |
+| 카테고리 이름 "급등 예보", "성장주 매수" | 권유성 어조 | ✅ Axis-side 변환 완료 (`web/lib/legal-labels.ts`) |
 
-→ **권장**: Week 6 법적 sweep 단계에서 `screener/api/routes.py` 응답 wrap 함수 추가하여 v7.5 자체는 그대로 두되 Axis-side에서 변환 후 노출.
+→ Axis 프론트는 변환 완료. v7.5 main 머지 시 백엔드 응답 wrap 추가 필요.
 
 ---
 

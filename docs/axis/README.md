@@ -7,30 +7,44 @@
 ## 📚 문서 구조
 
 ```
-axis_plan/
-├── CLAUDE.md                    # 🌟 마스터 컨텍스트 (가장 먼저 읽기)
-├── README.md                    # 이 파일 (인덱스)
-└── docs/
-    ├── ROADMAP.md              # 6주 일정 + 체크리스트
-    ├── ARCHITECTURE.md         # 전체 시스템 설계
-    ├── DATABASE.md             # Firestore 스키마
-    ├── LEGAL.md                # 법적 안전장치 (필수)
-    │
-    ├── agents/                 # 4개 AI 에이전트
-    │   ├── research.md         # 시황/뉴스 (Haiku)
-    │   ├── analyst.md          # 기술/펀더멘털 (Sonnet)
-    │   ├── validator.md        # 검증 ⭐ (Sonnet)
-    │   └── strategist.md       # 종합/페르소나 (Opus)
-    │
-    ├── api/                    # 백엔드 API 스펙
-    │   ├── ai.md               # AI 분석 엔드포인트
-    │   ├── watchlist.md        # 관심 종목 CRUD
-    │   └── screener.md         # 스크리너
-    │
-    └── frontend/               # 프론트엔드 설계
-        ├── pages.md            # Next.js 페이지 구조
-        └── components.md       # 핵심 React 컴포넌트
+docs/axis/
+├── README.md                   # 이 파일 (인덱스)
+│
+├── ⭐ 활성 작업 문서 (먼저 읽기)
+├── PROGRESS.md                 # Week 1~6 진척 + 라운드 1~3 결과 (2026-04-30 갱신)
+├── NEXT_STEPS.md               # 남은 작업 + 사용자 액션 + LEGAL/비용 잔여
+├── REDESIGN.md                 # 🆕 분석 시간 단축 재설계 (post-beta 큰 작업)
+├── BETA_GUIDE.md               # 베타 테스터 안내
+├── INTEGRATION_NOTES.md        # v7.5 연동 메모
+│
+├── 📐 설계/계획 문서
+├── ROADMAP.md                  # 원본 6주 일정 (완료)
+├── ARCHITECTURE.md             # 전체 시스템 설계
+├── DATABASE.md                 # Firestore 스키마
+├── LEGAL.md                    # 법적 안전장치 (절대 원칙)
+│
+├── agents/                     # 4개 AI 에이전트 스펙
+│   ├── research.md
+│   ├── analyst.md
+│   ├── validator.md
+│   └── strategist.md
+│
+├── api/                        # 백엔드 API 스펙
+│   ├── ai.md
+│   ├── watchlist.md
+│   └── screener.md
+│
+└── frontend/                   # 프론트엔드 설계
+    ├── pages.md
+    └── components.md
 ```
+
+### 새 세션 진입 순서
+1. `CLAUDE.md` (프로젝트 루트) — 마스터 컨텍스트
+2. **`PROGRESS.md`** — 가장 최근 상태
+3. **`REDESIGN.md`** — 다음 큰 작업
+4. **`NEXT_STEPS.md`** — 작은 잔여 항목 + 사용자 액션
+5. 작업 종류별 세부 문서 (agents/api/frontend/legal)
 
 ---
 

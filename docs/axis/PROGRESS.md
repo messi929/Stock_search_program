@@ -286,5 +286,49 @@ ROADMAP 기준:
 
 ---
 
-**최종 업데이트**: 2026-04-29 (Week 6 종료, 20 commits 예정)
-**다음 세션 시작점**: 베타 런칭 (사용자 작업) — 베타 폼 생성 / Vercel 배포 / 도메인 / Anthropic 잔액 / 공지. 자세한 단계는 `NEXT_STEPS.md` Day 5 참고.
+## 🚀 2026-04-30 — 라운드 1~3 워크스루 + Fix 적용
+
+### 환경 셋업
+- ✅ Vercel 프로덕션 배포 (`axis-web-five.vercel.app`) — 환경변수 7개 등록
+- ✅ Cloud Run `axis-staging` revision 00006-222 배포 (Week 3 D4 + W4-5 백엔드 변경 반영)
+- ✅ ADMIN_EMAILS에 `wogus711929@gmail.com` 추가 (revision 00007-gqf)
+- ✅ Strategist token 축소 + Discoverer 후보 절감 (revision 00008-mlw)
+
+### 발견 + 수정한 P0 (8건)
+| # | 영역 | 변경 |
+|---|------|------|
+| 1 | `/analyze` 인덱스 페이지 신설 | 검색 + 인기 종목 8개 카드 |
+| 2 | 대시보드 NAV 4개 중 2개 404 | `/watchlist`, `/analyses`, `/settings/profile` → 정상 라우트로 교체 |
+| 3 | 로그인 후 원래 페이지 미복귀 | `?next=` 파라미터 + open-redirect 차단 |
+| 4 | 영문 404 페이지 | 한국어 다크 테마 (`web/app/not-found.tsx`) |
+| 5 | LEGAL — 스크리너 카테고리 권유성 6건 | "매수"/"추천" → "관찰"/"점수 상위" (`web/lib/legal-labels.ts`) |
+| 6 | WatchlistPreview Free/Pro 분기 | usePersonas로 user_plan 자동 분기 |
+| 7 | "전체 관리 →" /watchlist 링크 깨짐 | 관심종목 있을 때만 "+더 추가" 노출 |
+| 8 | "다시 검증" 라벨 혼란 | 분석 중 "분석 후 검증"(disabled) → 완료 후 "실시간 검증" |
+
+### 발견 + 수정한 P1 (4건)
+- 푸터 탭 타겟 17~20px → 44px
+- 로그인 약관 링크 클릭 가능
+- 종목명 즉시 표시 (analyst 응답 전 useStockSearch fallback)
+- `window.__axis_auth` dev hook (Playwright 회귀 테스트 가능)
+
+### 측정 결과
+| 항목 | 값 |
+|------|-----|
+| 분석 시간 (revision 00007, 삼성전자) | 91.92초 |
+| 분석 시간 (revision 00008, SK하이닉스 fresh) | 84.74초 |
+| 분석 시간 (revision 00008, 캐시 히트) | 60.07초 |
+| ROADMAP 추정 | 5~10초 |
+
+### 핵심 발견
+- LangGraph는 이미 Research+Analyst 병렬 실행 중. 진짜 병목은 **Validator가 critical path 직렬**.
+- **다음 큰 작업**: [REDESIGN.md](REDESIGN.md) Option A — Validator를 수동 트리거로 분리.
+
+### 도구 추가
+- `scripts/_mint_admin_token.py` — Firebase 커스텀 토큰 발급 (관리자 권한 검증용)
+- 인프라 회고: `gcloud run deploy --source=.`이 Buildpacks 선택 → Dockerfile 무시 버그 발견. 분리 명령(`builds submit` + `run deploy --image`) 권장. `scripts/deploy-axis-staging.sh` TODO.
+
+---
+
+**최종 업데이트**: 2026-04-30 (라운드 1~3 완료, 12 fix 적용, REDESIGN.md 신설)
+**다음 세션 시작점**: [REDESIGN.md](REDESIGN.md) Option A 착수 (Validator critical path 분리). 그 전에 사용자 결정 2건 필요 — 자동 vs 수동 검증, Strategist Opus vs Sonnet A/B 평가 시작.
