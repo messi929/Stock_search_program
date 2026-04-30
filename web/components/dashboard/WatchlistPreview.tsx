@@ -4,10 +4,15 @@ import Link from "next/link";
 
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { usePersonas } from "@/hooks/usePersonas";
 import { useWatchlist } from "@/hooks/useWatchlist";
 
-export function WatchlistPreview({ free = true }: { free?: boolean }) {
-  const limit = free ? 5 : 30;
+export function WatchlistPreview() {
+  // user_plan은 personas API에 포함됨 — pro/premium은 30개, free는 5개.
+  const { data: personas } = usePersonas();
+  const isPaid =
+    personas?.user_plan === "pro" || personas?.user_plan === "premium";
+  const limit = isPaid ? 30 : 5;
   const { data, isLoading, isError } = useWatchlist();
   const tickers = data?.watchlist ?? [];
 
@@ -62,14 +67,16 @@ export function WatchlistPreview({ free = true }: { free?: boolean }) {
           </p>
         )}
 
-        <div className="pt-2">
-          <Link
-            href="/watchlist"
-            className="text-xs text-muted-foreground hover:underline"
-          >
-            전체 관리 →
-          </Link>
-        </div>
+        {tickers.length > 0 && (
+          <div className="pt-2">
+            <Link
+              href="/watchlist/add"
+              className="text-xs text-muted-foreground hover:underline"
+            >
+              + 더 추가
+            </Link>
+          </div>
+        )}
       </CardContent>
     </Card>
   );

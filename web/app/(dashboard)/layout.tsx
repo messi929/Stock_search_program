@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useEffect } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -11,10 +11,10 @@ import { signOut } from "@/lib/auth-actions";
 
 const NAV = [
   { href: "/dashboard", label: "대시보드", icon: "🏠" },
-  { href: "/watchlist", label: "관심 종목", icon: "⭐" },
+  { href: "/analyze", label: "종목 분석", icon: "🔍" },
+  { href: "/watchlist/add", label: "관심 종목", icon: "⭐" },
   { href: "/screener", label: "스크리너", icon: "📊" },
-  { href: "/analyses", label: "분석 이력", icon: "📜" },
-  { href: "/settings/profile", label: "설정", icon: "⚙️" },
+  { href: "/settings/notifications", label: "알림 설정", icon: "🔔" },
 ];
 
 export default function DashboardLayout({
@@ -23,19 +23,21 @@ export default function DashboardLayout({
   children: React.ReactNode;
 }) {
   const router = useRouter();
+  const pathname = usePathname();
   const { user, loading: authLoading } = useAuth();
   const { onboarded, loading: profileLoading } = useUserProfile();
 
   useEffect(() => {
     if (authLoading || profileLoading) return;
     if (!user) {
-      router.replace("/login");
+      const next = pathname && pathname !== "/login" ? `?next=${encodeURIComponent(pathname)}` : "";
+      router.replace(`/login${next}`);
       return;
     }
     if (!onboarded) {
       router.replace("/onboarding");
     }
-  }, [user, onboarded, authLoading, profileLoading, router]);
+  }, [user, onboarded, authLoading, profileLoading, pathname, router]);
 
   if (authLoading || profileLoading || !user || !onboarded) {
     return (

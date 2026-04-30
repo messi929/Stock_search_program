@@ -162,20 +162,35 @@ export default function Home() {
 
       {/* Footer + Disclaimer */}
       <footer className="px-6 py-10 max-w-5xl mx-auto border-t">
-        <div className="flex flex-wrap gap-6 text-sm text-muted-foreground mb-4">
-          <Link href="/pricing" className="hover:underline">
+        <nav
+          aria-label="푸터"
+          className="flex flex-wrap gap-1 text-sm text-muted-foreground mb-4"
+        >
+          <Link
+            href="/pricing"
+            className="inline-flex items-center min-h-[44px] px-3 hover:text-foreground hover:underline"
+          >
             요금제
           </Link>
-          <Link href="/terms" className="hover:underline">
+          <Link
+            href="/terms"
+            className="inline-flex items-center min-h-[44px] px-3 hover:text-foreground hover:underline"
+          >
             이용약관
           </Link>
-          <Link href="/privacy" className="hover:underline">
+          <Link
+            href="/privacy"
+            className="inline-flex items-center min-h-[44px] px-3 hover:text-foreground hover:underline"
+          >
             개인정보처리방침
           </Link>
-          <Link href="/login" className="hover:underline">
+          <Link
+            href="/login"
+            className="inline-flex items-center min-h-[44px] px-3 hover:text-foreground hover:underline"
+          >
             로그인
           </Link>
-        </div>
+        </nav>
         <Disclaimer />
       </footer>
     </main>

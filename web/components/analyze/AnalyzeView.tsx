@@ -22,6 +22,7 @@ import { ValidatorCard } from "@/components/analyze/ValidatorCard";
 import { Disclaimer } from "@/components/legal/Disclaimer";
 import { Card, CardContent } from "@/components/ui/card";
 import { usePersonas } from "@/hooks/usePersonas";
+import { useStockSearch } from "@/hooks/useStockSearch";
 import { useUserProfile } from "@/hooks/useUserProfile";
 import { apiStream, APIError } from "@/lib/api";
 import { usePersonaStore, type PersonaId } from "@/store/personaStore";
@@ -38,6 +39,13 @@ type AgentStatus = "pending" | "running" | "done" | "error";
 export function AnalyzeView({ ticker }: { ticker: string }) {
   const persona = usePersonaStore((s) => s.current);
   const { profile } = useUserProfile();
+
+  // 분석이 끝나기 전(~10s)에도 종목명을 노출 — Analyst가 채워주기 전 fallback.
+  // staleTime 30s로 캐싱되므로 추가 비용 없음.
+  const { data: stockSearch } = useStockSearch(ticker, 1);
+  const earlyName = stockSearch?.stocks?.find(
+    (s) => s.ticker === ticker.toUpperCase(),
+  )?.name ?? null;
 
   const [research, setResearch] = useState<ResearchResult | null>(null);
   const [analyst, setAnalyst] = useState<AnalystResult | null>(null);
@@ -151,11 +159,15 @@ export function AnalyzeView({ ticker }: { ticker: string }) {
         <div className="flex items-start justify-between gap-4 flex-wrap">
           <div>
             <h1 className="text-2xl font-bold font-mono">{ticker}</h1>
-            {analyst && (
+            {analyst ? (
               <p className="text-sm text-muted-foreground mt-1">
                 {analyst.name} · {analyst.technical.current_price.toLocaleString()}원
               </p>
-            )}
+            ) : earlyName ? (
+              <p className="text-sm text-muted-foreground mt-1">
+                {earlyName} · 가격 조회 중...
+              </p>
+            ) : null}
           </div>
           <PersonaTabs current={persona} />
         </div>

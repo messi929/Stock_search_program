@@ -50,6 +50,13 @@ export function ValidateButton({ ticker, research, analyst, onResult, size = "sm
   };
 
   const disabled = !analyst || validate.isPending;
+  // 라벨 — 분석 진행 중에는 비활성 + 안내, 완료 후엔 "실시간 검증"으로 통일
+  // (자동 1회 실행되었더라도 사용자에겐 매번 새 검증으로 표시 — "다시"가 주는 혼란 제거)
+  const label = validate.isPending
+    ? "🔄 검증 중..."
+    : !analyst
+      ? "🔍 분석 후 검증"
+      : "🔍 실시간 검증";
   return (
     <div className="inline-flex items-center gap-2">
       <Button
@@ -58,8 +65,9 @@ export function ValidateButton({ ticker, research, analyst, onResult, size = "sm
         disabled={disabled}
         size={size}
         variant="outline"
+        title={!analyst ? "분석이 완료되면 활성화됩니다" : undefined}
       >
-        {validate.isPending ? "🔄 검증 중..." : "🔍 다시 검증"}
+        {label}
       </Button>
       {lastValidatedAt && !validate.isPending && (
         <span className="text-xs text-muted-foreground">

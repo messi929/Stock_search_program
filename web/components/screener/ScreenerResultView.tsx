@@ -23,6 +23,7 @@ import { Disclaimer } from "@/components/legal/Disclaimer";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { useScan, useSmartLists } from "@/hooks/useSmartLists";
+import { toSafeCategory } from "@/lib/legal-labels";
 import type { SmartListCategory } from "@/types/api";
 
 import { ProGate } from "./ProGate";
@@ -39,9 +40,11 @@ export function ScreenerResultView({ categoryId }: Props) {
     isError: smartListsError,
   } = useSmartLists();
 
-  const category: SmartListCategory | undefined = smartLists?.categories.find(
-    (c) => c.id === categoryId,
-  );
+  // LEGAL: 권유성 카테고리 라벨을 Axis 정책에 맞게 변환
+  const rawCategory = smartLists?.categories.find((c) => c.id === categoryId);
+  const category: SmartListCategory | undefined = rawCategory
+    ? toSafeCategory(rawCategory)
+    : undefined;
 
   const userPlan = (smartLists?.user_plan ?? "free").toLowerCase();
   const proGated = !!category && !category.available_to_free && userPlan === "free";

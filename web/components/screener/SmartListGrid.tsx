@@ -4,6 +4,7 @@ import Link from "next/link";
 
 import { Card, CardContent } from "@/components/ui/card";
 import { useSmartLists } from "@/hooks/useSmartLists";
+import { toSafeCategory } from "@/lib/legal-labels";
 import type { SmartListCategory } from "@/types/api";
 
 const GROUP_LABELS: Record<string, string> = {
@@ -33,7 +34,9 @@ export function SmartListGrid() {
     return <p className="text-sm text-muted-foreground">⚠️ 스마트 리스트 조회 실패</p>;
   }
 
-  const groups = groupBy(data.categories);
+  // LEGAL: 권유성 카테고리 라벨을 Axis 정책에 맞게 변환 후 표시
+  const safeCategories = data.categories.map(toSafeCategory);
+  const groups = groupBy(safeCategories);
   const order = ["strategy", "fundamental", "supply", "technical", "etc"];
 
   return (

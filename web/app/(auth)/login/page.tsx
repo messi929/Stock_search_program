@@ -1,7 +1,8 @@
 "use client";
 
-import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Suspense, useEffect, useState } from "react";
 import { toast } from "sonner";
 
 import { Card, CardContent } from "@/components/ui/card";
@@ -10,17 +11,46 @@ import { useAuth } from "@/hooks/useAuth";
 import { useUserProfile } from "@/hooks/useUserProfile";
 import { signInWithGoogle } from "@/lib/auth-actions";
 
+// open-redirect 차단: 로컬 경로만 허용 (//, http:, javascript: 거부).
+function safeNext(raw: string | null): string {
+  if (!raw) return "/dashboard";
+  if (!raw.startsWith("/") || raw.startsWith("//")) return "/dashboard";
+  if (raw === "/login") return "/dashboard";
+  return raw;
+}
+
 export default function LoginPage() {
+  // Next.js 16 — useSearchParams는 Suspense 경계 필수
+  return (
+    <Suspense fallback={<LoginCardShell />}>
+      <LoginPageInner />
+    </Suspense>
+  );
+}
+
+function LoginCardShell() {
+  return (
+    <Card className="w-full max-w-md">
+      <CardContent className="p-8 space-y-6">
+        <p className="text-sm text-muted-foreground text-center">로딩 중...</p>
+      </CardContent>
+    </Card>
+  );
+}
+
+function LoginPageInner() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const next = safeNext(searchParams.get("next"));
   const { user, loading: authLoading } = useAuth();
   const { onboarded, loading: profileLoading } = useUserProfile();
   const [busy, setBusy] = useState(false);
 
-  // 이미 로그인 상태 → onboarding 또는 dashboard로 자동 이동
+  // 이미 로그인 상태 → onboarding 또는 next(또는 dashboard)로 이동
   useEffect(() => {
     if (authLoading || profileLoading || !user) return;
-    router.replace(onboarded ? "/dashboard" : "/onboarding");
-  }, [user, onboarded, authLoading, profileLoading, router]);
+    router.replace(onboarded ? next : "/onboarding");
+  }, [user, onboarded, authLoading, profileLoading, next, router]);
 
   const handleGoogle = async () => {
     setBusy(true);
@@ -68,7 +98,15 @@ export default function LoginPage() {
         </div>
 
         <p className="text-xs text-muted-foreground text-center pt-2">
-          로그인하면 Axis 이용약관 및 개인정보처리방침에 동의한 것으로 간주됩니다.
+          로그인하면 Axis{" "}
+          <Link href="/terms" className="underline hover:text-foreground">
+            이용약관
+          </Link>{" "}
+          및{" "}
+          <Link href="/privacy" className="underline hover:text-foreground">
+            개인정보처리방침
+          </Link>
+          에 동의한 것으로 간주됩니다.
         </p>
       </CardContent>
     </Card>
