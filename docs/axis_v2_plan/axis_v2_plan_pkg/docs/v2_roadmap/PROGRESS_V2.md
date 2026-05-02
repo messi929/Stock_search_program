@@ -21,7 +21,26 @@
 8개 reviewer subagent 병렬 검토 → HIGH 10/MEDIUM 17/LOW 9 발견. Phase 1 13건 즉시 적용 (보안/LEGAL/점수 정확성).
 PROGRESS_V2.md에 검증 워크플로우 정책 명문화 (모듈 작성 직후 reviewer 호출 의무).
 
-### Day 2 — ECOS API 🔄 (진행 중)
+### Day 3 — 4대 사이클 판정 ✅ (commit pending)
+
+| 산출물 | 비고 |
+|--------|------|
+| `utils/data_collectors/cycle_detector.py` | 4 순수 함수 + detect_all_cycles 헬퍼 |
+| 단위 테스트 55건 | 경계값 + 알려진 시점 4개 + confidence + country |
+
+**알려진 시점 검증 (학계 합의 일치)**:
+- 2022-09 Stagflation → 인상 후반 + 고인플레 가속 + 확장 ✅
+- 2020-04 Covid → 인하 시작 + 디플레 우려 + 수축 후기 ✅
+- 2017-06 Goldilocks → 인상 후반 + 저인플레 + 확장 ✅
+- 2008-12 리먼 → 인하 시작 + 디플레 우려 + 수축 후기 ✅
+
+**Reviewer 1회 호출 (정책 적용)** — HIGH 1 / MEDIUM 2 / LOW 2 발견 → HIGH+MEDIUM 즉시 fix:
+- HIGH: 경기 분기 모순 logic — GDP 양수+IP 음수가 강제로 수축 → 명시적 전환기 분류
+- MEDIUM: confidence 단위 표준화 (`_normalize_confidence` + STRONG_* 상수)
+- MEDIUM: country 인자 추가 (US 1.5% / KR 2.0% 잠재성장률 분리)
+- LOW: detect_all_cycles 입력 검증 (REQUIRED_INPUTS + ValueError)
+
+### Day 2 — ECOS API ✅ (commit `2fb0c9e`)
 
 | 산출물 | 비고 |
 |--------|------|
