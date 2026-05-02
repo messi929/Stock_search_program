@@ -19,6 +19,8 @@ import pytest
 from utils.data_collectors.korea_supply import (
     CORE_INVESTORS,
     FIRESTORE_BATCH_LIMIT,
+    MIN_DAYS_FOR_SIGNAL,
+    KoreaSupplyAnalyzer,
     KoreaSupplyCollector,
     _safe_float,
     _safe_int,
@@ -367,3 +369,212 @@ def test_to_date_str_from_timestamp():
 def test_to_date_str_from_string():
     assert _to_date_str("2025-12-31") == "20251231"
     assert _to_date_str("20251231") == "20251231"
+
+
+# ──────────────────────────────────────────────
+# 테스트 6: KoreaSupplyAnalyzer (Day 2)
+# ──────────────────────────────────────────────
+
+
+def _mk_analyzer_with_records(records: list[dict]) -> KoreaSupplyAnalyzer:
+    """Firestore mock 주입한 analyzer.
+
+    records: load_supply_history가 반환할 dict 리스트.
+    """
+    db = MagicMock()
+    fake_docs = [SimpleNamespace(to_dict=lambda r=r: r) for r in records]
+    # .where(...).where(...).stream() 체인 흉내
+    query_chain = MagicMock()
+    query_chain.stream.return_value = iter(fake_docs)
+    query_chain.where.return_value = query_chain
+    db.collection.return_value.where.return_value = query_chain
+    return KoreaSupplyAnalyzer(db=db)
+
+
+def _generate_supply_records(
+    ticker: str,
+    days: int,
+    foreign_pcts: list[float] | None = None,
+    foreign_net_buys: list[int] | None = None,
+    institution_net_buys: list[int] | None = None,
+    start_date: str = "20250101",
+) -> list[dict]:
+    """테스트용 supply records 생성."""
+    base = datetime.strptime(start_date, "%Y%m%d") if False else None
+    from datetime import datetime as _dt
+    from datetime import timedelta as _td
+
+    base_dt = _dt.strptime(start_date, "%Y%m%d")
+    records = []
+    for i in range(days):
+        d = base_dt + _td(days=i)
+        records.append(
+            {
+                "ticker": ticker,
+                "date": d.strftime("%Y%m%d"),
+                "foreign_exhaustion_pct": (foreign_pcts[i] if foreign_pcts else 50.0),
+                "foreign_net_buy_value": (foreign_net_buys[i] if foreign_net_buys else 0),
+                "institution_net_buy_value": (
+                    institution_net_buys[i] if institution_net_buys else 0
+                ),
+            }
+        )
+    return records
+
+
+def test_analyzer_get_consecutive_buy_days_counts_recent_buys():
+    """최근부터 거꾸로 양수만 카운트, 첫 음수에서 멈춰야 함."""
+    # 7일치: [-100, +50, +100, -10, +200, +300, +400]
+    # 가장 최근 4일이 양수 → 최근 3일(거꾸로 4 5 6 7)... 잠깐 [+200, +300, +400]은 양수, -10 멈춤 → 3
+    nets = [-100, 50, 100, -10, 200, 300, 400]
+    records = _generate_supply_records("005930", 7, foreign_net_buys=nets)
+    analyzer = _mk_analyzer_with_records(records)
+
+    assert analyzer.get_consecutive_buy_days("005930") == 3
+
+
+def test_analyzer_get_consecutive_buy_days_returns_zero_if_latest_is_sell():
+    """마지막 날 순매도면 0."""
+    nets = [100, 200, 300, -50]
+    records = _generate_supply_records("005930", 4, foreign_net_buys=nets)
+    analyzer = _mk_analyzer_with_records(records)
+
+    assert analyzer.get_consecutive_buy_days("005930") == 0
+
+
+def test_analyzer_get_consecutive_buy_days_empty_history():
+    analyzer = _mk_analyzer_with_records([])
+    assert analyzer.get_consecutive_buy_days("005930") == 0
+
+
+def test_analyzer_get_30d_net_buy_sums_correctly():
+    nets = [100_000_000, -50_000_000, 200_000_000, -30_000_000]  # = 220M
+    records = _generate_supply_records("005930", 4, foreign_net_buys=nets)
+    analyzer = _mk_analyzer_with_records(records)
+
+    assert analyzer.get_30d_net_buy("005930") == 220_000_000
+
+
+def test_analyzer_get_30d_net_buy_handles_none():
+    """None/NaN 값은 0 취급."""
+    records = _generate_supply_records("005930", 3, foreign_net_buys=[100, 200, 300])
+    # 의도적으로 한 record의 net_buy를 None으로 변경
+    records[1]["foreign_net_buy_value"] = None
+    analyzer = _mk_analyzer_with_records(records)
+
+    assert analyzer.get_30d_net_buy("005930") == 400
+
+
+def test_analyzer_get_dual_buy_signal_counts_both_positive_days():
+    """외국인 + 기관 둘 다 양수인 날만 카운트."""
+    foreigns = [100, 200, -50, 300, 400]
+    insts = [50, -10, 200, 100, 50]  # 둘 다 양수: idx 0, 3, 4 = 3일
+    records = _generate_supply_records(
+        "005930", 5, foreign_net_buys=foreigns, institution_net_buys=insts
+    )
+    analyzer = _mk_analyzer_with_records(records)
+
+    result = analyzer.get_dual_buy_signal("005930")
+    assert result["days"] == 3
+    assert result["window"] == 30
+    assert result["ratio"] == round(3 / 5, 3)
+
+
+def test_analyzer_get_foreign_5y_trend_full_signal():
+    """충분한 데이터 + 매수 흐름 + 평균 초과 → increasing_above_avg."""
+    # 25일 데이터: 보유 비중 50→55 (현재 55 > 평균 ~52)
+    # 30일 net buy 양수 합계
+    pcts = [50.0 + i * 0.2 for i in range(25)]  # 50.0, 50.2, ..., 54.8
+    nets = [10_000_000_000] * 25  # 매일 100억 매수
+    records = _generate_supply_records("005930", 25, foreign_pcts=pcts, foreign_net_buys=nets)
+    analyzer = _mk_analyzer_with_records(records)
+
+    trend = analyzer.get_foreign_5y_trend("005930")
+
+    assert trend["ticker"] == "005930"
+    assert trend["data_points"] == 25
+    assert trend["current_holding_pct"] == 54.8
+    assert trend["5y_max"] == 54.8
+    assert trend["5y_min"] == 50.0
+    assert trend["interpretation_signal"] == "increasing_above_avg"
+    assert trend["consecutive_buy_days"] == 25  # 전부 양수
+    assert trend["30d_net_buy"] == 25 * 10_000_000_000
+
+
+def test_analyzer_get_foreign_5y_trend_decreasing_below_avg():
+    """매도 흐름 + 평균 미만 → decreasing_below_avg."""
+    # 보유 비중 60→50 하락 (현재 50 < 평균 ~55)
+    pcts = [60.0 - i * 0.4 for i in range(25)]
+    nets = [-5_000_000_000] * 25  # 매일 50억 매도
+    records = _generate_supply_records("005930", 25, foreign_pcts=pcts, foreign_net_buys=nets)
+    analyzer = _mk_analyzer_with_records(records)
+
+    trend = analyzer.get_foreign_5y_trend("005930")
+
+    assert trend["interpretation_signal"] == "decreasing_below_avg"
+    assert trend["consecutive_buy_days"] == 0
+
+
+def test_analyzer_get_foreign_5y_trend_neutral():
+    """평균 차이 < 0.5%p + 30일 net buy < 1억 → neutral."""
+    # 보유 비중이 거의 변동 없음
+    pcts = [50.0] * 25
+    nets = [10_000_000, -5_000_000, 8_000_000, -3_000_000] + [0] * 21  # 합 = 10M (1억 미만)
+    records = _generate_supply_records("005930", 25, foreign_pcts=pcts, foreign_net_buys=nets)
+    analyzer = _mk_analyzer_with_records(records)
+
+    trend = analyzer.get_foreign_5y_trend("005930")
+
+    assert trend["interpretation_signal"] == "neutral"
+
+
+def test_analyzer_get_foreign_5y_trend_insufficient_data():
+    """MIN_DAYS_FOR_SIGNAL 미만 → insufficient_data + 모든 값 0."""
+    records = _generate_supply_records(
+        "005930", MIN_DAYS_FOR_SIGNAL - 1, foreign_pcts=[50.0] * (MIN_DAYS_FOR_SIGNAL - 1)
+    )
+    analyzer = _mk_analyzer_with_records(records)
+
+    trend = analyzer.get_foreign_5y_trend("005930")
+
+    assert trend["interpretation_signal"] == "insufficient_data"
+    assert trend["current_holding_pct"] == 0.0
+    assert trend["data_points"] == MIN_DAYS_FOR_SIGNAL - 1
+
+
+def test_analyzer_get_foreign_5y_trend_empty_history():
+    analyzer = _mk_analyzer_with_records([])
+    trend = analyzer.get_foreign_5y_trend("999999")
+
+    assert trend["interpretation_signal"] == "insufficient_data"
+    assert trend["data_points"] == 0
+
+
+def test_analyzer_load_supply_history_handles_firestore_exception():
+    """Firestore 에러는 graceful 처리 — 빈 DataFrame 반환."""
+    db = MagicMock()
+    db.collection.return_value.where.side_effect = ConnectionError("network error")
+    analyzer = KoreaSupplyAnalyzer(db=db)
+
+    df = analyzer.load_supply_history("005930", days=30)
+
+    assert df.empty
+
+
+def test_analyzer_load_supply_history_sorts_by_date_ascending():
+    """date 컬럼이 오름차순 정렬되어 반환."""
+    # 의도적으로 역순으로 records 작성
+    records = [
+        {"ticker": "005930", "date": "20251231", "foreign_net_buy_value": 100},
+        {"ticker": "005930", "date": "20251229", "foreign_net_buy_value": 50},
+        {"ticker": "005930", "date": "20251230", "foreign_net_buy_value": 75},
+    ]
+    analyzer = _mk_analyzer_with_records(records)
+
+    df = analyzer.load_supply_history("005930", days=10)
+
+    assert list(df["date"]) == ["20251229", "20251230", "20251231"]
+
+
+# datetime import for record generators
+from datetime import datetime  # noqa: E402

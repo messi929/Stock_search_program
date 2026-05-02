@@ -382,6 +382,265 @@ class KoreaSupplyCollector:
 
 
 # ──────────────────────────────────────────────
+# 분석 헬퍼 (Korean Specialist 페르소나가 호출)
+# ──────────────────────────────────────────────
+
+
+# 5년 = 거래일 약 1,250 / 달력일 1,825
+DAYS_5Y_CALENDAR = 1825
+# interpretation_signal 임계값
+NEUTRAL_AVG_DIFF_PCT_POINTS = 0.5  # 평균 대비 차이 (%p)
+NEUTRAL_NET_BUY_KRW = 100_000_000  # 30일 누적 순매수 절대값 (1억원)
+MIN_DAYS_FOR_SIGNAL = 20  # 5년 추이 분석에 필요한 최소 데이터 일수
+
+
+class KoreaSupplyAnalyzer:
+    """Firestore historical_supply 컬렉션 기반 분석 함수 모음.
+
+    Korean Specialist 페르소나가 호출하여 종목별 외국인/기관 수급 통계를 받음.
+    KoreaSupplyCollector가 백필/증분으로 채워둔 데이터를 읽기 전용으로 활용.
+
+    Args:
+        db: Firestore 클라이언트 (None 시 lazy import).
+        collection: 컬렉션 이름 (기본: historical_supply, KoreaSupplyCollector와 일치).
+    """
+
+    def __init__(self, db: Any | None = None, collection: str = "historical_supply") -> None:
+        self._db = db
+        self.collection = collection
+
+    @property
+    def db(self) -> Any:
+        if self._db is None:
+            from screener.db.firebase_client import get_db
+
+            self._db = get_db()
+        return self._db
+
+    # ──────────────────────────────────────────────
+    # Firestore 읽기 (composite index: ticker + date)
+    # ──────────────────────────────────────────────
+
+    def load_supply_history(self, ticker: str, days: int = 30) -> pd.DataFrame:
+        """종목 수급 이력 N일치 조회.
+
+        Args:
+            ticker: 종목 코드
+            days: 며칠치 (달력일 기준)
+
+        Returns:
+            DataFrame[date, foreign_holding_qty, foreign_exhaustion_pct,
+                      foreign_net_buy_value, institution_net_buy_value, ...]
+            date 오름차순 정렬. 빈 결과면 빈 DataFrame.
+        """
+        from datetime import timedelta
+
+        from google.cloud.firestore_v1.base_query import FieldFilter
+
+        start_date = (datetime.now() - timedelta(days=days)).strftime("%Y%m%d")
+
+        try:
+            docs = (
+                self.db.collection(self.collection)
+                .where(filter=FieldFilter("ticker", "==", ticker))
+                .where(filter=FieldFilter("date", ">=", start_date))
+                .stream()
+            )
+            records = [doc.to_dict() for doc in docs]
+        except Exception as e:
+            logger.warning(
+                f"Firestore historical_supply 조회 실패 (ticker={ticker}): "
+                f"{type(e).__name__}: {str(e)[:120]}"
+            )
+            return pd.DataFrame()
+
+        if not records:
+            return pd.DataFrame()
+
+        df = pd.DataFrame(records)
+        if "date" in df.columns:
+            df = df.sort_values("date").reset_index(drop=True)
+        return df
+
+    # ──────────────────────────────────────────────
+    # 5년 외국인 추이 + 통계 (korea_market.md §1.4)
+    # ──────────────────────────────────────────────
+
+    def get_foreign_5y_trend(self, ticker: str) -> dict[str, Any]:
+        """종목별 5년 외국인 수급 추이 + 통계.
+
+        Returns:
+            {
+                "ticker": "005930",
+                "current_holding_pct": 55.12,
+                "5y_avg_holding_pct": 53.4,
+                "1y_change_pct_points": 1.4,
+                "5y_max": 56.8,
+                "5y_min": 49.2,
+                "consecutive_buy_days": 4,
+                "30d_net_buy": 8500000000,
+                "dual_buy_days_30d": 12,
+                "interpretation_signal": "increasing_above_avg",
+                "data_points": 1240,
+            }
+            데이터 부족 시 일부 값 0 + signal="insufficient_data".
+        """
+        df = self.load_supply_history(ticker, days=DAYS_5Y_CALENDAR)
+
+        if df.empty or len(df) < MIN_DAYS_FOR_SIGNAL:
+            return {
+                "ticker": ticker,
+                "current_holding_pct": 0.0,
+                "5y_avg_holding_pct": 0.0,
+                "1y_change_pct_points": 0.0,
+                "5y_max": 0.0,
+                "5y_min": 0.0,
+                "consecutive_buy_days": 0,
+                "30d_net_buy": 0,
+                "dual_buy_days_30d": 0,
+                "interpretation_signal": "insufficient_data",
+                "data_points": len(df),
+            }
+
+        # 보유 비중 통계 (foreign_exhaustion_pct가 있는 행만)
+        if "foreign_exhaustion_pct" in df.columns:
+            holding = df["foreign_exhaustion_pct"].dropna()
+            holding = holding[holding > 0]  # 매매-only row는 0 → 제외
+        else:
+            holding = pd.Series(dtype=float)
+
+        if len(holding) > 0:
+            current_pct = float(holding.iloc[-1])
+            avg_pct = float(holding.mean())
+            max_pct = float(holding.max())
+            min_pct = float(holding.min())
+            # 1년 전 = 약 240 거래일 전 (없으면 첫 값)
+            one_year_idx = max(0, len(holding) - 240)
+            one_year_ago_pct = float(holding.iloc[one_year_idx])
+            year_change = round(current_pct - one_year_ago_pct, 2)
+        else:
+            current_pct = avg_pct = max_pct = min_pct = year_change = 0.0
+
+        # 매매 통계 (최근 30일)
+        df_30d = df.tail(30) if len(df) > 30 else df
+        consecutive = self._consecutive_buy_days_from_df(df_30d)
+        net_buy_30d = self._net_buy_from_df(df_30d)
+        dual_days = self._dual_buy_days_from_df(df_30d)
+
+        signal = self._classify_signal(
+            current_pct=current_pct,
+            avg_pct=avg_pct,
+            net_buy_30d=net_buy_30d,
+            data_points=len(df),
+        )
+
+        return {
+            "ticker": ticker,
+            "current_holding_pct": round(current_pct, 2),
+            "5y_avg_holding_pct": round(avg_pct, 2),
+            "1y_change_pct_points": year_change,
+            "5y_max": round(max_pct, 2),
+            "5y_min": round(min_pct, 2),
+            "consecutive_buy_days": consecutive,
+            "30d_net_buy": net_buy_30d,
+            "dual_buy_days_30d": dual_days,
+            "interpretation_signal": signal,
+            "data_points": len(df),
+        }
+
+    # ──────────────────────────────────────────────
+    # 개별 헬퍼 (단독 호출 가능)
+    # ──────────────────────────────────────────────
+
+    def get_consecutive_buy_days(self, ticker: str, days_back: int = 30) -> int:
+        """최근 외국인 연속 순매수일 (가장 최근부터 거꾸로 카운트).
+
+        가장 최근 거래일이 순매도면 0 반환.
+        """
+        df = self.load_supply_history(ticker, days=days_back)
+        return self._consecutive_buy_days_from_df(df)
+
+    def get_30d_net_buy(self, ticker: str) -> int:
+        """30일 외국인 누적 순매수 (원 단위 거래대금)."""
+        df = self.load_supply_history(ticker, days=30)
+        return self._net_buy_from_df(df)
+
+    def get_dual_buy_signal(self, ticker: str, days_back: int = 30) -> dict[str, Any]:
+        """외국인+기관 동시 순매수 신호.
+
+        Returns:
+            {"days": 12, "ratio": 0.4, "window": 30}
+            ratio = days / 데이터 일수 (총 거래일이 windows보다 적을 수 있음)
+        """
+        df = self.load_supply_history(ticker, days=days_back)
+        days = self._dual_buy_days_from_df(df)
+        ratio = round(days / len(df), 3) if len(df) > 0 else 0.0
+        return {"days": days, "ratio": ratio, "window": days_back}
+
+    # ──────────────────────────────────────────────
+    # 내부 계산 (DataFrame 기반, Firestore 의존 X)
+    # ──────────────────────────────────────────────
+
+    @staticmethod
+    def _consecutive_buy_days_from_df(df: pd.DataFrame) -> int:
+        """df에서 외국인 연속 순매수일을 가장 최근부터 카운트."""
+        if df.empty or "foreign_net_buy_value" not in df.columns:
+            return 0
+        # date 오름차순이라고 가정 → 거꾸로 순회
+        count = 0
+        for v in reversed(df["foreign_net_buy_value"].tolist()):
+            if v is None or v <= 0:
+                break
+            count += 1
+        return count
+
+    @staticmethod
+    def _net_buy_from_df(df: pd.DataFrame) -> int:
+        if df.empty or "foreign_net_buy_value" not in df.columns:
+            return 0
+        return int(df["foreign_net_buy_value"].fillna(0).sum())
+
+    @staticmethod
+    def _dual_buy_days_from_df(df: pd.DataFrame) -> int:
+        if (
+            df.empty
+            or "foreign_net_buy_value" not in df.columns
+            or "institution_net_buy_value" not in df.columns
+        ):
+            return 0
+        f = df["foreign_net_buy_value"].fillna(0)
+        i = df["institution_net_buy_value"].fillna(0)
+        return int(((f > 0) & (i > 0)).sum())
+
+    @staticmethod
+    def _classify_signal(
+        current_pct: float, avg_pct: float, net_buy_30d: int, data_points: int
+    ) -> str:
+        """interpretation_signal 5종 분류.
+
+        - increasing_above_avg : 30일 순매수 + 보유 비중 평균 초과
+        - increasing_below_avg : 30일 순매수 + 보유 비중 평균 미만
+        - decreasing_above_avg : 30일 순매도 + 보유 비중 평균 초과
+        - decreasing_below_avg : 30일 순매도 + 보유 비중 평균 미만
+        - neutral              : 평균 차이 미미 + 30일 순매수 미미
+        - insufficient_data    : 데이터 < MIN_DAYS_FOR_SIGNAL
+        """
+        if data_points < MIN_DAYS_FOR_SIGNAL:
+            return "insufficient_data"
+
+        avg_diff = current_pct - avg_pct
+        is_neutral_avg = abs(avg_diff) < NEUTRAL_AVG_DIFF_PCT_POINTS
+        is_neutral_flow = abs(net_buy_30d) < NEUTRAL_NET_BUY_KRW
+
+        if is_neutral_avg and is_neutral_flow:
+            return "neutral"
+
+        flow_dir = "increasing" if net_buy_30d > 0 else "decreasing"
+        avg_dir = "above_avg" if avg_diff > 0 else "below_avg"
+        return f"{flow_dir}_{avg_dir}"
+
+
+# ──────────────────────────────────────────────
 # 유틸 (모듈 private)
 # ──────────────────────────────────────────────
 
