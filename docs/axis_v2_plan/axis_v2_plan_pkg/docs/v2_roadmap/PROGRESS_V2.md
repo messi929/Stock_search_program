@@ -21,7 +21,28 @@
 8개 reviewer subagent 병렬 검토 → HIGH 10/MEDIUM 17/LOW 9 발견. Phase 1 13건 즉시 적용 (보안/LEGAL/점수 정확성).
 PROGRESS_V2.md에 검증 워크플로우 정책 명문화 (모듈 작성 직후 reviewer 호출 의무).
 
-### Day 3 — 4대 사이클 판정 ✅ (commit pending)
+### Day 4 — 6대 국면 매핑 + 매크로 캘린더 ✅ (commit pending)
+
+| 산출물 | 비고 |
+|--------|------|
+| `utils/data_collectors/regime_detector.py` | 6 국면 매핑 (Goldilocks/Reflation/Stagflation/Risk-Off/Recovery/Late Cycle) + Transition |
+| `data/macro_calendar.json` | 2026 FOMC 8회 + BOK 8회 + CPI 24회 + GDP 8회 + 고용 12회 = 60건 |
+| 단위 테스트 28건 | 6 국면 명확 매칭 + 4 알려진 시점 + 동률 처리 + 캘린더 + LEGAL |
+
+**4 알려진 시점 검증 (학계 합의 일치)**:
+- 2022-09: Late Cycle 4/4
+- 2020-04: Recovery 4/4
+- 2017-06: Goldilocks 3/4
+- 2008-12: Recovery/Risk-Off 동률 3/3 + transition_to
+
+**Reviewer 1회 호출** — MEDIUM 3 / LOW 2 발견 → 모두 fix:
+- Recovery vs Reflation 구조적 중첩 해소 — Recovery=수축 후기만, Reflation=확장 초기만 (학계 정의 부합)
+- MIN_PRIMARY_SCORE 2→3 강화 (50% confidence를 primary로 단정 X, 75% 이상만 명확)
+- detect_regime_from_cycles KeyError → ValueError (cycle_detector와 일관성)
+- 캘린더 fallback 영구 캐시 문제 — 파일 미존재 시 캐시 X (다음 호출 재시도 가능)
+- macro_calendar.json _meta에 fed/bok/bls/bea/kostat URL + verification_checklist 추가
+
+### Day 3 — 4대 사이클 판정 ✅ (commit `81f4ff1`)
 
 | 산출물 | 비고 |
 |--------|------|
