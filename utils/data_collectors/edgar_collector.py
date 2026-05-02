@@ -227,7 +227,9 @@ class EdgarClient:
 # ──────────────────────────────────────────────
 
 
-_ITEM_RE = re.compile(r"\b(\d\.\d{2})\b")
+# Item 코드는 "X.YY" (X=한 자리). "10.01" 같은 비SEC 패턴이 "0.01"로
+# 잘못 매칭되지 않도록 앞에 (?<!\d) 가드를 둠.
+_ITEM_RE = re.compile(r"(?<!\d)(\d\.\d{2})(?!\d)")
 
 
 def decode_8k_items(items_str: str) -> list[tuple[str, str]]:

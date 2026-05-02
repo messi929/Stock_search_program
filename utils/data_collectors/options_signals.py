@@ -152,7 +152,8 @@ def calculate_options_signals(
         _cache_set(cache_key, result)
         return result
 
-    nearest = expirations[0]
+    # yfinance가 보통 정렬해 주지만 명시적으로 sorted 처리 (ISO 날짜 lexicographic).
+    nearest = sorted(expirations)[0]
 
     try:
         chain = yf_ticker.option_chain(nearest)

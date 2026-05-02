@@ -1,7 +1,120 @@
 # Axis v2 — 6 Persona Expansion 진척 기록
 
 > **브랜치**: `feature/v2-six-personas` (axis-ai-layer에서 분기, 2026-05-02)
-> **현재 위치**: Week A Day 4 진행 중
+> **현재 위치**: Week C 종료 (2026-05-03)
+
+---
+
+## 📅 Week C — 이벤트 데이터 인프라
+
+### Day 1 — yfinance 옵션 시그널 ✅ (commit `5a50ac2`)
+
+| 산출물 | 비고 |
+|--------|------|
+| `utils/data_collectors/options_signals.py` | calculate_options_signals + VKOSPI 보조, PCR(volume+OI) + ATM IV |
+| 단위 테스트 18건 | mock yfinance, ATM band ±5%, PCR/IV 분기, 30분 캐시, graceful |
+
+`option_chain(date)` positional 인자, `fast_info → info` fallback. LEGAL: 단정 표현 회피 ("Put 우세/Call 우세/균형"만).
+
+### Day 2 — 기업 이벤트 (DART + EDGAR + yfinance) ✅ (commit `805d244`)
+
+| 산출물 | 비고 |
+|--------|------|
+| `utils/data_collectors/dart_event_collector.py` | 7 카테고리 (M&A/buyback/CB/증자/분할/배당/실적), buyback subtype은 dart_buyback에 위임 |
+| `utils/data_collectors/edgar_collector.py` | SEC submissions API + 22개 8-K Item 매핑, User-Agent 강제 |
+| `utils/data_collectors/yfinance_event_collector.py` | earnings_dates + dividends + quarterly_income_stmt |
+| 단위 테스트 52건 | DART 분류 9 + EDGAR client 14 + yfinance event 9 + buyback 위임 + 8-K dedupe |
+
+EDGAR User-Agent에 이메일 누락 시 ValueError. yfinance는 신구 컬럼 양쪽 graceful 매핑 (EPS Estimate / epsEstimate).
+
+### Day 3 — 매크로 이벤트 메타 + IPO 큐레이션 ✅ (commit `f8ff2e7`)
+
+| 산출물 | 비고 |
+|--------|------|
+| `data/macro_event_metadata.json` | 7 이벤트 (FOMC/BOK/US_CPI/KR_CPI/US_GDP/KR_GDP/US_EMPLOYMENT) 변동성 통계 |
+| `data/upcoming_ipo.json` | 5건 수동 큐레이션 (SpaceX→RKLB/ASTS/IRDM, 케이뱅크→323410, LG CNS, Stripe, Databricks) |
+| `utils/data_collectors/event_metadata.py` | get_event_meta + find_ipos_for_secondary + get_high_certainty_ipos |
+| 단위 테스트 16건 | 스키마 정합성 + LEGAL 경고 필수 + 2차 수혜 매핑 검증 |
+
+LEGAL: `fabrication_warning` + `no_recommendation_disclaimer` 필수 필드.
+
+### Day 4 — LLM 유사 이벤트 추론 캐시 ✅ (commit `c399720`)
+
+| 산출물 | 비고 |
+|--------|------|
+| `utils/data_collectors/event_inference_cache.py` | Claude API + 24h 캐시 + SIMILAR_EVENT_PROMPT |
+| 단위 테스트 28건 (이후 30건) | 표본 신뢰도 + JSON 추출 + 단정 표현 차단 + 캐시 hit/miss + API 실패 graceful |
+
+**LEGAL/Fabrication 안전망 (자동 첨부)**:
+- 표본 < 5: `statistical_summary_suppressed=True` (정성 분석만)
+- 표본 5-9: "참고용" / 표본 ≥ 10: "신뢰 가능 (단, fabrication 경고 유지)"
+- `fabrication_warning` + `verification_needed` (3건) + `no_recommendation_disclaimer` 강제
+- `FORBIDDEN_PATTERNS_KO` 정규식 — "매수신호"/"매수 시그널" 변형까지 차단
+
+### Day 5 — Jobs + Reviewer + LEGAL ✅ (commit pending)
+
+| 산출물 | 비고 |
+|--------|------|
+| `jobs/daily_options_collect.py` | 와치리스트 미국 종목 옵션 + VKOSPI, dry-run 지원 |
+| `jobs/weekly_event_calendar_sync.py` | DART + yfinance + EDGAR 통합, KR/US 분리, env 미설정 시 부분 skip |
+| `tests/data_collectors/test_event_jobs.py` | 7 통합 테스트 (dry-run, 부분 실패, EDGAR cik_lookup 분기) |
+
+**Reviewer subagent 호출 (5 모듈 일괄)** — HIGH 4 / MEDIUM 7 / LOW 6 발견 → HIGH 즉시 fix:
+- HIGH: `_scrub_forbidden` 단순 substring → 정규식 + 변형/동의어 차단 (FORBIDDEN_PATTERNS_KO)
+- HIGH: `sample_size` int 캐스트가 문자열에 폭파 → `_safe_int_sample_size` 추출 헬퍼
+- HIGH: dart_event_collector batch.commit 예외 미격리 → chunk 단위 try/except
+- HIGH: `_ITEM_RE` 8-K 코드 regex가 "10.01"을 "0.01"로 오매칭 → `(?<!\d)...(?!\d)` 가드
+- MEDIUM (적용): 옵션 만기일 명시적 sorted, yfinance df sort_index 후 head/tail
+- LOW: 동기 래퍼 docstring에 "이벤트 루프 외부 전용" 강조
+
+**LEGAL sweep**: 모든 LLM 응답에 fabrication 경고 + no_recommendation_disclaimer 자동 첨부 (event_inference_cache 검증). DART/EDGAR/yfinance 수집 모듈은 raw data 보관만 — 단정 표현 생성 X.
+
+**전체 회귀**: 496 PASS (Week A 168 + Week B 204 + Week C 124).
+
+---
+
+## ✅ Week C 종료 — 이벤트 데이터 인프라 완성
+
+**5일 누적**:
+- Commit 5건 (Day 1~4 + Day 5)
+- 코드 ~3,400줄 추가 (모듈 ~2,200 + 테스트 ~1,200)
+- 테스트 124 신규 PASS
+- Reviewer 1회 호출 (5 모듈 일괄)
+
+**산출 모듈**:
+1. `options_signals.py` — yfinance 옵션 PCR/ATM IV, VKOSPI 보조
+2. `dart_event_collector.py` — DART 7 이벤트 카테고리 (buyback 위임)
+3. `edgar_collector.py` — SEC 8-K 22개 Item 매핑
+4. `yfinance_event_collector.py` — 미국 실적/배당 일정
+5. `event_metadata.py` + `data/macro_event_metadata.json` + `data/upcoming_ipo.json` — 매크로 변동성 메타 + 수동 IPO 큐레이션
+6. `event_inference_cache.py` — Claude LLM 유사 이벤트 추론 + LEGAL 안전망
+7. `daily_options_collect.py` — 일일 옵션 수집 Job
+8. `weekly_event_calendar_sync.py` — 주간 KR/US 이벤트 통합 Job
+
+**Cloud Run Job 등록 가이드 (배포 시)**:
+```bash
+# Daily options (06:30 KST = 21:30 UTC 전날)
+gcloud run jobs create axis-daily-options \
+  --image=<axis-staging image> --command=python --args=-m,jobs.daily_options_collect \
+  --region=asia-northeast3
+gcloud scheduler jobs create http daily-options \
+  --schedule="30 21 * * *" --time-zone="UTC" --uri=<job-trigger-url>
+
+# Weekly events (매주 일요일 22:00 KST = 13:00 UTC)
+gcloud run jobs create axis-weekly-events \
+  --command=python --args=-m,jobs.weekly_event_calendar_sync \
+  --set-secrets=DART_API_KEY=dart-api-key:latest,EDGAR_USER_AGENT=edgar-ua:latest
+gcloud scheduler jobs create http weekly-events --schedule="0 13 * * 0" --time-zone="UTC"
+```
+
+### 잔여 TODO (별도 PR)
+
+| TODO | 우선순위 | 작업량 |
+|------|---------|--------|
+| EDGAR ticker→CIK 매핑 자동 빌드 (현재 cik_lookup 수동 주입) | 🟡 중 | 2h |
+| KRX 코스피200 옵션 IV/PCR 보조 (yfinance VKOSPI는 시장 전체) | 🟡 중 | 3h |
+| upcoming_ipo.json 월 1회 갱신 SOP 문서화 | 🟢 저 | 30m |
+| Claude API 비용 monitoring (event_inference 호출 추적) | 🟠 높 (운영 전) | 1h |
 
 ---
 

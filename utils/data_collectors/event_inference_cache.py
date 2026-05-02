@@ -38,17 +38,16 @@ SAMPLE_SIZE_LOW = 5  # 미만이면 "통계 미제시"
 SAMPLE_SIZE_OK = 10  # 이상이면 "통계 신뢰 가능"
 
 # LEGAL: 단정 표현 차단 정책 (Validator-style)
-FORBIDDEN_TERMS_KO = (
-    "추천합니다",
-    "추천드립니다",
-    "사세요",
-    "매수 신호",
-    "매도 신호",
-    "매수하세요",
-    "매도하세요",
-    "목표가",
-    "손절가",
-    "매수가",
+# 정규식 패턴 — 공백/조사 변형, "신호/시그널" 동의어 포함.
+FORBIDDEN_PATTERNS_KO: tuple[tuple[str, str], ...] = (
+    (r"추천(합|드립|해드립)?[니다드림요]*", "추천 표현"),
+    (r"매수\s*(신호|시그널|시점|타이밍|기회)", "매수 신호류"),
+    (r"매도\s*(신호|시그널|시점|타이밍)", "매도 신호류"),
+    (r"(사|매수)세요", "매수 권유"),
+    (r"매도하세요", "매도 권유"),
+    (r"목표가", "목표가"),
+    (r"손절가", "손절가"),
+    (r"매수가\b", "매수가"),
 )
 
 
@@ -163,19 +162,44 @@ def _strip_to_json(text: str) -> str:
 
 
 def _scrub_forbidden(text: str) -> tuple[str, list[str]]:
-    """LLM 응답에서 단정 표현 발견 시 마스킹 + 발견 목록 반환."""
+    """LLM 응답에서 단정 표현 발견 시 마스킹 + 발견 라벨 목록 반환.
+
+    정규식 매칭으로 '매수신호'(공백 X)/'매수 시그널' 등 변형까지 차단.
+    """
     found: list[str] = []
     out = text
-    for term in FORBIDDEN_TERMS_KO:
-        if term in out:
-            found.append(term)
-            out = out.replace(term, "[중립표현 필요]")
+    for pattern, label in FORBIDDEN_PATTERNS_KO:
+        compiled = re.compile(pattern)
+        if compiled.search(out):
+            found.append(label)
+            out = compiled.sub("[중립표현 필요]", out)
     return out, found
+
+
+def _safe_int_sample_size(v: Any) -> int:
+    """sample_size를 정수로 안전 변환. LLM이 '11개', '약 8' 등 문자열로 줄 수 있음."""
+    if v is None:
+        return 0
+    if isinstance(v, bool):  # bool은 int 서브클래스 — 명시 차단
+        return 0
+    if isinstance(v, (int, float)):
+        try:
+            return max(0, int(v))
+        except (ValueError, OverflowError):
+            return 0
+    if isinstance(v, str):
+        m = re.search(r"\d+", v)
+        if m:
+            try:
+                return int(m.group())
+            except ValueError:
+                return 0
+    return 0
 
 
 def _attach_safety(parsed: dict[str, Any]) -> dict[str, Any]:
     """LEGAL/Fabrication 안전망 자동 첨부."""
-    sample_size = int(parsed.get("sample_size") or 0)
+    sample_size = _safe_int_sample_size(parsed.get("sample_size"))
     parsed.setdefault("comparable_events", [])
     parsed["sample_size"] = sample_size
     parsed["sample_reliability"] = _classify_sample_reliability(sample_size)
@@ -304,7 +328,10 @@ async def get_similar_events_cached(
     return parsed
 
 
-# 동기 호환 래퍼 (Job/CLI 환경에서 비동기 컨텍스트 없을 때)
+# 동기 호환 래퍼 — Job/CLI 한정.
+# ⚠️ 이미 실행 중인 이벤트 루프 안(예: FastAPI 핸들러)에서 호출하면
+#    asyncio.run()이 RuntimeError. async 컨텍스트에서는 반드시
+#    get_similar_events_cached(...)를 직접 await 해야 함.
 def get_similar_events_sync(
     event_type: str,
     event_target: str,

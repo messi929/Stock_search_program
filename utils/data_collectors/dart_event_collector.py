@@ -285,6 +285,7 @@ class DartEventCollector:
         for chunk_start in range(0, len(records), FIRESTORE_BATCH_LIMIT):
             chunk = records[chunk_start : chunk_start + FIRESTORE_BATCH_LIMIT]
             batch = self.db.batch()
+            valid_count = 0
             for rec in chunk:
                 stock_code = rec.get("stock_code")
                 rcept_no = rec.get("rcept_no")
@@ -296,9 +297,19 @@ class DartEventCollector:
                 doc["collected_at"] = now_iso
                 doc["data_source"] = "dart_opendart_v1"
                 batch.set(col_ref.document(doc_id), doc, merge=True)
-            batch.commit()
-            written += len(chunk)
-            self.stats.docs_written += len(chunk)
+                valid_count += 1
+            try:
+                batch.commit()
+            except Exception as e:
+                # chunk 단위 격리 — 한 chunk 실패가 전체 batch를 폭파시키지 않게.
+                logger.warning(
+                    f"corporate_events batch commit 실패 "
+                    f"(chunk_start={chunk_start}): "
+                    f"{type(e).__name__}: {str(e)[:160]}"
+                )
+                continue
+            written += valid_count
+            self.stats.docs_written += valid_count
 
         return written
 

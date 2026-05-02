@@ -80,12 +80,22 @@ def test_strip_json_no_braces_returns_empty():
 
 
 @pytest.mark.parametrize(
-    "term",
-    ["추천합니다", "사세요", "매수 신호", "매도 신호", "목표가", "손절가"],
+    "term,expected_label",
+    [
+        ("추천합니다", "추천 표현"),
+        ("사세요", "매수 권유"),
+        ("매수 신호", "매수 신호류"),
+        ("매수신호", "매수 신호류"),  # 공백 없는 변형도 차단
+        ("매수 시그널", "매수 신호류"),  # 동의어 차단
+        ("매도 신호", "매도 신호류"),
+        ("매도 시그널", "매도 신호류"),
+        ("목표가", "목표가"),
+        ("손절가", "손절가"),
+    ],
 )
-def test_scrub_forbidden_detects_terms(term):
+def test_scrub_forbidden_detects_terms(term, expected_label):
     out, found = _scrub_forbidden(f"이 종목은 {term}.")
-    assert term in found
+    assert expected_label in found
     assert term not in out
     assert "[중립표현 필요]" in out
 
@@ -151,6 +161,26 @@ def test_post_process_handles_invalid_json():
     assert out["sample_size"] == 0
 
 
+def test_post_process_safe_int_sample_size_from_string():
+    """LLM이 sample_size를 '11개', '약 8' 등 문자열로 줘도 정수로 추출."""
+    raw = json.dumps(
+        {"comparable_events": [], "sample_size": "11개"},
+        ensure_ascii=False,
+    )
+    out = _post_process(raw)
+    assert out["sample_size"] == 11
+    assert "신뢰" in out["sample_reliability"]
+
+
+def test_post_process_safe_int_sample_size_invalid_falls_to_zero():
+    raw = json.dumps(
+        {"comparable_events": [], "sample_size": True}, ensure_ascii=False
+    )
+    out = _post_process(raw)
+    # bool은 0으로
+    assert out["sample_size"] == 0
+
+
 def test_post_process_handles_empty_text():
     """braces 자체가 없는 경우 → 빈 dict로 시작, 안전망 첨부."""
     out = _post_process("not json here")
@@ -173,7 +203,7 @@ def test_post_process_scrubs_forbidden_in_response():
     )
     out = _post_process(raw)
     assert "forbidden_terms_scrubbed" in out
-    assert "매수 신호" in out["forbidden_terms_scrubbed"]
+    assert "매수 신호류" in out["forbidden_terms_scrubbed"]
 
 
 # ──────────────────────────────────────────────

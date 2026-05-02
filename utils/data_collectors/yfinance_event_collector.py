@@ -81,6 +81,12 @@ def _earnings_to_records(
     if df is None or len(df) == 0:
         return []
 
+    # 최신순으로 정렬 후 limit (index가 정렬돼 있지 않을 가능성 대비).
+    try:
+        df = df.sort_index(ascending=False)
+    except Exception:
+        pass
+
     out: list[dict[str, Any]] = []
     # index = 발표일자 Timestamp
     for ts, row in df.iloc[:limit].iterrows():
@@ -121,6 +127,11 @@ def _dividends_to_records(
 ) -> list[dict[str, Any]]:
     if series is None or len(series) == 0:
         return []
+    # 정렬 후 tail (최근 limit건) — ts ascending 정렬 보장.
+    try:
+        series = series.sort_index()
+    except Exception:
+        pass
     s = series.tail(limit)
     out: list[dict[str, Any]] = []
     for ts, amount in s.items():
