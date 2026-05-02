@@ -18,6 +18,7 @@ try:
 except Exception:
     pass
 
+import pytest
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -28,6 +29,9 @@ from agents.graph import (
     run_analysis,
 )
 from agents.strategist import UserProfile
+
+# 실 Claude 4 에이전트 호출 — 비용 큼. `pytest --run-integration` 추가 시에만.
+pytestmark = pytest.mark.integration
 
 
 async def test_full_pipeline() -> None:

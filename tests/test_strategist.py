@@ -24,6 +24,7 @@ try:
 except Exception:
     pass
 
+import pytest
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -37,6 +38,9 @@ from agents.strategist import (
     UserProfile,
 )
 from agents.validator import ValidatorAgent, ValidatorInput, ValidatorResult
+
+# 실 Claude Opus + Sonnet + Haiku 호출 — 비용 큼. `pytest --run-integration` 추가 시에만.
+pytestmark = pytest.mark.integration
 
 
 async def _build_pipeline_inputs(ticker: str = "207940") -> tuple[ResearchResult, AnalystResult, ValidatorResult]:

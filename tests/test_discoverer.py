@@ -23,9 +23,13 @@ try:
 except Exception:
     pass
 
+import pytest
 from dotenv import load_dotenv
 
 load_dotenv()
+
+# 실 Claude Sonnet 호출 — 비용 발생. `pytest --run-integration` 추가 시에만.
+pytestmark = pytest.mark.integration
 
 from agents.discoverer import (
     DiscoverFilters,

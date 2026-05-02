@@ -10,11 +10,15 @@ from __future__ import annotations
 
 import asyncio
 
+import pytest
 from dotenv import load_dotenv
 
 load_dotenv()
 
 from agents.research import ResearchAgent, ResearchInput, ResearchResult
+
+# 실 Claude Haiku 호출 — 비용 발생. `pytest --run-integration` 추가 시에만 실행.
+pytestmark = pytest.mark.integration
 
 
 async def test_smoke_no_ticker() -> None:

@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import asyncio
 
+import pytest
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -19,6 +20,9 @@ from agents.analyst import (
     AnalystInput,
     AnalystResult,
 )
+
+# 실 Claude Sonnet 호출 — 비용 발생. `pytest --run-integration` 추가 시에만 실행.
+pytestmark = pytest.mark.integration
 
 
 VALID_TIERS = {"상위", "준상위", "중간", "관찰"}
