@@ -66,6 +66,13 @@ FRED_SERIES: dict[str, dict[str, str]] = {
         "description": "10Y-2Y 장단기 스프레드 (%) — 음수면 역전",
     },
     # 경기 (business_cycle)
+    "gdp_yoy_us": {
+        # cycle_detector.detect_business_cycle_stage 입력용 (분기별 GDP 전년동기대비)
+        "series_id": "A191RL1Q225SBEA",
+        "category": "business_cycle",
+        "frequency": "Q",
+        "description": "미국 실질 GDP 전년동기대비 (분기, %)",
+    },
     "industrial_production": {
         "series_id": "INDPRO",
         "category": "business_cycle",

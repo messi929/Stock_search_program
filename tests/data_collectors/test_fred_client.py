@@ -24,6 +24,13 @@ def test_fred_series_has_minimum_12_entries():
     assert len(FRED_SERIES) >= 12
 
 
+def test_fred_series_includes_gdp_for_cycle_detector():
+    """gdp_yoy_us는 monthly_regime_calc.CYCLE_INPUT_FIELDS US 매핑에 사용됨."""
+    assert "gdp_yoy_us" in FRED_SERIES
+    assert FRED_SERIES["gdp_yoy_us"]["series_id"] == "A191RL1Q225SBEA"
+    assert FRED_SERIES["gdp_yoy_us"]["frequency"] == "Q"
+
+
 def test_fred_series_required_categories_present():
     """4 카테고리 모두 최소 1개 이상."""
     cats = {meta["category"] for meta in FRED_SERIES.values()}

@@ -21,7 +21,73 @@
 8개 reviewer subagent 병렬 검토 → HIGH 10/MEDIUM 17/LOW 9 발견. Phase 1 13건 즉시 적용 (보안/LEGAL/점수 정확성).
 PROGRESS_V2.md에 검증 워크플로우 정책 명문화 (모듈 작성 직후 reviewer 호출 의무).
 
-### Day 4 — 6대 국면 매핑 + 매크로 캘린더 ✅ (commit pending)
+### Day 5 — 일일/월별 Job + Week B 종료 ✅ (commit pending)
+
+| 산출물 | 비고 |
+|--------|------|
+| `jobs/daily_macro_collect.py` | FRED 13 + ECOS 6 verified = 19 시리즈 일일 수집 + 변동 감지 |
+| `jobs/monthly_regime_calc.py` | 사이클 + 국면 재계산 + 국면 전환 감지 + Firestore macro_regime_history |
+| `tests/data_collectors/test_macro_jobs.py` | 단위 + 통합 테스트 25건 |
+| `fred_client.py` | gdp_yoy_us 추가 (A191RL1Q225SBEA) — cycle_detector 입력용 |
+
+**Reviewer 1회 호출 (Job 모듈)** — HIGH 1 / MEDIUM 2 / LOW 2 발견 → 모두 fix:
+- HIGH: CYCLE_INPUT_FIELDS 매핑 불일치 (US gdp_yoy → "gdp_yoy_us" FRED_SERIES에 미존재) → FRED_SERIES에 추가 + KR unemployment/gdp 미수집 명시 (DATA_QUALITY_KNOWN_GAPS)
+- MEDIUM: significant_change 임계 단위 불일치 → indicator_key별 rule (절대값/percent/percent_pp 분리)
+- MEDIUM: GDP 분기 데이터 14일 윈도우 부족 → freq별 동적 (분기 ±45일/95일)
+- LOW: 변동 감지 시 exit 1 → exit 0 + Cloud Logging severity NOTICE 분리
+- LOW: 같은 일자 재실행 시 transition 손실 → exclude_date 파라미터로 자기 자신 제외
+
+**LEGAL sweep**: grep 권유성 단어 0건 (모든 매칭이 안전한 컨텍스트 — pykrx 컬럼명 / LEGAL 경고 docstring / 통계 용어).
+
+**전체 회귀**: 372 PASS (Week A 168 + Week B 204).
+
+---
+
+## ✅ Week B 종료 — 매크로 데이터 인프라 완성
+
+**5일 누적**:
+- Commit 6건 (Day 1~5 + Phase 1 fix)
+- 코드 ~5,800줄 추가
+- 테스트 204 신규 PASS
+- Reviewer 5회 호출 (Day 1 일괄 + Day 2~5 모듈별)
+
+**산출 모듈**:
+1. `fred_client.py` — FRED 13 시리즈 (금리/경기/인플레/통화/원자재/GDP)
+2. `ecos_client.py` — ECOS 8 통계 (6 verified, 2 갱신 TODO)
+3. `cycle_detector.py` — 4 사이클 판정 (금리/경기/인플레/통화)
+4. `regime_detector.py` — 6 국면 매핑 (Goldilocks/Reflation/Stagflation/Risk-Off/Recovery/Late Cycle + Transition)
+5. `macro_calendar.json` — 60 매크로 이벤트 (FOMC/BOK/CPI/GDP/고용)
+6. `daily_macro_collect.py` — 일일 수집 Job + 변동 감지
+7. `monthly_regime_calc.py` — 월별 사이클+국면 재계산 + 전환 감지
+
+**Cloud Run Job 등록 가이드 (배포 시)**:
+```bash
+# Daily (06:00 KST = 21:00 UTC 전날)
+gcloud run jobs create axis-daily-macro-collect \
+  --image=<axis-staging image> --command=python --args=-m,jobs.daily_macro_collect \
+  --set-secrets=FRED_API_KEY=fred-api-key:latest,ECOS_API_KEY=ecos-api-key:latest \
+  --region=asia-northeast3
+gcloud scheduler jobs create http daily-macro \
+  --schedule="0 21 * * *" --time-zone="UTC" --uri=<job-trigger-url>
+
+# Monthly (매월 1일 06:00 KST)
+gcloud run jobs create axis-monthly-regime --image=<...> --args=-m,jobs.monthly_regime_calc
+gcloud scheduler jobs create http monthly-regime --schedule="0 21 1 * *" --time-zone="UTC"
+```
+
+### 잔여 TODO (별도 PR)
+
+| TODO | 우선순위 | 작업량 |
+|------|---------|--------|
+| ECOS gdp_yoy + cpi_core 코드 갱신 (한국은행 개편) | 🟡 중 | 1-2h |
+| KR unemployment_rate ECOS_CODES 추가 | 🟡 중 | 1h |
+| Cloud Run Secret Manager 등록 (FRED/ECOS/DART 키) | 🔴 높 (배포 전) | 30m |
+| Firestore composite index 등록 (macro_indicators ticker+date) | 🔴 높 (운영 전) | 15m |
+| KRX 외국인 5년 풀 백필 (Week A 잔여) | 🔴 높 | ~3h Cloud Run Job |
+
+---
+
+### Day 4 — 6대 국면 매핑 + 매크로 캘린더 ✅ (commit `df2d2af`)
 
 | 산출물 | 비고 |
 |--------|------|
