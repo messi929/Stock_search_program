@@ -23,7 +23,7 @@ load_dotenv()
 
 
 def test_personas_route() -> None:
-    """GET /api/ai/personas — 페르소나 3종 반환 + 비로그인은 free tier."""
+    """GET /api/ai/personas — 6 페르소나 반환 (3 strategist + 3 데이터)."""
     from fastapi.testclient import TestClient
     from screener.main import app
 
@@ -33,25 +33,24 @@ def test_personas_route() -> None:
 
     data = res.json()
     assert "personas" in data, f"응답에 personas 누락: {data}"
-    assert len(data["personas"]) == 3, f"페르소나 3개여야 함: {len(data['personas'])}"
+    assert len(data["personas"]) == 6, f"페르소나 6개여야 함: {len(data['personas'])}"
 
     ids = [p["id"] for p in data["personas"]]
-    assert set(ids) == {"blackrock", "ark", "graham"}
+    assert set(ids) == {"blackrock", "ark", "graham", "event", "macro", "korean"}
 
+    # Free 접근: blackrock만
     blackrock = next(p for p in data["personas"] if p["id"] == "blackrock")
     assert blackrock["available_to_free"] is True
 
-    ark = next(p for p in data["personas"] if p["id"] == "ark")
-    assert ark["available_to_free"] is False
+    # Pro 전용: 나머지 5개
+    for pid in ("ark", "graham", "event", "macro", "korean"):
+        p = next(x for x in data["personas"] if x["id"] == pid)
+        assert p["available_to_free"] is False, f"{pid} 는 Pro 전용이어야 함"
 
-    graham = next(p for p in data["personas"] if p["id"] == "graham")
-    assert graham["available_to_free"] is False
-
-    # 비로그인 → AUTH_ENABLED=false 환경에서는 pro 또는 free 둘 다 가능 (middleware 기본값)
     assert data["user_plan"] in ("free", "pro")
     assert data["user_default_persona"] == "blackrock"
 
-    print(f"[personas_route] 3 페르소나 반환 OK")
+    print(f"[personas_route] 6 페르소나 반환 OK")
     for p in data["personas"]:
         free_mark = "🆓" if p["available_to_free"] else "💎"
         print(f"  {free_mark} {p['icon']} {p['name']} ({p['id']})")

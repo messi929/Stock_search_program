@@ -147,18 +147,186 @@ export type StrategistResult = {
   timestamp: string;
 };
 
+// ─── 데이터 페르소나 (event/macro/korean) ──────
+//
+// 백엔드 agents/event_analyst.py / macro_pm.py / korean_specialist.py
+// Pydantic 모델과 1:1 일치. 신규 필드 추가 시 백엔드도 동기 갱신 필요.
+
+// Event Analyst
+export type CertaintyBreakdown = {
+  source: number;
+  source_rationale?: string;
+  timing: number;
+  timing_rationale?: string;
+  probability: number;
+  probability_rationale?: string;
+  impact: number;
+  impact_rationale?: string;
+  final_score: number;
+  mode: "Full Analysis" | "Cautious" | "Probabilistic Only" | "Refused" | string;
+};
+
+export type EventSummary = {
+  event_type: string;
+  event_target: string;
+  d_day?: string;
+  certainty_breakdown: CertaintyBreakdown;
+  badge: string;
+};
+
+export type ImpactMapping = {
+  direct_beneficiary?: { ticker?: string; rationale?: string };
+  secondary_beneficiaries?: Array<{ ticker?: string; rationale?: string }>;
+  tertiary_beneficiaries?: Array<{ ticker?: string; rationale?: string }>;
+};
+
+export type SignalBlock = {
+  available: boolean;
+  interpretation?: string;
+  key_observations?: string[];
+};
+
+export type HistoricalStatistics = {
+  comparable_events_count: number;
+  sample_reliability: string;
+  comparable_events: Array<Record<string, unknown>>;
+  fabrication_warning: string;
+};
+
+export type ReferenceZones = {
+  current_position_vs_history?: string;
+  historical_volatility_lower_1sigma?: string;
+  historical_volatility_upper_1sigma?: string;
+  note?: string;
+};
+
+export type ScenarioCase = {
+  trigger: string;
+  historical_pattern: string;
+  probability: string;
+};
+
+export type ScenarioAnalysis = {
+  bullish_case: ScenarioCase;
+  base_case: ScenarioCase;
+  bearish_case: ScenarioCase;
+};
+
+export type EventAnalystResult = {
+  ticker: string;
+  market: "KR" | "US" | string;
+  event_summary: EventSummary;
+  impact_mapping: ImpactMapping;
+  volume_supply_analysis: SignalBlock;
+  options_signals: SignalBlock;
+  credit_short_signals: SignalBlock;
+  historical_statistics: HistoricalStatistics;
+  reference_observation_zones: ReferenceZones;
+  scenario_analysis: ScenarioAnalysis;
+  key_risks: string[];
+  what_to_watch: string[];
+  summary_neutral: string;
+  persona: "event";
+  timestamp: string;
+};
+
+// Macro PM
+export type CycleStage = {
+  stage: string;
+  key_indicators?: Record<string, unknown>;
+  rationale?: string;
+};
+
+export type CycleAnalysis = {
+  interest_rate: CycleStage;
+  business_cycle: CycleStage;
+  currency_cycle: CycleStage;
+  inflation_cycle: CycleStage;
+};
+
+export type MacroRegime = {
+  current_regime: string;
+  transition_to: string | null;
+  regime_confidence: number;
+};
+
+export type WeightingUsed = {
+  us_weight: number;
+  kr_weight: number;
+  rationale: string;
+};
+
+export type StockMacroAlignment = {
+  ticker?: string;
+  sector?: string;
+  macro_alignment: string;
+  alignment_score: number;
+  interpretation?: string;
+};
+
+export type TransitionSignal = {
+  signal: string;
+  current?: string;
+  trigger_level?: string;
+  implication?: string;
+};
+
+export type MacroPmResult = {
+  macro_regime: MacroRegime;
+  cycle_analysis: CycleAnalysis;
+  regime_implications: Record<string, unknown>;
+  transition_signals_to_monitor: TransitionSignal[];
+  stock_specific_analysis?: StockMacroAlignment | null;
+  weighting_used: WeightingUsed;
+  summary_neutral: string;
+  persona: "macro";
+  timestamp: string;
+};
+
+// Korean Specialist
+export type KoreaSpecificScore = {
+  foreign_supply: number;
+  governance: number;
+  valueup_alignment: number;
+  theme_position: number;
+  policy_friendliness: number;
+  weighted_total: number;
+  interpretation?: string;
+};
+
+export type KoreanSpecialistResult = {
+  korea_specific_analysis: Record<string, unknown>;
+  foreign_supply_analysis: Record<string, unknown>;
+  chaebol_structure_analysis: Record<string, unknown>;
+  value_up_analysis: Record<string, unknown>;
+  theme_cycle_analysis: Record<string, unknown>;
+  policy_risk_analysis: Record<string, unknown>;
+  korea_specific_score: KoreaSpecificScore;
+  what_to_watch_korea_specific: string[];
+  summary_neutral: string;
+  persona: "korean";
+  timestamp: string;
+};
+
 // ─── /api/ai/analyze 응답 (non-stream) ──────
+//
+// 페르소나 그룹별 nullable:
+//   - strategist 흐름(blackrock/ark/graham): research/analyst/validator/strategist 채워짐, event/macro/korean=null
+//   - 데이터 페르소나(event/macro/korean): 해당 1개만 채워짐, 나머지=null
 export type AnalyzeResponse = {
   ticker: string;
   persona: string;
-  research: ResearchResult;
-  analyst: AnalystResult;
-  validator: ValidatorResult;
-  strategist: StrategistResult;
+  research: ResearchResult | null;
+  analyst: AnalystResult | null;
+  validator: ValidatorResult | null;
+  strategist: StrategistResult | null;
+  event: EventAnalystResult | null;
+  macro: MacroPmResult | null;
+  korean: KoreanSpecialistResult | null;
   metadata: {
     total_elapsed: number;
     retry_count: number;
-    validation_status: "PASS" | "WARN" | "FAIL";
+    validation_status: "PASS" | "WARN" | "FAIL" | null;
   };
   disclaimer: string;
 };

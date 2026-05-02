@@ -40,11 +40,24 @@ PLAN_LIMITS: dict[str, dict[str, int]] = {
 # ──────────────────────────────────────────────
 
 class AnalyzeRequest(BaseModel):
-    ticker: str = Field(..., description="6자리 종목 코드")
+    ticker: str = Field(..., description="6자리 종목 코드 (KR) 또는 알파벳 (US)")
     query: str = Field("", description="자연어 쿼리 (옵션)")
-    persona: str = Field("blackrock", description="blackrock | ark | graham")
+    persona: str = Field(
+        "blackrock",
+        description="blackrock | ark | graham (strategist 흐름) | event | macro | korean (데이터 페르소나)",
+    )
     stream: bool = Field(True, description="SSE 스트리밍 여부")
     user_profile: Optional[dict] = Field(None, description="UserProfile dict (옵션)")
+    # Event Analyst 전용 옵션 (persona='event' 시)
+    event_type: Optional[str] = Field(
+        None, description="event 페르소나 전용: earnings/ipo_secondary/buyback/fomc 등"
+    )
+    event_target: Optional[str] = Field(
+        None, description="event 페르소나 전용: 'SpaceX IPO 2026 Q4' 등 자유 텍스트"
+    )
+    primary_ticker: Optional[str] = Field(
+        None, description="event 페르소나 전용: 1차 수혜 (분석 대상은 2차 수혜)"
+    )
 
 
 class ValidateRequest(BaseModel):
@@ -67,6 +80,7 @@ class Persona(BaseModel):
 # ──────────────────────────────────────────────
 
 _PERSONAS: list[Persona] = [
+    # Strategist 흐름 (research + analyst + validator + strategist)
     Persona(
         id="blackrock",
         name="BlackRock 애널리스트",
@@ -88,7 +102,34 @@ _PERSONAS: list[Persona] = [
         icon="📚",
         available_to_free=False,
     ),
+    # 데이터 페르소나 (Week C/D 신규 — 단일 노드)
+    Persona(
+        id="event",
+        name="Event Analyst",
+        description="실적/M&A/IPO 통계 분석 (확실성 점수 + 시나리오)",
+        icon="⚡",
+        available_to_free=False,
+    ),
+    Persona(
+        id="macro",
+        name="Macro PM",
+        description="4 사이클 + 6 매크로 국면 + 동적 한국 가중치",
+        icon="🌐",
+        available_to_free=False,
+    ),
+    Persona(
+        id="korean",
+        name="Korean Specialist",
+        description="외국인/재벌/밸류업/거버넌스 한국 시장 특수성",
+        icon="🇰🇷",
+        available_to_free=False,
+    ),
 ]
+
+
+# 페르소나 그룹 분류 (graph 라우팅과 일치 — agents/graph.py의 *_PERSONAS와 동일)
+_STRATEGIST_PERSONAS = {"blackrock", "ark", "graham"}
+_DATA_DRIVEN_PERSONAS = {"event", "macro", "korean"}
 
 
 @router.get("/personas")
@@ -152,6 +193,9 @@ async def analyze(req: AnalyzeRequest, request: Request):
                 persona=req.persona,
                 user_profile=user_profile,
                 user_uid=uid,
+                event_type=req.event_type,
+                event_target=req.event_target,
+                primary_ticker=req.primary_ticker,
             ),
             media_type="text/event-stream",
             headers={
@@ -170,6 +214,9 @@ async def analyze(req: AnalyzeRequest, request: Request):
         persona=req.persona,
         user_profile=user_profile,
         user_uid=uid,
+        event_type=req.event_type,
+        event_target=req.event_target,
+        primary_ticker=req.primary_ticker,
     )
     elapsed = round(time.time() - t0, 2)
 
@@ -177,13 +224,21 @@ async def analyze(req: AnalyzeRequest, request: Request):
 
 
 def _build_full_response(final: dict, elapsed: float) -> dict:
-    """non-streaming 모드 응답 dict 구성. LEGAL: 모든 문자열 필터 통과."""
+    """non-streaming 모드 응답 dict 구성. LEGAL: 모든 문자열 필터 통과.
+
+    페르소나 그룹별 직렬화:
+      - strategist 흐름: research/analyst/validator/strategist 4개
+      - 데이터 페르소나: event/macro/korean 중 1개 (others null)
+    """
     from agents.base import DISCLAIMER
 
     research = final.get("research_output")
     analyst = final.get("analyst_output")
     validator = final.get("validator_output")
     strategist = final.get("strategist_output")
+    event_out = final.get("event_output")
+    macro_out = final.get("macro_output")
+    korean_out = final.get("korean_output")
 
     payload = {
         "ticker": final.get("ticker"),
@@ -192,6 +247,9 @@ def _build_full_response(final: dict, elapsed: float) -> dict:
         "analyst": analyst.model_dump() if analyst else None,
         "validator": validator.model_dump() if validator else None,
         "strategist": strategist.model_dump() if strategist else None,
+        "event": event_out.model_dump() if event_out else None,
+        "macro": macro_out.model_dump() if macro_out else None,
+        "korean": korean_out.model_dump() if korean_out else None,
         "metadata": {
             "total_elapsed": elapsed,
             "retry_count": final.get("retry_count", 0),
@@ -251,10 +309,14 @@ async def _stream_analysis(
     persona: str,
     user_profile,
     user_uid: str,
+    event_type: Optional[str] = None,
+    event_target: Optional[str] = None,
+    primary_ticker: Optional[str] = None,
 ) -> AsyncGenerator[str, None]:
     """LangGraph astream을 SSE로 변환.
 
-    각 노드 완료 시 `{node}_complete` 이벤트 emit.
+    Strategist 흐름: 4 노드 완료 시 `{node}_complete` 이벤트.
+    데이터 페르소나(event/macro/korean): 단일 노드라 시작/완료만 emit.
     """
     from agents.graph import create_analysis_graph
 
@@ -268,14 +330,21 @@ async def _stream_analysis(
         "user_uid": user_uid,
         "user_profile": user_profile,
         "retry_count": 0,
+        "event_type": event_type,
+        "event_target": event_target,
+        "primary_ticker": primary_ticker,
     }
+
+    is_data_driven = persona in _DATA_DRIVEN_PERSONAS
+    estimated_sec = 20 if is_data_driven else 12
 
     yield _sse(
         "start",
         {
             "ticker": ticker,
             "persona": persona,
-            "estimated_seconds": 12,
+            "persona_group": "data_driven" if is_data_driven else "strategist",
+            "estimated_seconds": estimated_sec,
             "started_at": datetime.now(timezone.utc).isoformat(),
         },
     )
@@ -289,7 +358,7 @@ async def _stream_analysis(
                     continue
                 final_state.update(state_diff)
 
-                # 에이전트 결과별 이벤트
+                # ── Strategist 흐름 4 에이전트 결과 ──
                 if "research_output" in state_diff and state_diff["research_output"]:
                     yield _sse(
                         "research_complete",
@@ -324,6 +393,35 @@ async def _stream_analysis(
                         {
                             "agent": "strategist",
                             "result": state_diff["strategist_output"].model_dump(),
+                            "elapsed": round(time.time() - t0, 2),
+                        },
+                    )
+
+                # ── 데이터 페르소나 단일 노드 결과 ──
+                if "event_output" in state_diff and state_diff["event_output"]:
+                    yield _sse(
+                        "event_complete",
+                        {
+                            "agent": "event_analyst",
+                            "result": state_diff["event_output"].model_dump(),
+                            "elapsed": round(time.time() - t0, 2),
+                        },
+                    )
+                if "macro_output" in state_diff and state_diff["macro_output"]:
+                    yield _sse(
+                        "macro_complete",
+                        {
+                            "agent": "macro_pm",
+                            "result": state_diff["macro_output"].model_dump(),
+                            "elapsed": round(time.time() - t0, 2),
+                        },
+                    )
+                if "korean_output" in state_diff and state_diff["korean_output"]:
+                    yield _sse(
+                        "korean_complete",
+                        {
+                            "agent": "korean_specialist",
+                            "result": state_diff["korean_output"].model_dump(),
                             "elapsed": round(time.time() - t0, 2),
                         },
                     )
@@ -646,7 +744,7 @@ class AxisProfileBody(BaseModel):
     volatility_tolerance: Optional[str] = None  # "10" | "20" | "30"
     interested_sectors: list[str] = Field(default_factory=list)
     investment_principles: list[str] = Field(default_factory=list)
-    preferred_persona: Optional[str] = None  # "blackrock" | "ark" | "graham"
+    preferred_persona: Optional[str] = None  # blackrock|ark|graham|event|macro|korean
 
 
 @router.get("/profile")
@@ -685,7 +783,7 @@ async def save_axis_profile(payload: AxisProfileBody, request: Request):
     valid_experience = {"beginner", "1-5y", "5y+", None}
     valid_period = {"1m", "6m", "1-2y", "3y+", None}
     valid_volatility = {"10", "20", "30", None}
-    valid_persona = {"blackrock", "ark", "graham", None}
+    valid_persona = {"blackrock", "ark", "graham", "event", "macro", "korean", None}
 
     if payload.investing_experience not in valid_experience:
         raise HTTPException(400, {"code": "INVALID_EXPERIENCE", "message": "investing_experience 값 오류"})
