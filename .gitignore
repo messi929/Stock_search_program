@@ -54,3 +54,8 @@ web/tsconfig.tsbuildinfo
 .playwright-mcp/
 web/.playwright-mcp/
 *.png
+
+# 로컬 API 키 메모 (사용자 개인 보관용 — 절대 commit 금지)
+API_KEYS.local.txt
+*.local.txt
+secrets/
