@@ -20,8 +20,9 @@ import { StrategistCard } from "@/components/analyze/StrategistCard";
 import { ValidateButton } from "@/components/analyze/ValidateButton";
 import { ValidatorCard } from "@/components/analyze/ValidatorCard";
 import { Disclaimer } from "@/components/legal/Disclaimer";
+import { PersonaGuideModal } from "@/components/persona/PersonaGuideModal";
+import { PersonaSwitch } from "@/components/persona/PersonaSwitch";
 import { Card, CardContent } from "@/components/ui/card";
-import { usePersonas } from "@/hooks/usePersonas";
 import { useStockSearch } from "@/hooks/useStockSearch";
 import { useUserProfile } from "@/hooks/useUserProfile";
 import { apiStream, APIError } from "@/lib/api";
@@ -169,7 +170,10 @@ export function AnalyzeView({ ticker }: { ticker: string }) {
               </p>
             ) : null}
           </div>
-          <PersonaTabs current={persona} />
+          <div className="flex items-center gap-2">
+            <PersonaSwitch current={persona} />
+            <PersonaGuideModal />
+          </div>
         </div>
 
         {/* Action buttons — 모바일에서 flex-wrap */}
@@ -217,54 +221,3 @@ export function AnalyzeView({ ticker }: { ticker: string }) {
   );
 }
 
-function PersonaTabs({ current }: { current: PersonaId }) {
-  const setPersona = usePersonaStore((s) => s.setPersona);
-  const { data: personasData } = usePersonas();
-
-  const isFree = (personasData?.user_plan ?? "free") === "free";
-  const availability = new Map(
-    (personasData?.personas ?? []).map((p) => [p.id, p.available_to_free]),
-  );
-
-  const items: Array<{ id: PersonaId; icon: string; name: string }> = [
-    { id: "blackrock", icon: "🏛", name: "블랙록" },
-    { id: "ark", icon: "🚀", name: "ARK" },
-    { id: "graham", icon: "📚", name: "그레이엄" },
-  ];
-
-  return (
-    <div className="flex gap-1 border rounded-md p-1 bg-muted/30">
-      {items.map((p) => {
-        const availableForFree = availability.get(p.id) ?? p.id === "blackrock";
-        const locked = isFree && !availableForFree;
-        return (
-          <button
-            key={p.id}
-            type="button"
-            onClick={() => {
-              if (locked) {
-                toast.info(`${p.name} 페르소나는 Pro 전용입니다.`, {
-                  description: "/pricing 에서 업그레이드 안내를 확인하세요.",
-                });
-                return;
-              }
-              setPersona(p.id);
-            }}
-            aria-pressed={current === p.id}
-            aria-disabled={locked}
-            title={locked ? "Pro 전용 페르소나" : undefined}
-            className={`px-3 py-1.5 text-sm rounded transition ${
-              current === p.id
-                ? "bg-background shadow-sm font-medium"
-                : "text-muted-foreground hover:text-foreground"
-            } ${locked ? "opacity-50 cursor-not-allowed" : ""}`}
-          >
-            <span className="mr-1">{p.icon}</span>
-            {p.name}
-            {locked && <span className="ml-1 text-[10px]">🔒</span>}
-          </button>
-        );
-      })}
-    </div>
-  );
-}

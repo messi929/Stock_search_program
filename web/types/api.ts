@@ -131,8 +131,10 @@ export type AlertCondition = {
   action: string;
 };
 
+import type { PersonaId } from "./persona";
+
 export type StrategistResult = {
-  persona_used: "blackrock" | "ark" | "graham" | string;
+  persona_used: PersonaId | string;
   persona_perspective: string;
   summary: string;
   entry_points: EntryPoints | null;
@@ -163,7 +165,7 @@ export type AnalyzeResponse = {
 
 // ─── /api/ai/personas 응답 ─────────────────
 export type Persona = {
-  id: "blackrock" | "ark" | "graham";
+  id: PersonaId;
   name: string;
   description: string;
   icon: string;
