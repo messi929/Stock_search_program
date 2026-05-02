@@ -5,6 +5,59 @@
 
 ---
 
+## 📅 Week B — 매크로 데이터 인프라
+
+### Day 1 — FRED API ✅ (commit `40d4396`)
+
+| 산출물 | 비고 |
+|--------|------|
+| `utils/data_collectors/fred_client.py` | FREDClient + FRED_SERIES 12 매핑 (금리/경기/인플레/통화/원자재) |
+| 단위 테스트 35건 | 매핑/마스킹/페이지/예외 |
+
+실데이터 검증 (5 시리즈 × 1년, 7초): Fed 4.33→3.64% 인하 사이클, 10Y-2Y 스프레드 정상화 (0.30→0.52), CPI +3% 인플레.
+
+### Day 1.5 — Reviewer Phase 1 일괄 fix ✅ (commit `af3d5f1`)
+
+8개 reviewer subagent 병렬 검토 → HIGH 10/MEDIUM 17/LOW 9 발견. Phase 1 13건 즉시 적용 (보안/LEGAL/점수 정확성).
+PROGRESS_V2.md에 검증 워크플로우 정책 명문화 (모듈 작성 직후 reviewer 호출 의무).
+
+### Day 2 — ECOS API 🔄 (진행 중)
+
+| 산출물 | 비고 |
+|--------|------|
+| `utils/data_collectors/ecos_client.py` | ECOSClient + ECOS_CODES 8 매핑 (httpx 직접 + freq별 날짜 변환) |
+| 단위 테스트 56건 | 매핑/마스킹/페이지/Q 검증/에러 분기 |
+
+**Reviewer 1회 호출 (정책 적용)** — HIGH 2 / MEDIUM 2 / LOW 2 발견 → 즉시 fix.
+
+**실데이터 검증 결과 (8 통계)**:
+| 통계 | 코드 | verified | 비고 |
+|------|------|----------|------|
+| base_rate | 722Y001/0101000/M | ✅ | 3.5→3.0% (인하 사이클) |
+| treasury_3y | 817Y002/010200000/D | ✅ | 신규 코드 (721Y001 → 817Y002) |
+| treasury_10y | 817Y002/010210000/D | ✅ | 신규 코드 |
+| industrial_production | 901Y033/AB00/M | ✅ | I31AA → AB00 + 원계열(item_code2=1) |
+| cpi_total | 901Y009/0/M | ✅ | +1.5% |
+| usd_krw | 731Y001/0000001/D | ✅ | 1395 → 1470 |
+| gdp_yoy | 200Y002/10101/Q | ❌ | ERROR-101 — stat_code 한국은행 개편 |
+| cpi_core | 901Y009/QA/M | ❌ | INFO-200 — item_code 변경 |
+
+unverified 2건 (gdp_yoy/cpi_core)은 `verified=False` 마킹 + 갱신 TODO. Day 3 사이클 판정 모듈에서 우회 처리.
+
+---
+
+## 🚧 ECOS 코드 갱신 TODO (별도 PR)
+
+ECOS는 한국은행 통계 분류 개편으로 코드가 변경됨 (spec macro.md §2.4 경고).
+다음 두 항목은 한국은행 ECOS 사이트 또는 StatisticTableList API로 신규 코드 재조회 필요:
+
+1. **gdp_yoy (분기별 실질 GDP 성장률)**: 200Y002 무효 → 200Y011/200Y115 등 후보
+2. **cpi_core (근원물가)**: 901Y009/QA 무효 → 901Y009의 다른 item_code로 매핑
+
+작업량: 1~2시간 (ECOS 사이트 직접 조회 + 갱신).
+
+---
+
 ## 📅 Week A — 한국 시장 데이터 인프라
 
 ### Day 1 — 외국인/기관 수급 백필 ✅ (commit `47cc967`)
