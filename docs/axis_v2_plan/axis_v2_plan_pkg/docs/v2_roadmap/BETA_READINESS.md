@@ -113,13 +113,88 @@
 
 ---
 
-## 5. 베타 출시 후 Backlog
+## 5. 머지 후 운영 검증 절차 (단계별)
+
+mock 단위 테스트는 **인프라 동작**만 검증한다. 실 Claude API + 실 Firestore 데이터로
+**페르소나 차별성 / 분석 시간 / 비용**을 실측하는 단계가 별도로 필요.
+
+비용 부담을 줄이기 위해 **smoke → mini → full** 3 단계로 검증한다.
+
+### 5.1 Stage 1 — Smoke 1건 (~₩200, 1분)
+
+목적: ANTHROPIC_API_KEY + Firebase + 신규 페르소나 graph 라우팅이 staging에서
+실제로 동작하는지 1회 검증.
+
+```powershell
+# 신규 페르소나 1개만 (event 우선 — 가장 복잡한 케이스)
+py -c "import asyncio; from agents.graph import run_analysis; r = asyncio.run(run_analysis(ticker='AAPL', persona='event')); print(r['event_output'].summary_neutral[:200])"
+```
+
+**합격 기준**:
+- exit 0
+- summary_neutral 한국어 출력
+- 단정 표현 없음 (logger 경고 0건)
+
+⚠️ 차단 시: ANTHROPIC_API_KEY / Firebase 인증 / 패키지 import 문제 우선 해결.
+
+### 5.2 Stage 2 — Mini 6건 (~₩1,200, 5분)
+
+목적: 6 페르소나 × 1 종목 = 6건. 페르소나별 분기 + 응답 형식 + 비용 실측.
+
+```powershell
+# Stage 2 backlog: test_60_cases.py에 --persona-filter / --ticker-filter 옵션 추가 필요
+# 임시: 직접 호출
+py -c @"
+import asyncio
+from agents.graph import run_analysis
+
+async def main():
+    for persona in ('blackrock','ark','graham','event','macro','korean'):
+        ticker = '005930' if persona == 'korean' else 'AAPL' if persona in ('blackrock','ark','graham','event','macro') else '005930'
+        r = await run_analysis(ticker=ticker, persona=persona)
+        print(f'[{persona}] OK')
+
+asyncio.run(main())
+"@
+```
+
+**합격 기준**:
+- 6 페르소나 모두 exit 0
+- 페르소나별 응답 시간 < 60초
+- 비용 합계 ≈ ₩1,200 (cost_tracker 로그 확인)
+
+### 5.3 Stage 3 — Full 60건 (~₩12,000, 30~60분)
+
+목적: 회귀 테스트 매트릭스 전체. 페르소나 일관성 / 데이터 정확성 / LEGAL.
+
+**선결 조건**:
+- ✅ Stage 1, 2 통과
+- ✅ `axis-daily-macro` Cloud Run Job 1주일 누적 (macro 페르소나 정량 결과 비교용)
+- ✅ `axis-weekly-events` 1회 실행 (event 페르소나 DART/EDGAR 데이터 사용)
+
+```powershell
+py -m tests.regression.test_60_cases --real
+# 결과: tests/regression/results/last_run.json
+```
+
+**합격 기준**:
+- 60건 중 ok=True ≥ 57 (95% 통과)
+- LEGAL 위반 0건
+- 페르소나별 평균 시간 < 90초
+- 같은 ticker × 다른 페르소나에서 summary_neutral 텍스트가 분명히 다름 (수동 5건 샘플링)
+
+⚠️ 차단 시: 다음 순서로 분석:
+1. 실패 페르소나 1~2개에 집중 → 데이터 부재인지 LLM 응답 문제인지 분류
+2. 1 페르소나 1 ticker `--real` 재실행 (격리 디버깅)
+
+---
+
+## 6. 베타 출시 후 Backlog
 
 ### 우선순위 높음 (베타 1~2주 내)
 
-- 신규 페르소나 실 분석 60건 통합 테스트 (`tests/regression/test_60_cases.py --real`)
-- macro_indicators Firestore 일일 적재 Cloud Run Job 등록 (FRED/ECOS Secret Manager)
-- Cloud Run `axis-daily-options` + `axis-weekly-events` Job 배포
+- `test_60_cases.py`에 `--persona-filter` / `--ticker-filter` / `--smoke` 옵션 추가
+  (현재는 풀 60건만 실행 가능 — Stage 1/2 검증을 위해 필터 필요)
 
 ### 중간 우선순위
 

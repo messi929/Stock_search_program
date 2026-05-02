@@ -322,9 +322,18 @@ foreach ($s in @("fred-api-key", "ecos-api-key", "dart-api-key", "edgar-user-age
 
 ## 11. 다음 단계 (배포 후)
 
-1. ✅ daily-macro 1주일 누적 후 monthly-regime 실 실행 검증
-2. ✅ Frontend에서 `/api/ai/analyze` macro 페르소나 호출 시 정량 사이클 결과 노출 확인
-3. ⏳ ticker→CIK 자동 매핑 (현재 weekly-events에서 EDGAR cik_lookup 누락 시 yfinance만)
-4. ⏳ upcoming_ipo.json 월 1회 갱신 SOP 문서화
+### 즉시 (배포 직후)
+1. **검증 1건** — `gcloud run jobs execute axis-daily-macro --wait` 후 Firestore `macro_indicators` 컬렉션 확인
+2. **Frontend staging** — `/api/ai/analyze` macro 페르소나 호출 시 정량 사이클 결과 노출 확인
+
+### 1주일 누적 후
+3. **monthly-regime 실 검증** — `gcloud run jobs execute axis-monthly-regime --wait` (cycle_detector REQUIRED_INPUTS 적재 필요)
+4. **단계별 실 분석 검증** — `BETA_READINESS.md §5` 절차 따라 Stage 1 → 2 → 3 진행
+
+### 베타 1~2주 내 backlog
+5. ticker→CIK 자동 매핑 (현재 weekly-events에서 EDGAR cik_lookup 누락 시 yfinance만)
+6. `upcoming_ipo.json` 월 1회 갱신 SOP 문서화
+7. `tests/regression/test_60_cases.py`에 `--persona-filter` / `--ticker-filter` / `--smoke` 옵션 추가
+   (Stage 1/2 단계 검증을 위한 필터 — 현재는 풀 60건만 실행 가능)
 
 — 배포 가이드 끝 (2026-05-03)
