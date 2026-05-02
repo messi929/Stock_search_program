@@ -104,3 +104,58 @@ gcloud secrets add-iam-policy-binding dart-api-key \
 ---
 
 **최종 업데이트**: 2026-05-02 (Day 4 작업 시작 시점)
+
+---
+
+## 🔍 검증 워크플로우 정책 (잊지 말 것)
+
+CLAUDE_V2.md "Reviewer Subagent 호출 시점" 정책을 명문화. 매 모듈 작성 직후 적용.
+
+### 표준 검증 단계 (모든 신규 데이터/페르소나/에이전트 모듈에 적용)
+
+| 순서 | 단계 | 도구 | 의무성 |
+|------|------|------|--------|
+| 1 | **단위 테스트 작성** | pytest (mock 기반) | 🔴 필수 |
+| 2 | **테스트 실행 + 회귀 확인** | `py -m pytest tests/data_collectors/` | 🔴 필수 |
+| 3 | **실데이터 1회 검증** | 임시 스크립트 (외부 API 모듈만) | 🟠 강력 권장 |
+| 4 | **Reviewer subagent 호출** ⭐ | `Agent(subagent_type="general-purpose")` | 🔴 필수 (이전 누락) |
+| 5 | **발견 이슈 fix + 회귀 재실행** | 위 1~3 반복 | 🔴 필수 |
+| 6 | **`scripts/legal_check.py`** | LEGAL 자동 검출 | 🟡 페르소나 모듈만 (Week D부터) |
+| 7 | **commit** | git commit (Conventional commits) | 🔴 필수 |
+| 8 | **PROGRESS_V2 갱신** | 본 문서 Day 섹션 | 🔴 필수 |
+
+### Reviewer 검증 관점 (모듈 유형별)
+
+**모든 모듈 공통**:
+- LEGAL: 권유성 표현 ("매수/추천/사세요") 0건
+- 보안: API 키 하드코딩 X, 로그/예외 마스킹 O
+- 비용: 캐싱/rate limit 적절, 호출 폭증 방지
+- 에러 처리: 외부 의존성 (API/DB) 예외 graceful 처리
+- 데이터 정확성: 단위/날짜 형식 일관, NaN/None 안전
+
+**Korean Specialist 모듈 (Week A)**:
+- pykrx 시그니처 정확 (특히 `observation_start` 등 인자명)
+- 한국 시장 특수성 (휴장일, 정정 공시, 분기 갱신 데이터)
+- 재벌/지주사/밸류업 데이터 한계 명시 (`verified` / `data_completeness`)
+
+**Macro PM 모듈 (Week B)**:
+- FRED/ECOS 시리즈 ID 정확성 (특히 ISM PMI 무료 미제공 → INDPRO 대안 명시)
+- 사이클 판정 경계값 합리성 (미국과 학계 합의 일치)
+- 후행 데이터 표시 ("최근 발표 기준")
+
+**Event Analyst 모듈 (Week C)**:
+- 이벤트 확실성 점수 logic
+- 단기 트레이딩 영역 — LEGAL 위험 가장 높음
+
+### 위반 시 즉시 조치
+
+- HIGH: commit 차단, 즉시 fix
+- MEDIUM: 다음 commit 전 fix
+- LOW: 별도 트래킹 (PROGRESS_V2 TODO 섹션)
+
+### 검증 이력 (Week A → B Day 1 누적)
+
+이 정책 명시 이전에 작성된 8개 모듈에 대한 일괄 reviewer 검토는 2026-05-02 진행.
+이후 신규 모듈은 본 정책 준수.
+
+---

@@ -75,21 +75,45 @@ def test_classify_short_ratio(ratio, expected_prefix):
 
 
 def test_interpret_short_trend_insufficient_data():
-    assert ss._interpret_short_trend(-1_000_000, data_points=3).startswith("데이터 부족")
+    """1~4일치 데이터는 '표본 부족'."""
+    assert "표본 부족" in ss._interpret_short_trend(-1_000_000, current_qty=10_000_000, data_points=3)
 
 
-def test_interpret_short_trend_neutral_change():
-    """절대값 임계 미만 → '변화 미미'."""
-    assert ss._interpret_short_trend(50_000, data_points=20) == "변화 미미"
-    assert ss._interpret_short_trend(-50_000, data_points=20) == "변화 미미"
+def test_interpret_short_trend_zero_data():
+    """0일치는 '수집된 데이터 없음'으로 명확히 구분."""
+    assert ss._interpret_short_trend(0, current_qty=0, data_points=0) == "수집된 데이터 없음"
+
+
+def test_interpret_short_trend_neutral_change_relative():
+    """현재 잔고 대비 5% 미만 변화 → '변화 미미' (대형주 noise 보정)."""
+    # 1억주 잔고 + 100만주 변화 = 1% → 미미
+    assert ss._interpret_short_trend(1_000_000, current_qty=100_000_000, data_points=20) == "변화 미미"
+    assert ss._interpret_short_trend(-1_000_000, current_qty=100_000_000, data_points=20) == "변화 미미"
+
+
+def test_interpret_short_trend_significant_relative_change():
+    """현재 잔고 대비 5% 이상 변화 → 추세 라벨."""
+    # 1억주 잔고 + 1천만주 감소 = 10% → 의미있는 감소
+    label = ss._interpret_short_trend(-10_000_000, current_qty=100_000_000, data_points=20)
+    assert "감소" in label and "커버링" in label
 
 
 def test_interpret_short_trend_decreasing_is_covering():
-    assert "커버링" in ss._interpret_short_trend(-1_000_000, data_points=20)
+    """잔고 5% 이상 감소 → 숏 커버링 가능성."""
+    label = ss._interpret_short_trend(-1_000_000, current_qty=10_000_000, data_points=20)
+    assert "커버링" in label
 
 
 def test_interpret_short_trend_increasing_is_betting():
-    assert "베팅 증가" in ss._interpret_short_trend(2_000_000, data_points=20)
+    """잔고 5% 이상 증가 → 숏 베팅 확대 가능성."""
+    label = ss._interpret_short_trend(2_000_000, current_qty=10_000_000, data_points=20)
+    assert "베팅" in label or "확대" in label
+
+
+def test_interpret_short_trend_zero_balance_uses_fallback():
+    """현재 잔고 0인 종목 → 절대 임계 fallback."""
+    # 50K 변화 (절대 임계 100K 미만) → 미미
+    assert ss._interpret_short_trend(50_000, current_qty=0, data_points=20) == "변화 미미"
 
 
 # ──────────────────────────────────────────────
@@ -216,15 +240,19 @@ def test_analyze_short_signals_covering():
 
     assert result["current_short_balance_qty"] == 11_500_000
     assert result["current_short_ratio_pct"] == 1.15
-    assert result["30d_change_qty"] == 11_500_000 - 13_000_000  # -1.5M
-    assert result["30d_change_pct_points"] == round(1.15 - 1.30, 2)
+    assert result["change_qty"] == 11_500_000 - 13_000_000  # -1.5M
+    assert result["change_pct_points"] == round(1.15 - 1.30, 2)
     assert "커버링" in result["interpretation"]
     assert result["ratio_classification"].startswith("낮음")
     assert result["data_points"] == 6
+    assert result["actual_window_days"] >= 25  # 20250401 ~ 20250428 = 27일
+    assert result["requested_window_days"] == 30
+    assert "interpretation_note" in result
     assert "policy_status" in result
 
 
 def test_analyze_short_signals_increasing():
+    """잔고 50% 증가 (10M → 15M) → 베팅/확대 라벨."""
     records = [
         {"ticker": "005930", "date": "20250401", "short_balance_qty": 10_000_000, "short_ratio_pct": 1.00},
         {"ticker": "005930", "date": "20250410", "short_balance_qty": 11_000_000, "short_ratio_pct": 1.10},
@@ -236,11 +264,11 @@ def test_analyze_short_signals_increasing():
     analyzer = _mk_analyzer_with_history(records)
 
     result = analyzer.analyze_short_signals("005930")
-    assert "베팅 증가" in result["interpretation"]
+    assert ("베팅" in result["interpretation"]) or ("확대" in result["interpretation"])
 
 
 def test_analyze_short_signals_neutral_change():
-    """잔고 변화 절대값이 임계 미만이면 '변화 미미'."""
+    """현재 잔고 대비 변화 5% 미만이면 '변화 미미' (12M 기준 60K = 0.5%)."""
     records = [
         {"ticker": "005930", "date": f"2025040{i}", "short_balance_qty": 12_000_000 + i * 10_000,
          "short_ratio_pct": 1.20}
@@ -257,8 +285,10 @@ def test_analyze_short_signals_empty_history():
     result = analyzer.analyze_short_signals("999999")
 
     assert result["current_short_balance_qty"] == 0
-    assert result["interpretation"] == "데이터 부족"
+    assert result["interpretation"] == "수집된 데이터 없음"
     assert result["data_points"] == 0
+    assert result["actual_window_days"] == 0
+    assert result["requested_window_days"] == 30
 
 
 def test_analyze_short_signals_includes_policy_status():
@@ -266,6 +296,13 @@ def test_analyze_short_signals_includes_policy_status():
     analyzer = _mk_analyzer_with_history([])
     result = analyzer.analyze_short_signals("005930")
     assert "재개" in result["policy_status"].get("status", "")
+
+
+def test_analyze_short_signals_includes_interpretation_note():
+    """LEGAL: 추세 ≠ 매매 신호 명시."""
+    analyzer = _mk_analyzer_with_history([])
+    result = analyzer.analyze_short_signals("005930")
+    assert result["interpretation_note"] == "추세 ≠ 매매 신호 (정보 제공 목적)"
 
 
 def test_analyze_short_signals_handles_firestore_exception():
@@ -276,4 +313,4 @@ def test_analyze_short_signals_handles_firestore_exception():
     result = analyzer.analyze_short_signals("005930")
 
     assert result["data_points"] == 0
-    assert result["interpretation"] == "데이터 부족"
+    assert result["interpretation"] == "수집된 데이터 없음"

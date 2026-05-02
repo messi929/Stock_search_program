@@ -138,9 +138,12 @@ def test_evaluate_circular_hyundai_unresolved():
 
 
 def test_evaluate_circular_non_chaebol_estimated():
-    """10대 그룹에 없는 종목 → estimated 2점."""
+    """10대 그룹에 없는 종목 → estimated 1점 (보수적 중립).
+
+    이전엔 2점 만점이었으나 11~88위 재벌 누락 종목이 부당하게 만점받는 이슈로 1점 변경.
+    """
     result = gs.evaluate_circular_ownership("999999")
-    assert result["score"] == 2
+    assert result["score"] == 1
     assert result["completeness"] == "estimated"
 
 
@@ -216,6 +219,9 @@ def test_calculate_governance_score_strong_company():
     assert result["ticker"] == "005930"
     # buyback 2 + dividend 2 + circular 2 (삼성 해소) + controlling 1 (estimated) + audit 2 (estimated) = 9
     assert result["total_score"] == 9
+    assert result["verified_score"] == 6  # buyback 2 + dividend 2 + circular 2 (verified만)
+    assert result["verified_max_score"] == 6
+    assert result["estimated_score"] == 3  # controlling 1 + audit 2
     assert result["grade"] == "A+"
     assert result["components"]["buyback_policy"]["score"] == 2
     assert result["components"]["dividend_consistency"]["score"] == 2
@@ -224,6 +230,7 @@ def test_calculate_governance_score_strong_company():
     assert result["data_completeness_summary"]["estimated"] == 2
     assert result["method"] == gs.KoreaGovernanceAnalyzer.METHOD_LABEL
     assert result["disclaimer"]
+    assert "[자체평가" in result["rationale"]  # disclaimer prepended
     assert "computed_at" in result
 
 

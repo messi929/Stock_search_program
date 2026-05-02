@@ -298,17 +298,20 @@ class KoreaShortSellingAnalyzer:
         return df
 
     def analyze_short_signals(self, ticker: str, days: int = 30) -> dict[str, Any]:
-        """30일 공매도 추이 + 정책 종합.
+        """기간 내 공매도 추이 + 정책 종합.
 
         Returns:
             {
                 "ticker": "005930",
                 "current_short_balance_qty": 12500000,
                 "current_short_ratio_pct": 1.2,
-                "30d_change_qty": -500000,            # 음수 = 숏 커버링
-                "30d_change_pct_points": -0.3,        # 비중 변화 (%p)
-                "ratio_classification": "낮음 (5% 미만)" | "중간" | "높음" | "매우 높음",
-                "interpretation": "숏 커버링 진행 중" | "숏 베팅 증가" | "변화 미미" | "데이터 부족",
+                "change_qty": -500000,
+                "change_pct_points": -0.3,
+                "actual_window_days": 22,         # 실제 데이터 기간 (요청 days와 다를 수 있음)
+                "requested_window_days": 30,
+                "ratio_classification": "낮음 (3% 미만)" | "중간" | "높음" | "매우 높음" | "매우 낮음",
+                "interpretation": "공매도 잔고 감소 (숏 커버링 가능성)" | "...증가..." | "변화 미미" | ...,
+                "interpretation_note": "추세 ≠ 매매 신호 (정보 제공 목적)",
                 "policy_status": {...},
                 "data_points": 22,
             }
@@ -317,16 +320,23 @@ class KoreaShortSellingAnalyzer:
         df = self.load_short_history(ticker, days=days)
         policy = get_current_policy_status()
 
+        base_response = {
+            "ticker": ticker,
+            "requested_window_days": days,
+            "policy_status": policy,
+            "interpretation_note": "추세 ≠ 매매 신호 (정보 제공 목적)",
+        }
+
         if df.empty:
             return {
-                "ticker": ticker,
+                **base_response,
                 "current_short_balance_qty": 0,
                 "current_short_ratio_pct": 0.0,
-                "30d_change_qty": 0,
-                "30d_change_pct_points": 0.0,
+                "change_qty": 0,
+                "change_pct_points": 0.0,
+                "actual_window_days": 0,
                 "ratio_classification": "데이터 없음",
-                "interpretation": "데이터 부족",
-                "policy_status": policy,
+                "interpretation": _interpret_short_trend(0, 0, 0),
                 "data_points": 0,
             }
 
@@ -340,16 +350,17 @@ class KoreaShortSellingAnalyzer:
 
         change_qty = current_qty - old_qty
         change_pct_points = round(current_ratio - old_ratio, 2)
+        actual_window = _calc_actual_window_days(latest.get("date"), oldest.get("date"))
 
         return {
-            "ticker": ticker,
+            **base_response,
             "current_short_balance_qty": current_qty,
             "current_short_ratio_pct": round(current_ratio, 2),
-            "30d_change_qty": change_qty,
-            "30d_change_pct_points": change_pct_points,
+            "change_qty": change_qty,
+            "change_pct_points": change_pct_points,
+            "actual_window_days": actual_window,
             "ratio_classification": _classify_short_ratio(current_ratio),
-            "interpretation": _interpret_short_trend(change_qty, len(df)),
-            "policy_status": policy,
+            "interpretation": _interpret_short_trend(change_qty, current_qty, len(df)),
             "data_points": len(df),
         }
 
@@ -372,18 +383,42 @@ def _classify_short_ratio(ratio_pct: float) -> str:
         return "매우 높음 (10% 이상)"
 
 
-# 30일 잔고 변화 절대값 임계 (미미한 변화 vs 의미있는 변화)
-SHORT_NEUTRAL_QTY_CHANGE = 100_000  # 10만주 이내는 noise
+# 잔고 변화 상대 임계 (시총/상장주식수 무시한 절대값은 대형주 vs 중소형주에서 의미가 정반대).
+# 변화량이 현재 잔고의 5% 미만이면 noise 취급.
+SHORT_NEUTRAL_RELATIVE_THRESHOLD = 0.05  # 5%
+# fallback 절대 임계 (현재 잔고 0인 경우 대비)
+SHORT_NEUTRAL_QTY_FALLBACK = 100_000
+
+# 데이터 표본 분류 임계
+MIN_DATA_POINTS_FOR_TREND = 5
 
 
-def _interpret_short_trend(change_qty: int, data_points: int) -> str:
-    if data_points < 5:
-        return "데이터 부족 (5일 미만)"
-    if abs(change_qty) < SHORT_NEUTRAL_QTY_CHANGE:
-        return "변화 미미"
+def _interpret_short_trend(change_qty: int, current_qty: int, data_points: int) -> str:
+    """공매도 잔고 변화 해석.
+
+    Args:
+        change_qty: 기간 시작점 대비 잔고 변화량 (주)
+        current_qty: 가장 최근 잔고 (주) — 상대 비율 계산용
+        data_points: 데이터 일수
+    """
+    if data_points == 0:
+        return "수집된 데이터 없음"
+    if data_points < MIN_DATA_POINTS_FOR_TREND:
+        return f"표본 부족 ({data_points}일치, {MIN_DATA_POINTS_FOR_TREND}일 미만)"
+
+    # 상대 비율 임계 (현재 잔고 대비) — 시총/종목 크기 보정
+    if current_qty > 0:
+        ratio = abs(change_qty) / current_qty
+        if ratio < SHORT_NEUTRAL_RELATIVE_THRESHOLD:
+            return "변화 미미"
+    else:
+        # 현재 잔고 0이면 fallback 절대 임계
+        if abs(change_qty) < SHORT_NEUTRAL_QTY_FALLBACK:
+            return "변화 미미"
+
     if change_qty < 0:
-        return "숏 커버링 진행 중 (잔고 감소)"
-    return "숏 베팅 증가 (잔고 증가)"
+        return "공매도 잔고 감소 (숏 커버링 가능성)"
+    return "공매도 잔고 증가 (숏 베팅 확대 가능성)"
 
 
 # ──────────────────────────────────────────────
@@ -420,3 +455,13 @@ def _to_date_str(idx: Any) -> str:
         return idx.strftime("%Y%m%d")
     s = str(idx).replace("-", "").replace("/", "").strip()
     return s[:8]
+
+
+def _calc_actual_window_days(latest_date: Any, oldest_date: Any) -> int:
+    """date 문자열 (YYYYMMDD) 두 개로 실제 윈도우 일수 계산."""
+    try:
+        latest = datetime.strptime(str(latest_date)[:8], "%Y%m%d")
+        oldest = datetime.strptime(str(oldest_date)[:8], "%Y%m%d")
+        return max(0, (latest - oldest).days)
+    except (ValueError, TypeError):
+        return 0

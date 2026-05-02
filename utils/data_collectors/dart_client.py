@@ -137,7 +137,7 @@ class DartClient:
                 self.stats.failed_calls += 1
                 logger.warning(
                     f"DART list.json 호출 실패 (page={page_no}): "
-                    f"{type(e).__name__}: {str(e)[:120]}"
+                    f"{type(e).__name__}: {mask_api_key_in_str(str(e))[:160]}"
                 )
                 self._sleep()
                 break
@@ -158,8 +158,16 @@ class DartClient:
             items = data.get("list", []) or []
             all_items.extend(items)
 
-            # 페이지 끝 도달
-            total_page = int(data.get("total_page", 1))
+            # 페이지 끝 도달 — total_page가 비정상 응답(문자열 등)일 때 graceful
+            try:
+                total_page = int(data.get("total_page", 1))
+            except (TypeError, ValueError):
+                logger.warning(
+                    f"DART total_page 비정상: {data.get('total_page')!r} → 현재 페이지 종료"
+                )
+                self._sleep()
+                break
+
             if page_no >= total_page or not items:
                 self._sleep()
                 break
@@ -200,7 +208,10 @@ class DartClient:
             r.raise_for_status()
         except Exception as e:
             self.stats.failed_calls += 1
-            logger.error(f"corpCode.xml 다운로드 실패: {type(e).__name__}: {str(e)[:120]}")
+            logger.error(
+                f"corpCode.xml 다운로드 실패: "
+                f"{type(e).__name__}: {mask_api_key_in_str(str(e))[:160]}"
+            )
             return {}
 
         if r.content[:2] != b"PK":
@@ -259,9 +270,18 @@ class DartClient:
 # ──────────────────────────────────────────────
 
 
-_API_KEY_RE = re.compile(r"crtfc_key=[a-f0-9]{40}", re.IGNORECASE)
+# DART 키는 40자 hex. URL 파라미터 형식 + 본문 노출 둘 다 마스킹.
+_API_KEY_PARAM_RE = re.compile(r"crtfc_key=[A-Za-z0-9]{32,64}", re.IGNORECASE)
+_API_KEY_BARE_RE = re.compile(r"\b[a-f0-9]{40}\b", re.IGNORECASE)
 
 
 def mask_api_key_in_str(s: str) -> str:
-    """문자열에서 DART API 키 노출을 마스킹 (로그/예외 메시지용)."""
-    return _API_KEY_RE.sub("crtfc_key=***", s)
+    """문자열에서 DART API 키 노출을 마스킹 (로그/예외 메시지용).
+
+    두 가지 노출 패턴 모두 처리:
+      1. URL 파라미터: `crtfc_key=...` → `crtfc_key=***`
+      2. bare 키 (예외 메시지에서 raw 노출): `4e5b...` (40자 hex) → `***`
+    """
+    s = _API_KEY_PARAM_RE.sub("crtfc_key=***", s)
+    s = _API_KEY_BARE_RE.sub("***", s)
+    return s

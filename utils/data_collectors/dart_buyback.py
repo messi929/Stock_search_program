@@ -18,6 +18,7 @@ Firestore 컬렉션: buyback_history
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
@@ -45,7 +46,19 @@ ACTION_META: dict[str, dict[str, Any]] = {
     "unknown": {"weight": 0, "rating": "?"},
 }
 
-AMENDMENT_PREFIXES = ("[기재정정]", "[정정]", "[첨부정정]", "[첨부추가]")
+# DART 정정 공시 prefix는 다양함 (기재정정/정정/첨부정정/첨부추가/일부정정/일부취소/연장결정/발행조건확정 등).
+# startswith 단순 매칭 대신 정규식으로 [...] 안의 정정 키워드 포괄 매칭.
+AMENDMENT_PREFIXES = ("[기재정정]", "[정정]", "[첨부정정]", "[첨부추가]")  # 하위 호환용 명시 list
+_AMENDMENT_RE = re.compile(
+    r"^\[[^\]]*(정정|취소|추가|연장|확정|변경|재공시)[^\]]*\]"
+)
+
+
+def is_amendment_prefix(report_nm: str) -> bool:
+    """report_nm 시작이 정정/취소/추가/연장/확정/변경/재공시 prefix인지."""
+    if not report_nm:
+        return False
+    return bool(_AMENDMENT_RE.match(report_nm))
 
 # Firestore batch (screener.db.repository.py 와 동일)
 FIRESTORE_BATCH_LIMIT = 490
@@ -84,7 +97,7 @@ def classify_buyback_action(report_nm: str) -> dict[str, Any]:
         }
     """
     nm = report_nm or ""
-    is_amendment = any(nm.startswith(p) for p in AMENDMENT_PREFIXES)
+    is_amendment = is_amendment_prefix(nm)
 
     for action, keywords in BUYBACK_KEYWORDS:
         for kw in keywords:
@@ -227,7 +240,9 @@ class DartBuybackCollector:
             for rec in chunk:
                 stock_code = rec.get("stock_code")
                 rcept_no = rec.get("rcept_no")
-                if not stock_code or not rcept_no:
+                # rcept_no는 14자리 숫자가 표준. 빈 문자열/짧은 값은 잘못된 데이터로 skip
+                # (예: stock_code="005930", rcept_no="" → "005930_" 같은 부정확 Doc ID 차단)
+                if not stock_code or not rcept_no or not str(rcept_no).strip():
                     logger.warning(f"stock_code/rcept_no 누락 → skip: {rec}")
                     continue
 

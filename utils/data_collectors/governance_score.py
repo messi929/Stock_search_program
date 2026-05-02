@@ -207,17 +207,18 @@ def evaluate_circular_ownership(ticker: str) -> dict[str, Any]:
     """순환출자 점수 (0~2).
 
     chaebol_groups.json 활용:
-      - 비재벌 → 2점
-      - 재벌 + 순환출자 해소 → 2점
-      - 재벌 + 순환출자 미해소 → 0점
-      - chaebol 데이터 미커버 (10대 외) → estimated 2점 (대부분 비재벌 가정)
+      - 재벌 + 순환출자 해소 → 2점 verified
+      - 재벌 + 순환출자 미해소 → 0점 verified
+      - chaebol 데이터 미커버 (공정위 88개 중 11~88위 또는 비재벌) → estimated 1점 (중립)
+        ※ 10대 외 종목을 "비재벌 가정 → 2점 만점"으로 처리하면 SK/롯데/한진 등 누락
+          그룹 종목이 부당하게 만점 받음. 보수적으로 1점(중립)으로 평가.
     """
     group = find_chaebol_group(ticker)
     if group is None:
         return {
-            "score": 2,
+            "score": 1,
             "completeness": "estimated",
-            "reason": "재벌 그룹 미소속 추정 (chaebol 데이터는 10대 그룹만 커버)",
+            "reason": "chaebol_groups.json 미커버 — 10대 외 그룹/비재벌 미평가 (보수적 중립 1점)",
         }
 
     if group.get("circular_ownership_resolved"):
@@ -362,7 +363,21 @@ class KoreaGovernanceAnalyzer:
             "audit_opinion_history": evaluate_audit_opinion(ticker),
         }
 
-        total_score = sum(int(c["score"]) for c in components.values())
+        # verified vs estimated 점수 분리 (페르소나가 변별력 가지도록)
+        # estimated 변수는 모든 종목에 동일 보너스 → total_score만 보면 변별력 약화
+        verified_score = sum(
+            int(c["score"]) for c in components.values()
+            if c.get("completeness") in ("verified", "partial")
+        )
+        estimated_score = sum(
+            int(c["score"]) for c in components.values()
+            if c.get("completeness") == "estimated"
+        )
+        verified_max = sum(
+            2 for c in components.values()
+            if c.get("completeness") in ("verified", "partial")
+        )
+        total_score = verified_score + estimated_score  # 하위 호환
 
         # 데이터 완전성 집계
         completeness_summary = {"verified": 0, "estimated": 0, "partial": 0, "unavailable": 0}
@@ -372,21 +387,30 @@ class KoreaGovernanceAnalyzer:
 
         # rationale (간략 요약)
         weak_spots = [k for k, v in components.items() if v["score"] == 0]
-        rationale_parts = [f"총점 {total_score}/10 ({score_to_grade(total_score)})"]
+        rationale_parts = [
+            f"총점 {total_score}/10 ({score_to_grade(total_score)})",
+            f"검증 점수 {verified_score}/{verified_max} (실데이터)",
+        ]
         if weak_spots:
             rationale_parts.append(f"약점: {', '.join(weak_spots)}")
         if completeness_summary["estimated"] >= 2:
             rationale_parts.append(
-                f"DART 미연동 변수 {completeness_summary['estimated']}개 (보완 필요)"
+                f"DART 미연동 변수 {completeness_summary['estimated']}개 (보완 필요, 점수에 보수 가정 포함)"
             )
+
+        # disclaimer를 rationale 앞에 prepend하여 페르소나 출력 시 누락 방지
+        disclaimer_inline = f"[자체평가 — {self.DISCLAIMER}] "
 
         return {
             "ticker": ticker,
             "total_score": total_score,
+            "verified_score": verified_score,
+            "verified_max_score": verified_max,
+            "estimated_score": estimated_score,
             "grade": score_to_grade(total_score),
             "components": components,
             "data_completeness_summary": completeness_summary,
-            "rationale": " | ".join(rationale_parts),
+            "rationale": disclaimer_inline + " | ".join(rationale_parts),
             "method": self.METHOD_LABEL,
             "disclaimer": self.DISCLAIMER,
             "external_reference": self.EXTERNAL_REFERENCE,

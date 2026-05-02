@@ -125,12 +125,20 @@ FRED_SERIES: dict[str, dict[str, str]] = {
 # ──────────────────────────────────────────────
 
 
-_FRED_KEY_RE = re.compile(r"api_key=[a-f0-9]{32}", re.IGNORECASE)
+# FRED 키는 32자 lowercase hex. URL 파라미터 + bare 노출 둘 다 처리.
+_FRED_KEY_PARAM_RE = re.compile(r"api_key[=:\s]+[A-Za-z0-9]{32}", re.IGNORECASE)
+_FRED_KEY_BARE_RE = re.compile(r"\b[a-f0-9]{32}\b", re.IGNORECASE)
 
 
 def mask_api_key_in_str(s: str) -> str:
-    """문자열에서 FRED API 키 노출을 마스킹 (로그/예외용)."""
-    return _FRED_KEY_RE.sub("api_key=***", s)
+    """문자열에서 FRED API 키 노출을 마스킹 (로그/예외용).
+
+    fredapi가 raise하는 예외 메시지에 raw key가 노출되는 경우도 있어
+    bare 32자 hex 패턴까지 함께 마스킹.
+    """
+    s = _FRED_KEY_PARAM_RE.sub("api_key=***", s)
+    s = _FRED_KEY_BARE_RE.sub("***", s)
+    return s
 
 
 # ──────────────────────────────────────────────
@@ -186,11 +194,20 @@ class FREDClient:
 
     @property
     def fred(self) -> Any:
+        """fredapi.Fred 인스턴스 (lazy init).
+
+        주의: 키 로테이션이 필요한 경우 self._fred = None으로 명시적 초기화 후 재진입.
+        한 번 생성된 인스턴스는 self.api_key 변경을 반영하지 않음.
+        """
         if self._fred is None:
             from fredapi import Fred
 
             self._fred = Fred(api_key=self.api_key)
         return self._fred
+
+    def reset_fred_instance(self) -> None:
+        """다음 fred property access 시 새 fredapi.Fred 인스턴스 생성 (키 로테이션용)."""
+        self._fred = None
 
     def _sleep(self) -> None:
         time.sleep(self.sleep_sec)

@@ -263,11 +263,15 @@ class HoldingCompanyAnalyzer:
             )
 
         holding_cap = self.get_market_cap_eok(holding_ticker)
+        has_unlisted = bool(holding_data.get("has_unlisted_subsidiaries"))
 
-        if holding_cap == 0.0 or nav == 0.0:
+        # 부동소수 비교 안전 임계 + 자회사 시총 전부 누락 케이스 명시
+        all_subs_missing = len(missing) == len(holding_data.get("subsidiaries", [])) and len(missing) > 0
+        if holding_cap < 1e-6 or nav < 1e-6 or all_subs_missing:
             logger.warning(
                 f"NAV 산정 불가 (ticker={holding_ticker}): "
-                f"nav={nav:.1f}억, holding_cap={holding_cap:.1f}억"
+                f"nav={nav:.1f}억, holding_cap={holding_cap:.1f}억, "
+                f"all_subs_missing={all_subs_missing}"
             )
             return {
                 "ticker": holding_ticker,
@@ -276,13 +280,14 @@ class HoldingCompanyAnalyzer:
                 "market_cap_eok": round(holding_cap, 1),
                 "discount_pct": None,
                 "interpretation": "산정 불가",
+                "has_unlisted_subsidiaries": has_unlisted,
                 "subsidiaries": sub_results,
                 "missing_subsidiary_caps": missing,
                 "metadata": holding_data.get("metadata", {}),
                 "computed_at": datetime.now().isoformat(),
             }
 
-        has_unlisted = bool(holding_data.get("has_unlisted_subsidiaries"))
+        # has_unlisted는 위에서 이미 추출됨 (산정 불가 분기에서도 반환).
         discount_pct = (nav - holding_cap) / nav * 100
         return {
             "ticker": holding_ticker,
