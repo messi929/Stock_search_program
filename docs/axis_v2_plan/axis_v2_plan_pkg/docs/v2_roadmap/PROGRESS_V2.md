@@ -38,11 +38,30 @@
 **실측 검증 결과** (Firestore 운영 시총):
 - LG 26.52% (중간), SK 86.87% (매우 높음), GS -252% (프리미엄/비상장 NAV 미산입), 한화 67.39% (매우 높음), 롯데지주 21.02% (중간)
 
-### Day 4 — 자사주 정책 (DART) 🔄 진행 중
+### Day 4 — 자사주 정책 (DART) ✅ (commit `4d16f76`)
 
-(작업 중)
+| 산출물 | 비고 |
+|--------|------|
+| `utils/data_collectors/dart_client.py` | DART OpenAPI 래퍼 + corpCode.xml ZIP + 페이지네이션 + API 키 마스킹 |
+| `utils/data_collectors/dart_buyback.py` | 5종 분류 (burn/buy_decision/buy_complete/trust/dispose) + summarize_history |
+| 단위 테스트 35건 추가 | 분류 15 + 마스킹 2 + Client 10 + Collector 8 |
 
-### Day 5 — 밸류업 + 거버넌스 + 공매도 ⏳ 대기
+**실데이터 검증** (5종목 × 3년, 22초): 분류 정확도 100% — 삼성전자 2025-02 소각결정 정확 포착.
+
+### Day 5 — 밸류업 + 거버넌스 + 공매도 ✅ (commit pending)
+
+| 산출물 | 비고 |
+|--------|------|
+| `data/valueup_index.json` | KRX 코리아 밸류업 지수 30종목 (출시 시점 핵심) + 분기 갱신 schema |
+| `utils/data_collectors/valueup_index.py` | is_in_valueup_index, get_constituents, get_recent_changes |
+| `utils/data_collectors/governance_score.py` | 5변수 자체 평가 (0~10점/등급) + data_completeness 표시 |
+| `data/short_selling_policy.json` | 한국 공매도 정책 8건 변동 이력 (2008~2025) |
+| `utils/data_collectors/short_selling.py` | KoreaShortSellingCollector + Analyzer + analyze_short_signals |
+| 단위 테스트 63건 추가 | valueup 10 + governance 25 + short_selling 28 |
+
+**Week A 종료 — 누적 168 PASS** (Day1: 23 + Day2: 22 + Day3: 25 + Day4: 35 + Day5: 63)
+
+---
 
 ---
 

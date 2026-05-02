@@ -1,0 +1,61 @@
+{
+  "_meta": {
+    "schema_version": "1.0",
+    "index_name": "코리아 밸류업 지수 (Korea Value-up Index)",
+    "operator": "한국거래소 (KRX)",
+    "launch_date": "2024-09-30",
+    "rebalancing_frequency": "분기 (3, 6, 9, 12월)",
+    "total_constituents_target": 100,
+    "as_of": "2024-09-30",
+    "source": "KRX 공식 발표 (출시 시점 100종목 일부 — 운용사 ETF 보유 종목 교차 검증). 분기마다 KODEX 379800 / TIGER 379810 ETF의 일별 PDF로 갱신.",
+    "rebalancing_dates_planned": ["2024-12-31", "2025-03-31", "2025-06-30", "2025-09-30", "2025-12-31"],
+    "policy": "전체 100종목 정확한 list 미공개 시점에는 ETF 보유 종목으로 추정. 갱신 시 added/removed 트래킹.",
+    "data_completeness": "partial (출시 시점 핵심 30종목만 우선 등록 — 분기 갱신으로 보완)",
+    "last_updated": "2026-05-02"
+  },
+  "rebalancing_history": [
+    {
+      "rebalancing_date": "2024-09-30",
+      "total_constituents": 100,
+      "constituents_listed_here": 30,
+      "added_companies": [],
+      "removed_companies": [],
+      "constituents": [
+        {"ticker": "005930", "name": "삼성전자", "sector": "반도체"},
+        {"ticker": "000660", "name": "SK하이닉스", "sector": "반도체"},
+        {"ticker": "005380", "name": "현대차", "sector": "자동차"},
+        {"ticker": "000270", "name": "기아", "sector": "자동차"},
+        {"ticker": "035420", "name": "NAVER", "sector": "인터넷"},
+        {"ticker": "035720", "name": "카카오", "sector": "인터넷"},
+        {"ticker": "012330", "name": "현대모비스", "sector": "자동차부품"},
+        {"ticker": "066570", "name": "LG전자", "sector": "전자"},
+        {"ticker": "051910", "name": "LG화학", "sector": "화학"},
+        {"ticker": "207940", "name": "삼성바이오로직스", "sector": "바이오"},
+        {"ticker": "068270", "name": "셀트리온", "sector": "바이오"},
+        {"ticker": "005490", "name": "POSCO홀딩스", "sector": "철강"},
+        {"ticker": "105560", "name": "KB금융", "sector": "금융"},
+        {"ticker": "055550", "name": "신한지주", "sector": "금융"},
+        {"ticker": "086790", "name": "하나금융지주", "sector": "금융"},
+        {"ticker": "316140", "name": "우리금융지주", "sector": "금융"},
+        {"ticker": "138930", "name": "BNK금융지주", "sector": "금융"},
+        {"ticker": "024110", "name": "기업은행", "sector": "금융"},
+        {"ticker": "139480", "name": "이마트", "sector": "유통"},
+        {"ticker": "032830", "name": "삼성생명", "sector": "보험"},
+        {"ticker": "088350", "name": "한화생명", "sector": "보험"},
+        {"ticker": "017670", "name": "SK텔레콤", "sector": "통신"},
+        {"ticker": "030200", "name": "KT", "sector": "통신"},
+        {"ticker": "032640", "name": "LG유플러스", "sector": "통신"},
+        {"ticker": "015760", "name": "한국전력", "sector": "유틸리티"},
+        {"ticker": "036570", "name": "엔씨소프트", "sector": "게임"},
+        {"ticker": "009540", "name": "HD한국조선해양", "sector": "조선"},
+        {"ticker": "010130", "name": "고려아연", "sector": "비철금속"},
+        {"ticker": "267260", "name": "HD현대일렉트릭", "sector": "전기설비"},
+        {"ticker": "012450", "name": "한화에어로스페이스", "sector": "방산"}
+      ]
+    }
+  ],
+  "etf_fallback": {
+    "kodex_valueup": {"ticker": "379800", "name": "KODEX 코리아밸류업"},
+    "tiger_valueup": {"ticker": "379810", "name": "TIGER 코리아밸류업"}
+  }
+}
