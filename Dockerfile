@@ -18,13 +18,14 @@ RUN pip install --no-cache-dir -r requirements.txt
 # 서버 전용 requirements (데스크톱 UI 제외)
 RUN pip uninstall -y pywebview pystray Pillow 2>/dev/null || true
 
-# 소스 복사 — v7.5(screener/) + Axis(api/agents/personas/utils/data/)
+# 소스 복사 — v7.5(screener/) + Axis(api/agents/personas/utils/data/) + v2 Jobs(jobs/)
 COPY screener/ screener/
 COPY api/ api/
 COPY agents/ agents/
 COPY personas/ personas/
 COPY utils/ utils/
 COPY data/ data/
+COPY jobs/ jobs/
 
 # 환경 변수 기본값
 ENV RUN_MODE=server
