@@ -48,9 +48,10 @@ FORBIDDEN_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
     (re.compile(r"사세요"), "사세요"),
     (re.compile(r"매수하세요"), "매수하세요"),
     (re.compile(r"매도하세요"), "매도하세요"),
-    (re.compile(r"매수\s*신호"), "매수 신호"),
-    (re.compile(r"매도\s*신호"), "매도 신호"),
-    (re.compile(r"진입\s*신호"), "진입 신호"),
+    # "신호" + "시그널" 양쪽 차단 (agents/base.py와 일치)
+    (re.compile(r"매수\s*(신호|시그널)"), "매수 신호"),
+    (re.compile(r"매도\s*(신호|시그널)"), "매도 신호"),
+    (re.compile(r"진입\s*(신호|시그널)"), "진입 신호"),
     (re.compile(r"유망(합니다|한|주\b|할 것)"), "유망"),
     (
         re.compile(r"(확실히|반드시|분명히)\s*(오릅|오를|상승|수익|매수|이익)"),
