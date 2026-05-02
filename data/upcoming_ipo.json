@@ -1,0 +1,79 @@
+{
+  "_meta": {
+    "schema_version": "1.0",
+    "description": "수동 큐레이션 IPO 캘린더 + 2차 수혜 매핑",
+    "rationale": "신뢰할 수 있는 무료 IPO 캘린더 부재 → 관리자 수동 추가",
+    "as_of": "2026-05-03",
+    "next_update": "월 1회 수동 갱신 권장",
+    "fields": {
+      "company": "발행사명",
+      "ticker": "상장 후 예상 티커 (미정 시 '(unlisted)')",
+      "expected_market": "예상 상장 시장 (NYSE/NASDAQ/KOSPI/KOSDAQ)",
+      "expected_date_range": "분기 단위 예상 (정확 일자는 보통 직전 1~2주 공시)",
+      "certainty_score": "0~10 — 시장 컨센서스 확정도 (관리자 주관)",
+      "secondary_beneficiaries": "2차 수혜 후보 종목 (LLM Event Analyst 추론 입력용)",
+      "rationale": "2차 수혜 논리 한 줄 (검증 필요)",
+      "added_at": "큐레이션 추가일",
+      "fabrication_warning": "secondary_beneficiaries는 관리자 가설로, 실제 상관관계는 데이터 검증 필요"
+    }
+  },
+  "items": [
+    {
+      "company": "SpaceX",
+      "ticker": "(unlisted)",
+      "expected_market": "NYSE",
+      "expected_date_range": "2026 Q4",
+      "certainty_score": 6,
+      "secondary_beneficiaries": ["RKLB", "ASTS", "IRDM"],
+      "rationale": "위성 발사/통신 인프라 수요 확대 시 동종업계 멀티플 리레이팅 가능성",
+      "added_at": "2026-05-03",
+      "source_hint": "공식 S-1 미제출. 일부 매체 보도 기반 추정."
+    },
+    {
+      "company": "Stripe",
+      "ticker": "(unlisted)",
+      "expected_market": "NYSE",
+      "expected_date_range": "2026 H2",
+      "certainty_score": 5,
+      "secondary_beneficiaries": ["ADYEY", "PYPL", "FOUR"],
+      "rationale": "결제 인프라 비교 종목 멀티플 비교 분석 활성화 가능성",
+      "added_at": "2026-05-03",
+      "source_hint": "지속 보도. 정확한 시점/방식(direct listing vs IPO) 불확실."
+    },
+    {
+      "company": "Databricks",
+      "ticker": "(unlisted)",
+      "expected_market": "NASDAQ",
+      "expected_date_range": "2026 H2 ~ 2027 H1",
+      "certainty_score": 5,
+      "secondary_beneficiaries": ["SNOW", "MDB", "PLTR"],
+      "rationale": "데이터/AI 플랫폼 동종업계 분석 강도 증가 가능성",
+      "added_at": "2026-05-03",
+      "source_hint": "Late stage round 진행. IPO 시점 미확정."
+    },
+    {
+      "company": "케이뱅크",
+      "ticker": "(unlisted)",
+      "expected_market": "KOSPI",
+      "expected_date_range": "2026 H2",
+      "certainty_score": 7,
+      "secondary_beneficiaries": ["323410", "035720"],
+      "rationale": "인터넷전문은행 비교 종목 (카카오뱅크 등) 비교 멀티플 영향 가능성",
+      "added_at": "2026-05-03",
+      "source_hint": "한국거래소 상장 예비심사 결과에 따라 시점 변동."
+    },
+    {
+      "company": "LG CNS",
+      "ticker": "(unlisted)",
+      "expected_market": "KOSPI",
+      "expected_date_range": "2026 H1 ~ H2",
+      "certainty_score": 6,
+      "secondary_beneficiaries": ["018260", "030200"],
+      "rationale": "IT 서비스/SI 비교 종목 (삼성SDS 등) 멀티플 비교 활성화 가능성",
+      "added_at": "2026-05-03",
+      "source_hint": "그룹 내부 추진 단계. 시점 가변."
+    }
+  ],
+  "fabrication_warning": "위 데이터는 공개 보도 기반의 수동 큐레이션이며, 일정/2차 수혜 매핑 모두 가설입니다. 분석 시 최신 공시/보도 재확인 필수.",
+  "no_recommendation_disclaimer": "본 데이터는 정보 제공이며 매수/매도 추천이 아닙니다. 최종 판단은 사용자 본인의 책임입니다."
+}
