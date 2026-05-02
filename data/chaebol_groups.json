@@ -1,0 +1,180 @@
+{
+  "_meta": {
+    "schema_version": "1.0",
+    "as_of": "2024-05-01",
+    "source": "공정거래위원회 2024년 5월 대규모기업집단 지정 + DART 공시",
+    "verified_groups": 10,
+    "scope": "공정위 88개 그룹 중 시가총액 상위 10대 + 핵심 그룹 우선 검증",
+    "policy": "지분율/자산 등 분기별 변동값은 별도 모듈(holding_company.py)에서 분기 갱신. 본 파일은 그룹 멤버십(소속 종목 ticker) 위주.",
+    "extension_guide": "그룹 추가 시 rank/total_assets_trillion/holding_company/core_companies 4개 필수. 미검증 시 verified=false 명시.",
+    "last_updated": "2026-05-02"
+  },
+  "삼성": {
+    "rank": 1,
+    "total_assets_trillion": 632.6,
+    "chairman": "이재용",
+    "holding_company": "028260",
+    "holding_company_name": "삼성물산",
+    "holding_note": "지주회사 형태 아님 (2015년 합병으로 사실상 그룹 지주 역할)",
+    "core_companies": [
+      {"ticker": "005930", "name": "삼성전자"},
+      {"ticker": "006400", "name": "삼성SDI"},
+      {"ticker": "018260", "name": "삼성SDS"},
+      {"ticker": "207940", "name": "삼성바이오로직스"},
+      {"ticker": "028260", "name": "삼성물산"},
+      {"ticker": "032830", "name": "삼성생명"},
+      {"ticker": "010140", "name": "삼성중공업"},
+      {"ticker": "009150", "name": "삼성전기"}
+    ],
+    "circular_ownership_resolved": true,
+    "verified": true
+  },
+  "SK": {
+    "rank": 2,
+    "total_assets_trillion": 334.3,
+    "chairman": "최태원",
+    "holding_company": "034730",
+    "holding_company_name": "SK",
+    "core_companies": [
+      {"ticker": "034730", "name": "SK"},
+      {"ticker": "000660", "name": "SK하이닉스"},
+      {"ticker": "017670", "name": "SK텔레콤"},
+      {"ticker": "096770", "name": "SK이노베이션"},
+      {"ticker": "402340", "name": "SK스퀘어"},
+      {"ticker": "018670", "name": "SK가스"}
+    ],
+    "circular_ownership_resolved": true,
+    "verified": true
+  },
+  "현대자동차": {
+    "rank": 3,
+    "total_assets_trillion": 281.5,
+    "chairman": "정의선",
+    "holding_company": "012330",
+    "holding_company_name": "현대모비스",
+    "holding_note": "지주사 전환 추진 중 (2024년 4월 발표, 2026년 완료 예정). 현 시점에는 사실상 지주 역할.",
+    "core_companies": [
+      {"ticker": "005380", "name": "현대차"},
+      {"ticker": "000270", "name": "기아"},
+      {"ticker": "012330", "name": "현대모비스"},
+      {"ticker": "086280", "name": "현대글로비스"},
+      {"ticker": "000720", "name": "현대건설"},
+      {"ticker": "004020", "name": "현대제철"}
+    ],
+    "circular_ownership_resolved": false,
+    "verified": true
+  },
+  "LG": {
+    "rank": 4,
+    "total_assets_trillion": 177.9,
+    "chairman": "구광모",
+    "holding_company": "003550",
+    "holding_company_name": "LG",
+    "core_companies": [
+      {"ticker": "003550", "name": "LG"},
+      {"ticker": "066570", "name": "LG전자"},
+      {"ticker": "051910", "name": "LG화학"},
+      {"ticker": "051900", "name": "LG생활건강"},
+      {"ticker": "032640", "name": "LG유플러스"},
+      {"ticker": "034220", "name": "LG디스플레이"},
+      {"ticker": "373220", "name": "LG에너지솔루션"}
+    ],
+    "circular_ownership_resolved": true,
+    "verified": true
+  },
+  "포스코": {
+    "rank": 5,
+    "total_assets_trillion": 137.6,
+    "chairman": "장인화",
+    "holding_company": "005490",
+    "holding_company_name": "POSCO홀딩스",
+    "core_companies": [
+      {"ticker": "005490", "name": "POSCO홀딩스"},
+      {"ticker": "003670", "name": "포스코퓨처엠"},
+      {"ticker": "047050", "name": "포스코인터내셔널"},
+      {"ticker": "022100", "name": "포스코DX"},
+      {"ticker": "058430", "name": "포스코스틸리온"}
+    ],
+    "circular_ownership_resolved": true,
+    "verified": true
+  },
+  "롯데": {
+    "rank": 6,
+    "total_assets_trillion": 129.6,
+    "chairman": "신동빈",
+    "holding_company": "004990",
+    "holding_company_name": "롯데지주",
+    "core_companies": [
+      {"ticker": "004990", "name": "롯데지주"},
+      {"ticker": "023530", "name": "롯데쇼핑"},
+      {"ticker": "011170", "name": "롯데케미칼"},
+      {"ticker": "280360", "name": "롯데웰푸드"},
+      {"ticker": "004000", "name": "롯데정밀화학"},
+      {"ticker": "286940", "name": "롯데이노베이트"}
+    ],
+    "circular_ownership_resolved": true,
+    "verified": true
+  },
+  "한화": {
+    "rank": 7,
+    "total_assets_trillion": 112.7,
+    "chairman": "김승연",
+    "holding_company": "000880",
+    "holding_company_name": "한화",
+    "core_companies": [
+      {"ticker": "000880", "name": "한화"},
+      {"ticker": "009830", "name": "한화솔루션"},
+      {"ticker": "012450", "name": "한화에어로스페이스"},
+      {"ticker": "272210", "name": "한화시스템"},
+      {"ticker": "088350", "name": "한화생명"},
+      {"ticker": "042660", "name": "한화오션"}
+    ],
+    "circular_ownership_resolved": true,
+    "verified": true
+  },
+  "HD현대": {
+    "rank": 8,
+    "total_assets_trillion": 96.1,
+    "chairman": "정몽준",
+    "holding_company": "267250",
+    "holding_company_name": "HD현대",
+    "core_companies": [
+      {"ticker": "267250", "name": "HD현대"},
+      {"ticker": "009540", "name": "HD한국조선해양"},
+      {"ticker": "329180", "name": "HD현대중공업"},
+      {"ticker": "267260", "name": "HD현대일렉트릭"},
+      {"ticker": "042670", "name": "HD현대인프라코어"},
+      {"ticker": "443060", "name": "HD현대마린솔루션"}
+    ],
+    "circular_ownership_resolved": true,
+    "verified": true
+  },
+  "GS": {
+    "rank": 9,
+    "total_assets_trillion": 80.8,
+    "chairman": "허창수",
+    "holding_company": "078930",
+    "holding_company_name": "GS",
+    "core_companies": [
+      {"ticker": "078930", "name": "GS"},
+      {"ticker": "006360", "name": "GS건설"},
+      {"ticker": "007070", "name": "GS리테일"},
+      {"ticker": "001250", "name": "GS글로벌"}
+    ],
+    "circular_ownership_resolved": true,
+    "verified": true
+  },
+  "농협": {
+    "rank": 10,
+    "total_assets_trillion": 75.7,
+    "chairman": "(협동조합)",
+    "holding_company": null,
+    "holding_company_name": "농협중앙회 (비상장)",
+    "holding_note": "협동조합 구조 — 지주회사 개념 적용 X. 자회사 일부만 상장.",
+    "core_companies": [
+      {"ticker": "005940", "name": "NH투자증권"}
+    ],
+    "circular_ownership_resolved": true,
+    "verified": true
+  }
+}
