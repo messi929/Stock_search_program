@@ -111,6 +111,10 @@ Cloud Run 운영 비용: **~₩900/월** (4 Job × 30회 + Firestore 쓰기)
 - [x] LEGAL strict 0건
 - [x] 페르소나 일관성 check 통과
 - [x] TypeScript clean
+- [x] **`next build`** — Compiled successfully (15 라우트)
+- [x] **Chrome DevTools mock 렌더** — 5각형/사이클 게이지/4차원 배지 + 모바일(375x812) + a11y
+- [x] **실 E2E SSE** — FastAPI uvicorn + 실 Sonnet 호출, `start → event_complete → complete` 정확
+- [x] E2E 발견 결함 즉시 fix (Pydantic `Field(default_factory=...)` 추가)
 
 ### 머지 후 — Cloud 배포 (DEPLOY_V2.md §1~5)
 - [ ] `gcloud secrets create` 4개 (fred/ecos/dart/edgar-user-agent)

@@ -74,6 +74,35 @@
 
 ---
 
+## ✅ 프론트엔드 마감 + 3단계 검증 (2026-05-03 후속)
+
+Week D Day 5 산출물 점검에서 발견 — **신규 3 페르소나 결과 카드 UI가 누락**되어 있어
+사용자가 event/macro/korean 탭 클릭 시 백엔드 400 에러 + 빈 화면.
+
+추가 commit (5건):
+1. `feat(v2/web): 6 페르소나 결과 카드 + 백엔드 직렬화 + SSE 분기` (`e1b3051`)
+   - 백엔드: `_PERSONAS` 6개로 확장, `valid_persona` 갱신, analyze 응답에 event/macro/korean 직렬화, SSE `event_complete`/`macro_complete`/`korean_complete` 이벤트
+   - 프론트엔드 타입: `EventAnalystResult`/`MacroPmResult`/`KoreanSpecialistResult` + nested 12 타입
+   - 신규 카드: `EventAnalystCard` (4차원 확실성 + 시나리오 + 영향 매핑), `MacroPmCard` (6 국면 + 4 사이클 게이지 + US/KR 막대), `KoreanSpecialistCard` (SVG 5각형 차트)
+   - `AnalyzeView` 페르소나별 분기
+
+2. `fix(v2): Pydantic default — Claude 응답 누락 시 검증 통과` (`0613f00`)
+   - 3단계 풀 E2E에서 발견: Claude Sonnet이 응답에 `scenario_analysis` 등 종종 누락 → Pydantic 검증 실패 → Refused fallback
+   - 모든 신규 페르소나 모델에 `Field(default_factory=...)` 추가
+   - 임시 방어책 — 근본 해결은 §6 backlog (페르소나 시스템 프롬프트 강화)
+
+### 3단계 검증 결과
+
+| 단계 | 결과 |
+|------|------|
+| 1. `next build` | ✅ Compiled successfully + TypeScript clean (15 라우트 정적/동적) |
+| 2. Chrome DevTools mock 렌더 | ✅ 데스크톱 + 모바일(375x812) 풀 렌더, 콘솔 에러 0건, 5각형 차트 + 4 사이클 게이지 + 4차원 배지 정상, a11y tab role + alt text |
+| 3. 풀 E2E (FastAPI uvicorn + 실 Sonnet) | ✅ SSE 시퀀스 (start → event_complete → complete) 정확, 실 LLM 응답 mode=Full Analysis / final_score=8.8 / sample_size=11 |
+
+전체 회귀: **645 PASS / 18 skipped(integration)**.
+
+---
+
 ## ✅ Week E 종료 — Axis v2 베타 출시 준비 완료
 
 **5일 누적 (Week E)**:
