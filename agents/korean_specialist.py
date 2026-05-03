@@ -56,7 +56,8 @@ class KoreanSpecialistResult(BaseModel):
     value_up_analysis: dict[str, Any] = Field(default_factory=dict)
     theme_cycle_analysis: dict[str, Any] = Field(default_factory=dict)
     policy_risk_analysis: dict[str, Any] = Field(default_factory=dict)
-    korea_specific_score: KoreaSpecificScore
+    # LLM 누락 시 검증 실패 회피 — run() 후처리에서 weighted_total 재계산.
+    korea_specific_score: KoreaSpecificScore = Field(default_factory=KoreaSpecificScore)
     what_to_watch_korea_specific: list[str] = Field(default_factory=list)
     summary_neutral: str = ""
     persona: str = "korean"

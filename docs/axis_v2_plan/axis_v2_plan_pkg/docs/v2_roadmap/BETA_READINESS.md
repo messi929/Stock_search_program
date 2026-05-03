@@ -196,6 +196,14 @@ py -m tests.regression.test_60_cases --real
 - `test_60_cases.py`에 `--persona-filter` / `--ticker-filter` / `--smoke` 옵션 추가
   (현재는 풀 60건만 실행 가능 — Stage 1/2 검증을 위해 필터 필요)
 
+- **페르소나 시스템 프롬프트 강화** — 풀 E2E (2026-05-03) 검증에서 발견:
+  Claude Sonnet이 응답 JSON에 `scenario_analysis` / `reference_observation_zones` /
+  `summary_neutral` 필드를 종종 누락. Pydantic default로 검증은 통과하지만 사용자에게
+  빈 카드 영역이 노출됨.
+  - 대응 1 (적용됨): Pydantic 모델에 `Field(default_factory=...)` 추가하여 검증 회피
+  - 대응 2 (backlog): `personas/event.md` user_message 템플릿에 "위 3 필드는 빠짐없이
+    채울 것" 강제 명시, max_tokens 추가 여유, prefill 사용 검토
+
 ### 중간 우선순위
 
 - Strategist Sonnet 다운그레이드 검증 (60건 품질 비교, 절감 80%)

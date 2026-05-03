@@ -47,10 +47,10 @@ class CycleStage(BaseModel):
 
 
 class CycleAnalysis(BaseModel):
-    interest_rate: CycleStage
-    business_cycle: CycleStage
-    currency_cycle: CycleStage
-    inflation_cycle: CycleStage
+    interest_rate: CycleStage = Field(default_factory=CycleStage)
+    business_cycle: CycleStage = Field(default_factory=CycleStage)
+    currency_cycle: CycleStage = Field(default_factory=CycleStage)
+    inflation_cycle: CycleStage = Field(default_factory=CycleStage)
 
 
 class MacroRegime(BaseModel):
@@ -81,12 +81,13 @@ class WeightingUsed(BaseModel):
 
 
 class MacroPmResult(BaseModel):
-    macro_regime: MacroRegime
-    cycle_analysis: CycleAnalysis
+    # LLM 누락 시 검증 실패 회피 — run() 후처리에서 정량 결과로 강제 보정.
+    macro_regime: MacroRegime = Field(default_factory=MacroRegime)
+    cycle_analysis: CycleAnalysis = Field(default_factory=CycleAnalysis)
     regime_implications: dict[str, Any] = Field(default_factory=dict)
     transition_signals_to_monitor: list[TransitionSignal] = Field(default_factory=list)
     stock_specific_analysis: Optional[StockMacroAlignment] = None
-    weighting_used: WeightingUsed
+    weighting_used: WeightingUsed = Field(default_factory=WeightingUsed)
     summary_neutral: str = ""
     persona: str = "macro"
     timestamp: str = ""

@@ -97,22 +97,27 @@ class ScenarioCase(BaseModel):
 
 
 class ScenarioAnalysis(BaseModel):
-    bullish_case: ScenarioCase
-    base_case: ScenarioCase
-    bearish_case: ScenarioCase
+    bullish_case: ScenarioCase = Field(default_factory=ScenarioCase)
+    base_case: ScenarioCase = Field(default_factory=ScenarioCase)
+    bearish_case: ScenarioCase = Field(default_factory=ScenarioCase)
 
 
 class EventAnalystResult(BaseModel):
-    ticker: str
-    market: str
+    # ticker/market은 입력에서 강제 보정되므로 default 제공 (Claude 누락 시 검증 실패 회피).
+    ticker: str = ""
+    market: str = ""
     event_summary: EventSummary
-    impact_mapping: ImpactMapping
-    volume_supply_analysis: SignalBlock
-    options_signals: SignalBlock
-    credit_short_signals: SignalBlock
-    historical_statistics: HistoricalStatistics
-    reference_observation_zones: ReferenceZones
-    scenario_analysis: ScenarioAnalysis
+    impact_mapping: ImpactMapping = Field(default_factory=ImpactMapping)
+    volume_supply_analysis: SignalBlock = Field(default_factory=SignalBlock)
+    options_signals: SignalBlock = Field(default_factory=SignalBlock)
+    credit_short_signals: SignalBlock = Field(default_factory=SignalBlock)
+    historical_statistics: HistoricalStatistics = Field(
+        default_factory=HistoricalStatistics
+    )
+    reference_observation_zones: ReferenceZones = Field(
+        default_factory=ReferenceZones
+    )
+    scenario_analysis: ScenarioAnalysis = Field(default_factory=ScenarioAnalysis)
     key_risks: list[str] = Field(default_factory=list)
     what_to_watch: list[str] = Field(default_factory=list)
     summary_neutral: str = ""
