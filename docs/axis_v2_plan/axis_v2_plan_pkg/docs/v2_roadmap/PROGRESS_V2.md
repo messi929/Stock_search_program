@@ -1,7 +1,77 @@
 # Axis v2 — 6 Persona Expansion 진척 기록
 
 > **브랜치**: `feature/v2-six-personas` (axis-ai-layer에서 분기, 2026-05-02)
-> **현재 위치**: Week E 종료 (2026-05-03) — 베타 출시 준비 완료
+> **현재 위치**: 베타 출시 준비 완료 — 배포는 GCP 결제 복구 대기 중 (2026-05-14 코드 작업 추가)
+
+---
+
+## 📅 2026-05-14 — 결제 차단 중 코드 작업 (B/C/A/D)
+
+GCP 프로젝트 `all-of-asset` 결제 비활성화로 Secret Manager·Cloud Run 배포가
+전면 차단된 상태. 배포 의존 없이 가능한 코드 작업 4건을 진행.
+origin push 완료 (`a50bd36..b87b5d9`, 4 commit).
+
+### B — 페르소나 응답 필드 누락 근본 해결 (`1eb6140`)
+
+3단계 풀 E2E(2026-05-03)에서 발견된 문제: Claude Sonnet이 `scenario_analysis`/
+`summary_neutral` 등을 누락 → Pydantic `default_factory`로 검증은 통과하나
+사용자에게 빈 카드 노출. `default_factory`가 `call_claude_json`의 재시도 경로를
+죽인 것이 근본 원인.
+
+| 계층 | 내용 |
+|------|------|
+| 1. 프롬프트 강화 | `personas/{event,macro,korean}.md` 끝에 "필수 필드 누락 금지" 체크리스트 + user_message 출력 지시 보강 |
+| 2. max_tokens 여유 | event 2500→3500, macro/korean 2200→3000 (`summary_neutral`이 항상 마지막 필드 → 출력 잘림이 주원인) |
+| 3. 완전성 재시도 | `BaseAgent.call_claude_json`에 `completeness_check` 콜백 — 검증 통과 후에도 핵심 필드가 비면 1회 재요청, 재시도 후에도 누락이면 graceful 반환. `check_{event,macro,korean}_completeness` 함수 추가 |
+
+테스트: 신규 15건 (`test_base.py` 4 + 에이전트별 완전성 검사 11).
+
+### C — 60건 회귀 테스트 부분 실행 필터 (`70580ec`)
+
+`tests/regression/test_60_cases.py`에 `--smoke` / `--persona-filter` /
+`--ticker-filter` 추가 — 결제 복구 후 BETA_READINESS §5 Stage 1/2 단계 검증용.
+필터 로직을 `resolve_matrix` 순수 함수로 분리. Windows cp949 콘솔 이모지
+`UnicodeEncodeError`도 함께 수정. 테스트: 신규 8건.
+
+### A — v7.5 추천 어휘 소스 중립화 ("녹이자", `ef327d8`)
+
+v7.5와 Axis는 하나의 서비스(Axis가 차기 버전)라는 결정에 따라, v7.5 레이어의
+매수 권유 어휘를 **소스에서** Axis "추천 금지" 원칙에 맞게 중립화. 조사 결과
+Axis 레이어(agents/personas/web)는 이미 중립이었고 v7.5 소스만 대상.
+
+- `metrics.py`: `buy_grade`를 중립 구간 라벨(상위/준상위/중간/관찰)로 직접 산출
+- `screener.py`: 카테고리명 6건 중립화 (성장주 매수→성장주, 종합 추천→종합 분석 등)
+- v7.5 라이브 UI: `index.html`("TOP 픽"→"주목 종목", "매수 포인트"→"관찰 포인트"),
+  `pricing.html`, `rank_page.py`, `admin_routes.py`, `backtest.py`
+- `analyst.py` 변환 규칙 갱신, `columnMeta.ts`/`legal-labels.ts`는 전환기 안전망
+  (서로 불일치하던 매핑도 통일: 관심→중간, 관망→관찰)
+- 문서 9건 갱신 (ARCHITECTURE/CATEGORY_FILTERS/TODO + axis/ 진행 문서)
+
+### D — EDGAR ticker→CIK 자동 매핑 (`b87b5d9`)
+
+`weekly_event_calendar_sync`가 `cik_lookup`을 구축하지 않아 EDGAR 8-K 수집이
+영구 skip되던 문제 해결. `EdgarClient.fetch_ticker_to_cik()` 추가 — SEC 공식
+`company_tickers.json`에서 ticker→CIK 자동 매핑(수동 dict 불필요). `main()`이
+`build_cik_lookup()`로 자동 구축, `--no-edgar`로 명시적 skip. 테스트: 신규 10건.
+
+### 검증 결과
+
+| 항목 | 결과 |
+|------|------|
+| pytest 전체 회귀 | ✅ **678 PASS / 18 skipped** (645 → 678, 신규 33건) |
+| `scripts/legal_check.py` | ✅ 94 파일 0 위반 |
+| `next build` | ✅ Compiled + TypeScript clean, 15 라우트 (stale `.next/dev` 캐시 제거 후) |
+| 프론트엔드 런타임 (Chrome DevTools) | ✅ dev 서버 부팅, 홈/로그인 콘솔 에러 0건, `/screener` 인증 게이트 정상 동작 |
+| `fmtBuyGradeNeutral` 전환 로직 | ✅ Chrome DevTools `evaluate_script` 10/10 케이스 통과 (신규 통과 / 구버전 보정 / 빈값·미지값) |
+
+**검증 한계**: 스테이징 백엔드(`axis-staging`)가 결제 차단으로 503 + `/screener`
+인증 게이트 → 데이터 연동 스크리너 페이지의 실 렌더 검증은 결제 복구 후로 보류.
+순수 함수 로직 + 빌드 + 타입체크는 검증 완료.
+
+### 남은 단일 차단점
+
+GCP 결제 복구 → Secret 등록 → Cloud Run 배포 → 실 분석 검증(Stage 1→2→3)
+→ main 머지. 결제 외 코드 작업은 모두 완료.
 
 ---
 
@@ -295,7 +365,7 @@ gcloud scheduler jobs create http weekly-events --schedule="0 13 * * 0" --time-z
 
 | TODO | 우선순위 | 작업량 |
 |------|---------|--------|
-| EDGAR ticker→CIK 매핑 자동 빌드 (현재 cik_lookup 수동 주입) | 🟡 중 | 2h |
+| ~~EDGAR ticker→CIK 매핑 자동 빌드~~ | ✅ 완료 (2026-05-14, D) | — |
 | KRX 코스피200 옵션 IV/PCR 보조 (yfinance VKOSPI는 시장 전체) | 🟡 중 | 3h |
 | upcoming_ipo.json 월 1회 갱신 SOP 문서화 | 🟢 저 | 30m |
 | Claude API 비용 monitoring (event_inference 호출 추적) | 🟠 높 (운영 전) | 1h |
