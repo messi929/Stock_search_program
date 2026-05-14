@@ -11,11 +11,14 @@ WEEK_C.md Day 5 산출물.
 ⚠️ 의존성:
   - DART_API_KEY, EDGAR_USER_AGENT 환경변수 필수
   - 미설정 시 해당 소스만 skip (다른 소스는 정상 진행)
+  - ticker → CIK 매핑은 SEC 공식 company_tickers.json에서 자동 구축
+    (수동 dict 불필요. EDGAR_USER_AGENT만 있으면 됨)
 
 사용 예:
   python -m jobs.weekly_event_calendar_sync --dry-run
   python -m jobs.weekly_event_calendar_sync --kr-tickers 005930,373220
   python -m jobs.weekly_event_calendar_sync --us-tickers AAPL,RKLB --window-days 14
+  python -m jobs.weekly_event_calendar_sync --no-edgar   # KR/yfinance만
 """
 
 from __future__ import annotations
@@ -251,6 +254,31 @@ def collect_us_events(
     _save_records(db, US_EVENTS_COLLECTION, records, stats)
 
 
+def build_cik_lookup(us_tickers: list[str]) -> dict[str, str]:
+    """US 티커 → CIK 매핑을 SEC 공식 company_tickers.json에서 자동 구축.
+
+    수동 cik_lookup dict 유지가 불필요. EDGAR_USER_AGENT 미설정 또는
+    네트워크 오류 시 빈 dict 반환 (EDGAR 8-K 단계는 graceful skip).
+    """
+    if not us_tickers:
+        return {}
+    if not os.environ.get("EDGAR_USER_AGENT"):
+        logger.warning("EDGAR_USER_AGENT 미설정 — CIK 자동 매핑 skip")
+        return {}
+    try:
+        from utils.data_collectors.edgar_collector import EdgarClient
+
+        client = EdgarClient()
+        lookup = client.fetch_ticker_to_cik(us_tickers)
+        logger.info(f"CIK 자동 매핑: {len(lookup)}/{len(us_tickers)}종목")
+        return lookup
+    except Exception as e:
+        logger.warning(
+            f"CIK 자동 매핑 실패: {type(e).__name__}: {str(e)[:120]}"
+        )
+        return {}
+
+
 def run_weekly_sync(
     *,
     kr_tickers: list[str],
@@ -317,6 +345,11 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Firestore 쓰기 skip",
     )
+    parser.add_argument(
+        "--no-edgar",
+        action="store_true",
+        help="EDGAR 8-K 단계 skip (CIK 자동 매핑 생략 — KR/yfinance만 수집)",
+    )
     args = parser.parse_args(argv)
 
     kr = (
@@ -330,10 +363,14 @@ def main(argv: list[str] | None = None) -> int:
         else list(DEFAULT_US_TICKERS)
     )
 
+    # ticker → CIK 매핑을 SEC 공식 데이터에서 자동 구축 (--no-edgar 시 생략).
+    cik_lookup = {} if args.no_edgar else build_cik_lookup(us)
+
     run_weekly_sync(
         kr_tickers=kr,
         us_tickers=us,
         window_days=args.window_days,
+        cik_lookup=cik_lookup,
         dry_run=args.dry_run,
     )
     return 0

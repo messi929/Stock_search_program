@@ -10,6 +10,7 @@ from jobs import daily_options_collect, weekly_event_calendar_sync
 from jobs.daily_options_collect import _DryRunDb, run_daily_options
 from jobs.weekly_event_calendar_sync import (
     _DryRunDb as _WeeklyDryRunDb,
+    build_cik_lookup,
     run_weekly_sync,
 )
 
@@ -205,3 +206,48 @@ def test_weekly_sync_dry_run_no_db_writes():
     )
     assert summary["dry_run"] is True
     assert summary["docs_written"] == 0
+
+
+# ──────────────────────────────────────────────
+# 3. build_cik_lookup — SEC company_tickers.json 자동 매핑
+# ──────────────────────────────────────────────
+
+
+def test_build_cik_lookup_skips_when_no_user_agent(monkeypatch):
+    """EDGAR_USER_AGENT 미설정 → 빈 dict (graceful skip)."""
+    monkeypatch.delenv("EDGAR_USER_AGENT", raising=False)
+    assert build_cik_lookup(["AAPL", "MSFT"]) == {}
+
+
+def test_build_cik_lookup_empty_tickers(monkeypatch):
+    """us_tickers 비어있으면 네트워크 호출 없이 빈 dict."""
+    monkeypatch.setenv("EDGAR_USER_AGENT", "Axis <ops@example.com>")
+    assert build_cik_lookup([]) == {}
+
+
+def test_build_cik_lookup_uses_edgar_client(monkeypatch):
+    """EDGAR_USER_AGENT 있으면 EdgarClient.fetch_ticker_to_cik 결과 반환."""
+    monkeypatch.setenv("EDGAR_USER_AGENT", "Axis <ops@example.com>")
+
+    fake_client = MagicMock()
+    fake_client.fetch_ticker_to_cik = MagicMock(
+        return_value={"AAPL": "320193", "RKLB": "1535527"}
+    )
+    with patch(
+        "utils.data_collectors.edgar_collector.EdgarClient",
+        return_value=fake_client,
+    ):
+        lookup = build_cik_lookup(["AAPL", "RKLB"])
+
+    assert lookup == {"AAPL": "320193", "RKLB": "1535527"}
+    fake_client.fetch_ticker_to_cik.assert_called_once_with(["AAPL", "RKLB"])
+
+
+def test_build_cik_lookup_graceful_on_error(monkeypatch):
+    """EdgarClient 예외 발생 시 빈 dict (8-K 단계만 skip, Job은 계속)."""
+    monkeypatch.setenv("EDGAR_USER_AGENT", "Axis <ops@example.com>")
+    with patch(
+        "utils.data_collectors.edgar_collector.EdgarClient",
+        side_effect=RuntimeError("network down"),
+    ):
+        assert build_cik_lookup(["AAPL"]) == {}

@@ -33,6 +33,8 @@ from loguru import logger
 
 
 EDGAR_BASE = "https://data.sec.gov"
+# SEC 공식 전체 상장사 ticker↔CIK 매핑 (www.sec.gov, data.sec.gov와 다른 호스트)
+SEC_COMPANY_TICKERS_URL = "https://www.sec.gov/files/company_tickers.json"
 DEFAULT_RATE_LIMIT_SEC = 0.15  # ~6.7 req/sec (SEC 권장 10 이내, 보수적)
 
 
@@ -129,6 +131,67 @@ class EdgarClient:
         if not s.isdigit():
             raise ValueError(f"잘못된 CIK: {cik!r}")
         return s.zfill(10)
+
+    def fetch_ticker_to_cik(
+        self, tickers: list[str] | None = None
+    ) -> dict[str, str]:
+        """SEC 공식 company_tickers.json → {TICKER: CIK} 매핑.
+
+        SEC가 공개하는 전체 상장사 ticker↔CIK 매핑을 1회 다운로드한다.
+        weekly_event_calendar_sync의 수동 cik_lookup dict 유지가 불필요해진다.
+
+        Args:
+            tickers: 지정 시 해당 티커만 필터링하여 반환 (대소문자 무관).
+                     None이면 전체 매핑 반환.
+
+        Returns:
+            {"AAPL": "320193", ...}. 네트워크/포맷 오류 시 빈 dict.
+        """
+        self.stats.total_calls += 1
+        try:
+            r = self._http.get(SEC_COMPANY_TICKERS_URL, headers=self._headers())
+            if r.status_code == 403:
+                self.stats.failed_calls += 1
+                logger.error(
+                    "EDGAR 403 (company_tickers) — User-Agent 차단 가능성. "
+                    f"현재 UA: {self.user_agent!r}"
+                )
+                self._sleep()
+                return {}
+            r.raise_for_status()
+            data = r.json()
+        except Exception as e:
+            self.stats.failed_calls += 1
+            logger.warning(
+                f"company_tickers.json 호출 실패: "
+                f"{type(e).__name__}: {str(e)[:160]}"
+            )
+            self._sleep()
+            return {}
+
+        self.stats.successful_calls += 1
+        self._sleep()
+
+        # SEC 포맷: {"0": {"cik_str": 320193, "ticker": "AAPL", "title": "..."}, ...}
+        mapping: dict[str, str] = {}
+        for entry in (data or {}).values():
+            try:
+                t = str(entry["ticker"]).strip().upper()
+                cik = str(entry["cik_str"]).strip()
+            except (KeyError, TypeError):
+                continue
+            if t and cik:
+                mapping[t] = cik
+
+        if tickers is not None:
+            wanted = {t.strip().upper() for t in tickers}
+            missing = wanted - mapping.keys()
+            if missing:
+                logger.warning(
+                    f"company_tickers.json에 없는 티커: {sorted(missing)}"
+                )
+            return {t: mapping[t] for t in wanted if t in mapping}
+        return mapping
 
     def fetch_submissions(self, cik: str | int) -> dict[str, Any]:
         """submissions JSON 조회 (최근 1000건).

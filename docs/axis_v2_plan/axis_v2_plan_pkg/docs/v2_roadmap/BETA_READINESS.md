@@ -80,9 +80,10 @@
    - 미적재 시 graceful — Claude가 정성 분석으로 fallback (수치 추정 X)
    - 운영 시 Cloud Run Job 일일 06:00 KST `jobs/daily_macro_collect.py` 실행 필요
 
-3. **EDGAR 자동화 부분 — CIK 매핑 수동**
-   - `jobs/weekly_event_calendar_sync.py`는 cik_lookup dict가 필요
-   - 추후 Backlog: SEC ticker_to_cik 매핑 자동 빌드
+3. ~~**EDGAR 자동화 부분 — CIK 매핑 수동**~~ — ✅ **해결 (2026-05-14)**
+   - `EdgarClient.fetch_ticker_to_cik()` 추가 — SEC 공식 company_tickers.json에서
+     ticker→CIK 자동 매핑. `weekly_event_calendar_sync.main()`이 `build_cik_lookup()`로
+     자동 구축. 수동 dict 불필요. `--no-edgar`로 명시적 skip 가능.
 
 4. **upcoming_ipo.json 수동 큐레이션**
    - 5건 초기 등록 (SpaceX/Stripe/Databricks/케이뱅크/LG CNS)
@@ -196,19 +197,27 @@ py -m tests.regression.test_60_cases --real
 - `test_60_cases.py`에 `--persona-filter` / `--ticker-filter` / `--smoke` 옵션 추가
   (현재는 풀 60건만 실행 가능 — Stage 1/2 검증을 위해 필터 필요)
 
-- **페르소나 시스템 프롬프트 강화** — 풀 E2E (2026-05-03) 검증에서 발견:
-  Claude Sonnet이 응답 JSON에 `scenario_analysis` / `reference_observation_zones` /
-  `summary_neutral` 필드를 종종 누락. Pydantic default로 검증은 통과하지만 사용자에게
-  빈 카드 영역이 노출됨.
+- ~~**페르소나 시스템 프롬프트 강화**~~ — ✅ **완료 (2026-05-14)**. 풀 E2E
+  (2026-05-03) 검증에서 발견: Claude Sonnet이 응답 JSON에 `scenario_analysis` /
+  `reference_observation_zones` / `summary_neutral` 필드를 종종 누락. Pydantic
+  default로 검증은 통과하지만 사용자에게 빈 카드 영역이 노출됨.
   - 대응 1 (적용됨): Pydantic 모델에 `Field(default_factory=...)` 추가하여 검증 회피
-  - 대응 2 (backlog): `personas/event.md` user_message 템플릿에 "위 3 필드는 빠짐없이
-    채울 것" 강제 명시, max_tokens 추가 여유, prefill 사용 검토
+  - 대응 2 (적용됨, 2026-05-14): 3계층 근본 해결
+    1. 프롬프트 강화 — `personas/{event,macro,korean}.md` 끝에 "필수 필드 누락 금지"
+       체크리스트 + 각 에이전트 user_message 출력 지시 보강
+    2. max_tokens 여유 — event 2500→3500, macro/korean 2200→3000 (잘림 방지;
+       `summary_neutral`이 항상 마지막 필드라 잘림이 누락의 주원인)
+    3. 완전성 재시도 — `BaseAgent.call_claude_json`에 `completeness_check` 콜백
+       추가. default_factory가 죽여버린 재시도 경로를 부활 — 핵심 필드가 비면
+       1회 재요청, 재시도 후에도 누락이면 graceful 반환. 각 에이전트에
+       `check_{event,macro,korean}_completeness` 함수 추가.
+  - 검증: pytest 660 PASS (신규 15건). 실 API 검증은 결제 복구 후 Stage 1/2에서.
 
 ### 중간 우선순위
 
 - Strategist Sonnet 다운그레이드 검증 (60건 품질 비교, 절감 80%)
 - 페르소나별 Firestore 캐시 (research/analyst/validator 재사용 → Strategist만 페르소나 수만큼 호출)
-- EDGAR ticker→CIK 자동 매핑
+- ~~EDGAR ticker→CIK 자동 매핑~~ — ✅ 완료 (2026-05-14, §3-3 참조)
 
 ### 낮은 우선순위 (Phase 2)
 

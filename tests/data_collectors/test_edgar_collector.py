@@ -228,3 +228,66 @@ def test_critical_items_present():
     """주요 8-K 코드는 모두 분류되어야 함."""
     for code in ("1.01", "2.01", "2.02", "5.02", "8.01", "9.01"):
         assert code in EIGHT_K_ITEM_CATEGORY
+
+
+# ──────────────────────────────────────────────
+# 7. fetch_ticker_to_cik — SEC company_tickers.json
+# ──────────────────────────────────────────────
+
+
+_COMPANY_TICKERS_PAYLOAD = {
+    "0": {"cik_str": 320193, "ticker": "AAPL", "title": "Apple Inc."},
+    "1": {"cik_str": 789019, "ticker": "MSFT", "title": "Microsoft Corp"},
+    "2": {"cik_str": 1535527, "ticker": "RKLB", "title": "Rocket Lab USA"},
+}
+
+
+def _client_with(payload, status=200):
+    fake_http = MagicMock()
+    fake_http.get = MagicMock(return_value=_mock_response_json(payload, status))
+    return EdgarClient(
+        user_agent="Axis <ops@example.com>", rate_limit_sec=0, http_client=fake_http
+    )
+
+
+def test_fetch_ticker_to_cik_full_mapping():
+    client = _client_with(_COMPANY_TICKERS_PAYLOAD)
+    mapping = client.fetch_ticker_to_cik()
+    assert mapping == {"AAPL": "320193", "MSFT": "789019", "RKLB": "1535527"}
+
+
+def test_fetch_ticker_to_cik_filtered_case_insensitive():
+    client = _client_with(_COMPANY_TICKERS_PAYLOAD)
+    mapping = client.fetch_ticker_to_cik(["aapl", "RKLB"])
+    assert mapping == {"AAPL": "320193", "RKLB": "1535527"}
+
+
+def test_fetch_ticker_to_cik_missing_ticker_returns_others():
+    """매핑에 없는 티커는 누락 — 나머지는 정상 반환."""
+    client = _client_with(_COMPANY_TICKERS_PAYLOAD)
+    mapping = client.fetch_ticker_to_cik(["AAPL", "NOTREAL"])
+    assert mapping == {"AAPL": "320193"}
+
+
+def test_fetch_ticker_to_cik_handles_403():
+    client = _client_with({}, status=403)
+    assert client.fetch_ticker_to_cik() == {}
+    assert client.stats.failed_calls == 1
+
+
+def test_fetch_ticker_to_cik_handles_network_error():
+    fake_http = MagicMock()
+    fake_http.get = MagicMock(side_effect=RuntimeError("connection reset"))
+    client = EdgarClient(
+        user_agent="Axis <ops@example.com>", rate_limit_sec=0, http_client=fake_http
+    )
+    assert client.fetch_ticker_to_cik(["AAPL"]) == {}
+    assert client.stats.failed_calls == 1
+
+
+def test_fetch_ticker_to_cik_cik_feeds_fetch_recent_8k():
+    """fetch_ticker_to_cik가 돌려준 CIK가 fetch_recent_8k에 그대로 쓰일 수 있어야 함."""
+    client = _client_with(_COMPANY_TICKERS_PAYLOAD)
+    cik = client.fetch_ticker_to_cik(["AAPL"])["AAPL"]
+    # _normalize_cik이 받아들이는 형식인지 (예외 없이 10자리 패딩)
+    assert EdgarClient._normalize_cik(cik) == "0000320193"
