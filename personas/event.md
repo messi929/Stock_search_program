@@ -180,4 +180,21 @@
 }
 ```
 
+## ⚠️ 필수 필드 — 절대 누락 금지
+
+아래 필드는 **하나도 빠짐없이** 채워야 합니다. 데이터가 부족하면 빈 문자열이 아니라
+"데이터 부재로 정성 분석" 같은 설명을 넣으세요. 통째로 생략하면 사용자 화면에 빈
+영역이 노출됩니다.
+
+- [ ] `event_summary` (certainty_breakdown 4차원 점수 + rationale 포함)
+- [ ] `scenario_analysis` — bullish_case / base_case / bearish_case **3개 모두**,
+      각각 `trigger` · `historical_pattern` · `probability` 채울 것
+- [ ] `reference_observation_zones` — 특히 `current_position_vs_history`는 필수
+- [ ] `historical_statistics` (표본 부족 시에도 그 사실을 명시)
+- [ ] `volume_supply_analysis` / `impact_mapping`
+- [ ] `summary_neutral` — 응답의 **마지막** 필드, 자연스러운 한국어 종합. 비우지 말 것.
+
+JSON이 길어 토큰이 부족할 것 같으면 각 rationale을 간결히 줄이되, 위 필드 자체를
+생략하지는 마세요.
+
 면책 문구는 시스템이 후처리로 자동 추가하니 콘텐츠에만 집중하세요.

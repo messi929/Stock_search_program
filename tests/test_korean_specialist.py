@@ -14,6 +14,7 @@ from agents.korean_specialist import (
     KoreanSpecialistResult,
     WEIGHTS,
     calculate_weighted_total,
+    check_korean_completeness,
 )
 
 
@@ -228,3 +229,46 @@ def test_persona_md_loads():
     assert "Korean Market Specialist" in agent.system_prompt
     assert "외국인" in agent.system_prompt
     assert "밸류업" in agent.system_prompt
+    # 필수 필드 누락 금지 섹션 (B 작업)
+    assert "필수 필드" in agent.system_prompt
+
+
+# ──────────────────────────────────────────────
+# 5. 완전성 검사 — check_korean_completeness
+# ──────────────────────────────────────────────
+
+
+def test_completeness_full_response_returns_empty():
+    result = KoreanSpecialistResult.model_validate(_minimal_korean_response())
+    assert check_korean_completeness(result) == []
+
+
+def test_completeness_detects_missing_summary():
+    response = _minimal_korean_response()
+    response["summary_neutral"] = ""
+    result = KoreanSpecialistResult.model_validate(response)
+    assert "summary_neutral" in check_korean_completeness(result)
+
+
+def test_completeness_detects_missing_score():
+    """korea_specific_score 통째 누락 — 5변수 0 + interpretation 빈 값."""
+    response = _minimal_korean_response()
+    del response["korea_specific_score"]
+    result = KoreanSpecialistResult.model_validate(response)
+    assert "korea_specific_score" in check_korean_completeness(result)
+
+
+def test_completeness_detects_missing_analysis_blocks():
+    """6개 분석 블록 전부 누락."""
+    response = _minimal_korean_response()
+    for key in (
+        "korea_specific_analysis",
+        "foreign_supply_analysis",
+        "chaebol_structure_analysis",
+        "value_up_analysis",
+        "theme_cycle_analysis",
+        "policy_risk_analysis",
+    ):
+        del response[key]
+    result = KoreanSpecialistResult.model_validate(response)
+    assert "korea_specific_analysis" in check_korean_completeness(result)

@@ -17,6 +17,7 @@ from agents.event_analyst import (
     EventAnalystInput,
     EventAnalystResult,
     calculate_final_score,
+    check_event_completeness,
     determine_mode,
     is_kr_ticker,
 )
@@ -386,3 +387,38 @@ def test_persona_md_loads_with_legal_rules():
     assert "summary_neutral" in agent.system_prompt
     assert "scenario_analysis" in agent.system_prompt
     assert "current_position_vs_history" in agent.system_prompt
+    # 필수 필드 누락 금지 섹션 (B 작업)
+    assert "필수 필드" in agent.system_prompt
+
+
+# ──────────────────────────────────────────────
+# 7. 완전성 검사 — check_event_completeness
+# ──────────────────────────────────────────────
+
+
+def test_completeness_full_response_returns_empty():
+    """모든 핵심 필드가 채워진 응답은 누락 없음."""
+    result = EventAnalystResult.model_validate(_minimal_response_dict())
+    assert check_event_completeness(result) == []
+
+
+def test_completeness_detects_missing_summary():
+    response = _minimal_response_dict()
+    response["summary_neutral"] = "   "
+    result = EventAnalystResult.model_validate(response)
+    assert "summary_neutral" in check_event_completeness(result)
+
+
+def test_completeness_detects_missing_scenario_analysis():
+    """scenario_analysis 통째 누락 — default_factory로 검증은 통과하나 빈 카드."""
+    response = _minimal_response_dict()
+    del response["scenario_analysis"]
+    result = EventAnalystResult.model_validate(response)
+    assert "scenario_analysis" in check_event_completeness(result)
+
+
+def test_completeness_detects_missing_reference_zones():
+    response = _minimal_response_dict()
+    response["reference_observation_zones"]["current_position_vs_history"] = ""
+    result = EventAnalystResult.model_validate(response)
+    assert "reference_observation_zones" in check_event_completeness(result)

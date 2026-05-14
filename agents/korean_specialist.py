@@ -65,6 +65,48 @@ class KoreanSpecialistResult(BaseModel):
 
 
 # ──────────────────────────────────────────────
+# 완전성 검사 — Claude 응답 필드 누락 탐지
+# ──────────────────────────────────────────────
+
+
+def check_korean_completeness(result: KoreanSpecialistResult) -> list[str]:
+    """default_factory로 검증 통과하는 핵심 필드의 실질 누락 탐지.
+
+    반환 리스트가 비어있지 않으면 call_claude_json이 1회 재요청한다.
+    """
+    missing: list[str] = []
+
+    if not result.summary_neutral.strip():
+        missing.append("summary_neutral")
+
+    s = result.korea_specific_score
+    if not s.interpretation.strip() and not any(
+        (
+            s.foreign_supply,
+            s.governance,
+            s.valueup_alignment,
+            s.theme_position,
+            s.policy_friendliness,
+        )
+    ):
+        missing.append("korea_specific_score")
+
+    if not any(
+        (
+            result.korea_specific_analysis,
+            result.foreign_supply_analysis,
+            result.chaebol_structure_analysis,
+            result.value_up_analysis,
+            result.theme_cycle_analysis,
+            result.policy_risk_analysis,
+        )
+    ):
+        missing.append("korea_specific_analysis")
+
+    return missing
+
+
+# ──────────────────────────────────────────────
 # 가중 평균 (5변수 → weighted_total)
 # ──────────────────────────────────────────────
 
@@ -130,13 +172,14 @@ class KoreanSpecialistAgent(BaseAgent):
         # 1) Week A 데이터 수집
         bundle = self._collect_korea_bundle(ticker)
 
-        # 2) user message + Claude
+        # 2) user message + Claude (JSON 파싱 + Pydantic 검증 + 완전성 재시도)
         user_message = self._build_user_message(input_data, bundle)
         result, _raw = await self.call_claude_json(
             user_message=user_message,
             schema=KoreanSpecialistResult,
-            max_tokens=2200,
+            max_tokens=3000,
             uid=uid,
+            completeness_check=check_korean_completeness,
         )
 
         # 3) 메타 보정
@@ -352,6 +395,7 @@ class KoreanSpecialistAgent(BaseAgent):
             "\n# 출력 지시\n"
             "위 데이터로 시스템 프롬프트 JSON 스키마에 맞춰 응답하세요. "
             "각 도메인 점수(0~10)를 정량적으로 매기고, weighted_total은 시스템이 후처리로 재계산하니 비워두거나 추정만 적으세요. "
+            "6개 분석 블록·korea_specific_score·summary_neutral은 **반드시** 채울 것 (생략 시 빈 카드 노출). "
             "단정어 사용 금지 — '관찰', '통상 패턴' 등 중립 표현만. "
             "거버넌스는 자체 평가임을 명시 (governance_disclaimer 필드 채울 것). "
             "수치는 위 입력 그대로 사용, 새 수치 만들지 마세요."

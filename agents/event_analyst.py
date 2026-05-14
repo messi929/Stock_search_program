@@ -126,6 +126,35 @@ class EventAnalystResult(BaseModel):
 
 
 # ──────────────────────────────────────────────
+# 완전성 검사 — Claude 응답 필드 누락 탐지
+# ──────────────────────────────────────────────
+
+
+def check_event_completeness(result: EventAnalystResult) -> list[str]:
+    """Claude가 통째로 빠뜨려도 default_factory로 검증 통과하는 핵심 필드 탐지.
+
+    반환 리스트가 비어있지 않으면 call_claude_json이 1회 재요청한다.
+    사용자에게 빈 카드가 노출되는 것을 막기 위한 근본 방어선.
+    """
+    missing: list[str] = []
+
+    if not result.summary_neutral.strip():
+        missing.append("summary_neutral")
+
+    sa = result.scenario_analysis
+    if not any(
+        case.trigger.strip() or case.historical_pattern.strip()
+        for case in (sa.bullish_case, sa.base_case, sa.bearish_case)
+    ):
+        missing.append("scenario_analysis")
+
+    if not result.reference_observation_zones.current_position_vs_history.strip():
+        missing.append("reference_observation_zones")
+
+    return missing
+
+
+# ──────────────────────────────────────────────
 # 모드 분기 (확실성 점수)
 # ──────────────────────────────────────────────
 
@@ -208,12 +237,13 @@ class EventAnalystAgent(BaseAgent):
         # 3) user message 구성
         user_message = self._build_user_message(input_data, bundle)
 
-        # 4) Claude 호출 (JSON 파싱 + Pydantic 검증)
+        # 4) Claude 호출 (JSON 파싱 + Pydantic 검증 + 완전성 재시도)
         result, raw = await self.call_claude_json(
             user_message=user_message,
             schema=EventAnalystResult,
-            max_tokens=2500,
+            max_tokens=3500,
             uid=uid,
+            completeness_check=check_event_completeness,
         )
 
         # 5) 메타 보정 — Claude가 ticker/timestamp를 부정확하게 줄 수 있음
@@ -491,7 +521,8 @@ class EventAnalystAgent(BaseAgent):
             "\n# 출력 지시\n"
             "위 데이터로 시스템 프롬프트 JSON 스키마에 맞춰 응답하세요. "
             "4차원 확실성 점수(source/timing/probability/impact)를 각 0~10으로 산출하고, "
-            "scenario_analysis(bullish/base/bearish)를 반드시 포함하세요. "
+            "scenario_analysis(bullish/base/bearish 3개)·reference_observation_zones·"
+            "summary_neutral을 **반드시** 채우세요 (생략 시 빈 카드 노출). "
             "표본 < 5건이면 historical_statistics에서 통계 미제시(정성만), "
             "5~9면 '표본 부족' 명시. 수치를 새로 만들지 말고 위 입력 그대로 사용."
         )

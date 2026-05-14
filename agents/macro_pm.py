@@ -94,6 +94,37 @@ class MacroPmResult(BaseModel):
 
 
 # ──────────────────────────────────────────────
+# 완전성 검사 — Claude 응답 필드 누락 탐지
+# ──────────────────────────────────────────────
+
+
+def check_macro_completeness(result: MacroPmResult) -> list[str]:
+    """default_factory로 검증 통과하는 핵심 필드의 실질 누락 탐지.
+
+    macro_regime/weighting_used는 run() 후처리에서 정량 결과로 강제 보정되므로
+    여기서는 LLM 고유 산출물인 cycle_analysis와 summary_neutral만 검사.
+    """
+    missing: list[str] = []
+
+    if not result.summary_neutral.strip():
+        missing.append("summary_neutral")
+
+    ca = result.cycle_analysis
+    if not any(
+        cycle.stage.strip()
+        for cycle in (
+            ca.interest_rate,
+            ca.business_cycle,
+            ca.currency_cycle,
+            ca.inflation_cycle,
+        )
+    ):
+        missing.append("cycle_analysis")
+
+    return missing
+
+
+# ──────────────────────────────────────────────
 # 동적 가중치 결정
 # ──────────────────────────────────────────────
 
@@ -159,12 +190,13 @@ class MacroPmAgent(BaseAgent):
         # 3) user message 구성
         user_message = self._build_user_message(input_data, bundle, us_w, kr_w, rationale)
 
-        # 4) Claude 호출
+        # 4) Claude 호출 (JSON 파싱 + Pydantic 검증 + 완전성 재시도)
         result, _raw = await self.call_claude_json(
             user_message=user_message,
             schema=MacroPmResult,
-            max_tokens=2200,
+            max_tokens=3000,
             uid=uid,
+            completeness_check=check_macro_completeness,
         )
 
         # 5) 메타 보정
@@ -309,6 +341,7 @@ class MacroPmAgent(BaseAgent):
             "\n# 출력 지시\n"
             "위 정량 결과를 그대로 사용하여 시스템 프롬프트 JSON 스키마에 맞춰 응답. "
             "regime은 위 정량 결과와 일치해야 하며, 사이클 4축의 stage 단어를 그대로 사용. "
+            "cycle_analysis 4축과 summary_neutral은 **반드시** 채울 것 (생략 시 빈 카드 노출). "
             "weighting_used는 위 정량 가중치 그대로. "
             "단정어 사용 금지 — '관찰', '통상 패턴', '역사적 통계' 등 중립 표현."
         )

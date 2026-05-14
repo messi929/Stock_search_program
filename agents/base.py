@@ -12,7 +12,7 @@ from __future__ import annotations
 import json
 import re
 from abc import ABC, abstractmethod
-from typing import Any
+from typing import Any, Callable
 
 from loguru import logger
 from pydantic import BaseModel
@@ -166,12 +166,21 @@ class BaseAgent(ABC):
         uid: str = "",
         max_retries: int = 1,
         system: str | None = None,
+        completeness_check: Callable[[BaseModel], list[str]] | None = None,
     ) -> tuple[BaseModel, dict]:
         """Claude 호출 + JSON 파싱 + Pydantic 검증.
 
         Sonnet 4.6 등 일부 모델은 assistant prefill을 지원하지 않으므로,
         prefill 없이 user message에 강한 JSON 출력 지시를 추가하여 호환성 확보.
         extract_json()이 ```json 코드 블록과 raw JSON 모두 처리.
+
+        completeness_check:
+            Pydantic 검증 통과 후 실행되는 선택적 콜백. 비어있거나 누락된
+            필수 필드명 리스트를 반환한다 (완전하면 빈 리스트).
+            스키마가 Field(default_factory=...)를 쓰면 Claude가 필드를 통째로
+            빠뜨려도 검증은 통과한다 — 그 경우 사용자에게 빈 카드가 노출되므로,
+            이 콜백이 비어있으면 재시도를 1회 더 유발한다. 재시도 후에도
+            누락이면 graceful하게 (default 채워진) 모델을 반환.
 
         Returns:
             (parsed_model, raw_result) — raw_result는 usage/cached 등 메타.
@@ -221,7 +230,6 @@ class BaseAgent(ABC):
 
             try:
                 model = schema.model_validate(data)
-                return model, result
             except ValueError as e:
                 last_err = e
                 logger.warning(f"[{self.agent_name}] Pydantic 검증 실패: {e}")
@@ -230,6 +238,29 @@ class BaseAgent(ABC):
                         f"{message}\n\n"
                         f"⚠️ 스키마 검증 실패: {e}. {schema.__name__} 정확히 따라 재출력."
                     )
+                continue
+
+            # 검증 통과 — 완전성 체크 (default_factory로 빈 필드가 통과하는 문제 보완)
+            if completeness_check is not None:
+                missing = completeness_check(model)
+                if missing and attempt < max_retries:
+                    logger.warning(
+                        f"[{self.agent_name}] 필수 필드 누락 {missing} — "
+                        f"재요청 (시도 {attempt + 1}/{max_retries + 1})"
+                    )
+                    message = (
+                        f"{message}\n\n"
+                        f"⚠️ 직전 응답에서 다음 필수 필드가 비어있거나 누락됨: "
+                        f"{', '.join(missing)}. {schema.__name__} 스키마의 모든 필드를 "
+                        f"빠짐없이 채워 재출력하세요. 위 필드는 절대 생략 금지."
+                    )
+                    continue
+                if missing:
+                    logger.warning(
+                        f"[{self.agent_name}] 재시도 후에도 필수 필드 누락 {missing} "
+                        f"— graceful 반환"
+                    )
+            return model, result
         raise ValueError(f"[{self.agent_name}] JSON 파싱 재시도 후에도 실패: {last_err}")
 
     @staticmethod

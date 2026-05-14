@@ -131,4 +131,21 @@
 }
 ```
 
+## ⚠️ 필수 필드 — 절대 누락 금지
+
+아래 필드는 **하나도 빠짐없이** 채워야 합니다. 데이터가 부족하면 빈 값이 아니라
+"데이터 부재" 같은 설명을 넣으세요. 통째로 생략하면 사용자 화면에 빈 영역이
+노출됩니다.
+
+- [ ] `korea_specific_analysis` / `foreign_supply_analysis` /
+      `chaebol_structure_analysis` / `value_up_analysis` /
+      `theme_cycle_analysis` / `policy_risk_analysis` — **6개 분석 블록 모두**
+- [ ] `korea_specific_score` — 5변수(foreign_supply / governance /
+      valueup_alignment / theme_position / policy_friendliness) 각 0~10 점수와
+      `interpretation`. weighted_total은 시스템이 재계산하니 0으로 두어도 됨.
+- [ ] `summary_neutral` — 응답의 **마지막** 필드, 자연스러운 한국어 종합. 비우지 말 것.
+
+JSON이 길어 토큰이 부족할 것 같으면 각 interpretation을 간결히 줄이되, 위 필드
+자체를 생략하지는 마세요.
+
 면책 문구는 시스템이 후처리로 자동 추가하니 콘텐츠에만 집중하세요.

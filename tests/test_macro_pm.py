@@ -16,6 +16,7 @@ from agents.macro_pm import (
     MacroRegime,
     StockMacroAlignment,
     WeightingUsed,
+    check_macro_completeness,
     determine_weights,
 )
 
@@ -221,3 +222,30 @@ def test_persona_md_loads():
     assert "Macro PM" in agent.system_prompt
     assert "Goldilocks" in agent.system_prompt
     assert "절대 금지" in agent.system_prompt
+    # 필수 필드 누락 금지 섹션 (B 작업)
+    assert "필수 필드" in agent.system_prompt
+
+
+# ──────────────────────────────────────────────
+# 4. 완전성 검사 — check_macro_completeness
+# ──────────────────────────────────────────────
+
+
+def test_completeness_full_response_returns_empty():
+    result = MacroPmResult.model_validate(_minimal_macro_response())
+    assert check_macro_completeness(result) == []
+
+
+def test_completeness_detects_missing_summary():
+    response = _minimal_macro_response()
+    response["summary_neutral"] = ""
+    result = MacroPmResult.model_validate(response)
+    assert "summary_neutral" in check_macro_completeness(result)
+
+
+def test_completeness_detects_missing_cycle_analysis():
+    """cycle_analysis 통째 누락 — default_factory로 검증은 통과하나 빈 카드."""
+    response = _minimal_macro_response()
+    del response["cycle_analysis"]
+    result = MacroPmResult.model_validate(response)
+    assert "cycle_analysis" in check_macro_completeness(result)
