@@ -13,6 +13,10 @@ WEEK_E.md Day 1-2 산출물.
    - ANTHROPIC_API_KEY + Firestore 연결 필요
    - py -m tests.regression.test_60_cases --real
    - 실제 비용 발생: 6 페르소나 × 10 종목 × 평균 ~200원 ≈ ₩12,000
+   - 부분 실행 필터 (BETA_READINESS §5 Stage 1/2 검증용):
+     · --smoke               Stage 1 — 1건만 (event × RKLB, ~₩200)
+     · --persona-filter a,b  지정 페르소나만
+     · --ticker-filter X,Y   지정 종목만 (예: --persona-filter event --ticker-filter AAPL,005930)
 
 mock 모드는 pytest로 실행, 실 모드는 직접 모듈 실행.
 """
@@ -100,6 +104,81 @@ def test_routing_dispatch(persona, ticker, name, desc):
         assert result == "macro"
     elif persona == "korean":
         assert result == "korean"
+
+
+# ──────────────────────────────────────────────
+# 부분 실행 필터 — resolve_matrix (Stage 1/2 검증용)
+# ──────────────────────────────────────────────
+
+
+def test_resolve_matrix_default_is_full_60():
+    """필터 미지정 → 6 페르소나 × 10 종목 = 60건."""
+    from tests.regression.test_60_cases import resolve_matrix
+
+    personas, tickers = resolve_matrix()
+    assert len(personas) == 6
+    assert len(tickers) == 10
+    assert len(personas) * len(tickers) == 60
+
+
+def test_resolve_matrix_persona_filter():
+    from tests.regression.test_60_cases import resolve_matrix
+
+    personas, tickers = resolve_matrix(persona_filter="event,macro")
+    assert personas == ["event", "macro"]
+    assert len(tickers) == 10  # 종목은 전체
+
+
+def test_resolve_matrix_ticker_filter_case_insensitive():
+    from tests.regression.test_60_cases import resolve_matrix
+
+    personas, tickers = resolve_matrix(ticker_filter="aapl,005930")
+    assert {t[0] for t in tickers} == {"AAPL", "005930"}
+    assert len(personas) == 6  # 페르소나는 전체
+
+
+def test_resolve_matrix_combined_filter():
+    from tests.regression.test_60_cases import resolve_matrix
+
+    personas, tickers = resolve_matrix(
+        persona_filter="korean", ticker_filter="005930"
+    )
+    assert personas == ["korean"]
+    assert [t[0] for t in tickers] == ["005930"]
+
+
+def test_resolve_matrix_smoke_default_is_event_rklb():
+    """--smoke 미필터 → event × RKLB 1건 (가장 복잡한 이벤트 케이스)."""
+    from tests.regression.test_60_cases import resolve_matrix
+
+    personas, tickers = resolve_matrix(smoke=True)
+    assert personas == ["event"]
+    assert [t[0] for t in tickers] == ["RKLB"]
+
+
+def test_resolve_matrix_smoke_with_filter_takes_first():
+    """--smoke + 필터 → 필터 결과의 첫 항목 1건."""
+    from tests.regression.test_60_cases import resolve_matrix
+
+    personas, tickers = resolve_matrix(
+        persona_filter="macro,korean", ticker_filter="AAPL,005930", smoke=True
+    )
+    assert personas == ["macro"]
+    assert [t[0] for t in tickers] == ["AAPL"]  # 입력 순서 보존 → 첫 항목 AAPL
+
+
+def test_resolve_matrix_invalid_persona_raises():
+    from tests.regression.test_60_cases import resolve_matrix
+
+    with pytest.raises(ValueError, match="알 수 없는 페르소나"):
+        resolve_matrix(persona_filter="event,bogus")
+
+
+def test_resolve_matrix_invalid_ticker_raises():
+    from tests.regression.test_60_cases import resolve_matrix
+
+    with pytest.raises(ValueError, match="매트릭스에 없는 종목"):
+        resolve_matrix(ticker_filter="AAPL,ZZZZ")
 
 
 # ──────────────────────────────────────────────
@@ -256,10 +335,63 @@ async def _run_one_real_case(persona: str, ticker: str, name: str) -> dict[str, 
         }
 
 
-async def _run_real_matrix() -> list[dict[str, Any]]:
+def resolve_matrix(
+    persona_filter: str | None = None,
+    ticker_filter: str | None = None,
+    smoke: bool = False,
+) -> tuple[list[str], list[tuple[str, str, str]]]:
+    """필터를 적용해 실행할 (personas, tickers) 매트릭스를 산출.
+
+    BETA_READINESS §5 Stage 1/2 단계 검증을 위한 부분 실행 지원.
+    잘못된 페르소나/종목명은 ValueError로 즉시 차단 (오타로 빈 매트릭스 방지).
+
+    - persona_filter: "event,macro" 형태 콤마 구분. None이면 6 페르소나 전체.
+    - ticker_filter: "AAPL,005930" 형태. 대소문자 무관. None이면 10 종목 전체.
+    - smoke: True면 1건만. 필터 미지정 시 event × RKLB (가장 복잡한 이벤트 케이스),
+             필터 지정 시 필터 결과의 첫 항목.
+    """
+    personas = list(PERSONAS)
+    if persona_filter:
+        requested = [p.strip() for p in persona_filter.split(",") if p.strip()]
+        invalid = [p for p in requested if p not in PERSONAS]
+        if invalid:
+            raise ValueError(
+                f"알 수 없는 페르소나: {invalid} (가능: {list(PERSONAS)})"
+            )
+        personas = requested
+
+    tickers = list(ALL_TICKERS)
+    if ticker_filter:
+        requested_t = [
+            t.strip().upper() for t in ticker_filter.split(",") if t.strip()
+        ]
+        by_symbol = {t[0].upper(): t for t in ALL_TICKERS}
+        missing = [t for t in requested_t if t not in by_symbol]
+        if missing:
+            raise ValueError(
+                f"매트릭스에 없는 종목: {missing} "
+                f"(가능: {[t[0] for t in ALL_TICKERS]})"
+            )
+        # 사용자 입력 순서 보존 (--smoke 시 첫 항목이 직관적으로 일치)
+        tickers = [by_symbol[t] for t in requested_t]
+
+    if smoke:
+        personas = personas[:1] if persona_filter else ["event"]
+        if ticker_filter:
+            tickers = tickers[:1]
+        else:
+            tickers = [t for t in ALL_TICKERS if t[0] == "RKLB"]
+
+    return personas, tickers
+
+
+async def _run_real_matrix(
+    personas: list[str],
+    tickers: list[tuple[str, str, str]],
+) -> list[dict[str, Any]]:
     results: list[dict[str, Any]] = []
-    for persona in PERSONAS:
-        for ticker, name, desc in ALL_TICKERS:
+    for persona in personas:
+        for ticker, name, desc in tickers:
             result = await _run_one_real_case(persona, ticker, name)
             print(
                 f"[{persona:10s}] {ticker:6s} ({name:20s}): "
@@ -270,6 +402,12 @@ async def _run_real_matrix() -> list[dict[str, Any]]:
 
 
 def main(argv: list[str] | None = None) -> int:
+    # Windows 콘솔(cp949)에서도 이모지 출력이 깨지지 않도록 UTF-8 강제.
+    try:
+        sys.stdout.reconfigure(encoding="utf-8")
+    except (AttributeError, ValueError):
+        pass
+
     parser = argparse.ArgumentParser(description="60건 회귀 테스트")
     parser.add_argument(
         "--real",
@@ -281,6 +419,21 @@ def main(argv: list[str] | None = None) -> int:
         default="tests/regression/results/last_run.json",
         help="결과 저장 경로",
     )
+    parser.add_argument(
+        "--smoke",
+        action="store_true",
+        help="Stage 1 — 1건만 실행 (event × RKLB, ~₩200).",
+    )
+    parser.add_argument(
+        "--persona-filter",
+        default=None,
+        help="실행할 페르소나 콤마 구분 (예: event,macro). 미지정 시 6 전체.",
+    )
+    parser.add_argument(
+        "--ticker-filter",
+        default=None,
+        help="실행할 종목 콤마 구분 (예: AAPL,005930). 미지정 시 10 전체.",
+    )
     args = parser.parse_args(argv)
 
     if not args.real:
@@ -291,10 +444,27 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 0
 
-    print(f"🔥 실 분석 모드 — 60건 ({len(PERSONAS)} × {len(ALL_TICKERS)})")
-    print("⚠️  비용 발생 — 약 ₩12,000 예상\n")
+    try:
+        personas, tickers = resolve_matrix(
+            persona_filter=args.persona_filter,
+            ticker_filter=args.ticker_filter,
+            smoke=args.smoke,
+        )
+    except ValueError as e:
+        print(f"❌ 필터 오류: {e}")
+        return 1
 
-    results = asyncio.run(_run_real_matrix())
+    case_count = len(personas) * len(tickers)
+    est_cost = case_count * 200
+    print(
+        f"🔥 실 분석 모드 — {case_count}건 "
+        f"({len(personas)} 페르소나 × {len(tickers)} 종목)"
+    )
+    print(f"   페르소나: {personas}")
+    print(f"   종목: {[t[0] for t in tickers]}")
+    print(f"⚠️  비용 발생 — 약 ₩{est_cost:,} 예상\n")
+
+    results = asyncio.run(_run_real_matrix(personas, tickers))
     out_path = Path(args.out)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(json.dumps(results, ensure_ascii=False, indent=2), encoding="utf-8")
