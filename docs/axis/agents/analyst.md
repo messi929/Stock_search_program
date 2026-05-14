@@ -34,7 +34,7 @@
 
 기존 `screener/core/metrics.py`에서 이미 계산된 지표:
 - `buy_score` (0-100)
-- `buy_grade` ("적극매수", "매수", "관망" 등)
+- `buy_grade` (중립 구간 라벨: "상위", "준상위", "중간", "관찰")
 - `rsi`
 - `vs_high_52w`, `vs_low_52w`
 - `foreign_consecutive`

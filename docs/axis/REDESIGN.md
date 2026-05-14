@@ -218,10 +218,11 @@ fanout
 **해결**: CI 차단용 grep 스크립트 (agents/, personas/, api/, web/app/, web/components/)
 **작업량**: 30분
 
-### 6.3 v7.5 main 머지 시 LEGAL wrap
-**Axis-side에서 이미 부분 처리** (web/lib/legal-labels.ts)
-**남은 작업**: `buy_grade="적극매수"/"매수"` API 응답 시점에 score_tier로 변환
-**작업량**: 1시간
+### 6.3 v7.5 LEGAL 중립화 ✅ 완료 (2026-05-14)
+소스에서 중립화 완료 — `screener/core/metrics.py`가 `buy_grade`를 중립 구간 라벨
+("상위"/"준상위"/"중간"/"관찰")로 직접 산출하고, `screener/core/screener.py`
+카테고리명도 중립화. `web/lib/legal-labels.ts`·`columnMeta.ts`는 전환기 안전망으로 유지.
+v7.5 라이브 UI(index.html/pricing.html/rank_page.py)의 권유성 표현도 일괄 정리.
 
 ---
 

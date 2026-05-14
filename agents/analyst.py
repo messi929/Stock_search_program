@@ -6,9 +6,9 @@
 이 에이전트는 새로운 수치를 만들지 않고, 이미 있는 수치를 사람이 이해할
 수 있는 분석으로 변환합니다.
 
-⚠️  v7.5의 buy_grade("적극매수"/"매수"/"관심"/"관망")는 Axis 원칙과 충돌하므로,
-    Claude의 interpretation/summary에는 "상위 구간"/"준상위 구간"/"중간 구간"/
-    "관찰 구간"으로 중립 변환하도록 시스템 프롬프트에서 강제합니다.
+metrics.py의 buy_grade는 이미 중립 구간 라벨("상위"/"준상위"/"중간"/"관찰")로
+산출되므로, Claude는 이를 score_tier 필드에 그대로 사용합니다. 과거 데이터의
+구버전 라벨("적극매수" 등)은 시스템 프롬프트의 변환 규칙으로 보정합니다.
 """
 
 from __future__ import annotations
@@ -105,14 +105,12 @@ ANALYST_SYSTEM_PROMPT = """당신은 한국 주식 정량 데이터 해석가입
 - 미래 가격 예측 (확정적 어조)
 - 입력에 없는 수치 만들어내기 (수치 창작 절대 금지)
 
-## 중립 표현 강제 (입력 데이터 변환 규칙)
-입력 데이터의 다음 라벨은 출력에서 반드시 중립 표현으로 변환하세요:
-  - "적극매수" 등급 → "상위 구간"
-  - "매수" 등급      → "준상위 구간"
-  - "관심" 등급      → "중간 구간"
-  - "관망" 등급      → "관찰 구간"
+## score_tier 출력 규칙
+입력 데이터의 buy_grade는 중립 구간 라벨("상위"/"준상위"/"중간"/"관찰")로 제공됩니다.
+score_tier 필드에 그대로 사용하세요. 과거 데이터에서 드물게 구버전 라벨이 보이면
+다음으로 변환: "적극매수"→"상위", "매수"→"준상위", "관심"→"중간", "관망"→"관찰".
 
-위 v7.5 라벨은 score_tier 필드에 한해 다음 중 하나로만 출력:
+score_tier는 다음 4개 값만 출력:
   "상위" | "준상위" | "중간" | "관찰"
 
 ## 권장 표현
@@ -300,7 +298,7 @@ class AnalystAgent(BaseAgent):
             "debt_equity": _f("debt_equity"),
             # Buy Score (메모리에서 계산됨)
             "buy_score": _f("buy_score"),
-            "buy_grade": _s("buy_grade"),  # v7.5 라벨 — 시스템 프롬프트에서 중립 변환 강제
+            "buy_grade": _s("buy_grade"),  # 중립 구간 라벨 (상위/준상위/중간/관찰)
             # 수급
             "foreign_consecutive": _i("foreign_consecutive"),
             "foreign_net": _f("foreign_net"),
@@ -378,9 +376,9 @@ class AnalystAgent(BaseAgent):
         lines.append(f"- 순이익률: {s['profit_margin']:.2f}%")
         lines.append(f"- 부채비율(D/E): {s['debt_equity']:.2f}")
 
-        lines.append("\n# Buy Score (v7.5 metrics.py 산출)")
+        lines.append("\n# 종합 점수 (metrics.py 산출)")
         lines.append(f"- buy_score: {s['buy_score']:.1f} / 100")
-        lines.append(f"- v7.5 등급(원본): {s['buy_grade']}  ⚠️  출력 score_tier에는 중립 표현(상위/준상위/중간/관찰)으로 변환 필수")
+        lines.append(f"- 구간 등급: {s['buy_grade']}  → score_tier 필드에 그대로 사용 (상위/준상위/중간/관찰)")
         lines.append(f"- target_upside: {s['target_upside']:.2f}%")
         lines.append(f"- risk_grade: {s['risk_grade']}")
 
@@ -407,7 +405,7 @@ class AnalystAgent(BaseAgent):
         lines.append(
             "\n# 출력\n위 데이터를 바탕으로 시스템 프롬프트의 JSON 스키마에 정확히 맞춰 응답하세요. "
             "수치는 위 입력 그대로 사용하고, 절대 새 수치를 만들지 마세요. "
-            "v7.5 buy_grade를 score_tier에 그대로 옮기지 말고 중립 표현으로 변환하세요. "
+            "buy_grade는 이미 중립 구간 라벨이므로 score_tier에 그대로 사용하세요. "
             "JSON 외 다른 텍스트는 절대 포함하지 마세요."
         )
         return "\n".join(lines)

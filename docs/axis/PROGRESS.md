@@ -237,9 +237,11 @@ frontend (Next.js)
 2. **Vercel 배포** — Next.js 프론트 외부 노출 (도메인 결정 후)
 3. **도메인** — `axis.kr` / `allofasset.com` 결정 + Cloudflare/Vercel 연결
 
-### v7.5와의 정합성 (머지 시점에 결정)
-- v7.5 "TOP 픽", "매수 포인트", `buy_grade="적극매수"` UI는 LEGAL 충돌
-- Axis는 score_tier "상위/준상위/중간/관찰"로 중립 변환 — main 머지 시 v7.5 UI도 변경할지 결정 필요
+### v7.5와의 정합성 ✅ 해결 (2026-05-14)
+- v7.5와 Axis는 하나의 서비스 — Axis가 차기 버전. v7.5의 권유성 표현을 소스에서 중립화.
+- `buy_grade`는 metrics.py에서 중립 구간 라벨("상위/준상위/중간/관찰")로 직접 산출.
+- "TOP 픽" → "오늘의 주목 종목", "매수 포인트" → "관찰 포인트", 카테고리명 6건 중립화.
+- v7.5 라이브 UI(index.html/pricing.html/rank_page.py) 일괄 정리 완료.
 
 ---
 
@@ -301,7 +303,7 @@ ROADMAP 기준:
 | 2 | 대시보드 NAV 4개 중 2개 404 | `/watchlist`, `/analyses`, `/settings/profile` → 정상 라우트로 교체 |
 | 3 | 로그인 후 원래 페이지 미복귀 | `?next=` 파라미터 + open-redirect 차단 |
 | 4 | 영문 404 페이지 | 한국어 다크 테마 (`web/app/not-found.tsx`) |
-| 5 | LEGAL — 스크리너 카테고리 권유성 6건 | "매수"/"추천" → "관찰"/"점수 상위" (`web/lib/legal-labels.ts`) |
+| 5 | LEGAL — 스크리너 카테고리 권유성 6건 | 소스(`screener/core/screener.py`) 중립화 + `web/lib/legal-labels.ts` 안전망 |
 | 6 | WatchlistPreview Free/Pro 분기 | usePersonas로 user_plan 자동 분기 |
 | 7 | "전체 관리 →" /watchlist 링크 깨짐 | 관심종목 있을 때만 "+더 추가" 노출 |
 | 8 | "다시 검증" 라벨 혼란 | 분석 중 "분석 후 검증"(disabled) → 완료 후 "실시간 검증" |

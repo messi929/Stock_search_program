@@ -88,9 +88,11 @@ TODO: `scripts/deploy-axis-staging.sh` 작성 ([REDESIGN.md §8.1](REDESIGN.md))
 **현재**: 로그인 페이지 "준비 중" 비활성 버튼.
 **결정**: 베타 동안은 Google만. 정식 런칭 시 재검토.
 
-### E. v7.5 카테고리 권유성 라벨 ✅ 부분 완료
-**현재**: `web/lib/legal-labels.ts` 신설 — 스크리너 카테고리 6건 ("매수"/"추천") 중립 변환 완료.
-**남은 부분**: `buy_grade="적극매수"/"매수"` API 응답 시점 변환 (REDESIGN.md §6.3)
+### E. v7.5 카테고리 권유성 라벨 ✅ 완료 (2026-05-14)
+**완료**: 백엔드 소스(`screener/core/screener.py`)에서 카테고리명 6건을 중립화하고,
+`screener/core/metrics.py`의 `buy_grade`를 중립 구간 라벨("상위"/"준상위"/"중간"/"관찰")로
+직접 산출하도록 변경. `web/lib/legal-labels.ts`·`columnMeta.ts`는 전환기 안전망으로 유지.
+v7.5 라이브 UI(`index.html`/`pricing.html`/`rank_page.py`)의 권유성 표현도 일괄 중립화.
 
 ---
 
@@ -198,10 +200,10 @@ TODO: `scripts/deploy-axis-staging.sh` 작성 ([REDESIGN.md §8.1](REDESIGN.md))
 
 | v7.5 요소 | LEGAL 충돌 | 처리 상태 |
 |----------|-----------|----------|
-| "🏆 오늘의 TOP 픽" 섹션 | 추천 리스트로 비춰질 위험 | ⏳ 머지 시 "관찰 가치 종목" 리네이밍 |
-| "매수 포인트" 하이라이트 | "매수 신호" 직접 사용 | ⏳ 머지 시 "관찰 시그널" 변환 |
-| `buy_grade="적극매수"/"매수"` 라벨 | "매수" 단어 | ⏳ API 응답 wrap 함수 (REDESIGN.md §6.3) |
-| 카테고리 이름 "급등 예보", "성장주 매수" | 권유성 어조 | ✅ Axis-side 변환 완료 (`web/lib/legal-labels.ts`) |
+| "🔥 오늘의 TOP 픽" 섹션 | 추천 리스트로 비춰질 위험 | ✅ "오늘의 주목 종목" 리네이밍 (2026-05-14) |
+| "매수 포인트" 하이라이트 | "매수" 직접 사용 | ✅ "관찰 포인트"로 변환 (2026-05-14) |
+| `buy_grade="적극매수"/"매수"` 라벨 | "매수" 단어 | ✅ 소스(metrics.py)에서 중립 라벨 직접 산출 (2026-05-14) |
+| 카테고리 이름 "급등 예보", "성장주 매수" | 권유성 어조 | ✅ 소스(screener.py) 중립화 완료 (2026-05-14) |
 
 → Axis 프론트는 변환 완료. v7.5 main 머지 시 백엔드 응답 wrap 추가 필요.
 

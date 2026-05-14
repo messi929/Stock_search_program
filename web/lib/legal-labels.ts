@@ -1,14 +1,14 @@
 /**
- * 스크리너 카테고리 — Axis-side 권유성 단어 중립화.
+ * 스크리너 카테고리 — Axis 표시용 라벨/설명.
  *
  * 배경:
- *   v7.5 백엔드(screener/core/screener.py)는 "성장주 매수", "종합 추천" 등
- *   권유성 라벨을 그대로 노출. Axis는 LEGAL.md 원칙상 "추천/매수" 단어 사용 금지.
+ *   백엔드(screener/core/screener.py)의 카테고리명은 이미 중립화됨
+ *   ("성장주", "종합 분석" 등). 이 레이어는 Axis 프론트에서 더 친화적인
+ *   표시명/설명을 제공하며, 권유성 단어가 새로 유입될 경우의 안전망 역할도 함.
  *
  * 정책:
- *   - 백엔드 코드는 건드리지 않음 (v7.5 main 브랜치 호환 유지)
- *   - Axis 프론트에서만 표시 직전에 변환
- *   - 매핑 누락된 카테고리는 원문 그대로 통과 (안전한 기본값)
+ *   - 매핑된 카테고리는 Axis 표시명으로 치환
+ *   - 매핑 누락된 카테고리는 원문 그대로 통과 (백엔드가 이미 중립이므로 안전)
  */
 
 import type { SmartListCategory } from "@/types/api";
@@ -37,7 +37,7 @@ const LEGAL_SAFE_LABELS: Record<string, SafeLabel> = {
   },
   turnaround: {
     name: "반등 관찰",
-    desc: "바닥권에서 거래가 살아나며 반등 신호가 보이는 종목",
+    desc: "바닥권에서 거래가 살아나며 반등 패턴이 관찰되는 종목",
   },
   recommend: {
     name: "종합 점수 상위",

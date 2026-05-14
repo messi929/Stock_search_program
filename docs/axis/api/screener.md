@@ -42,9 +42,9 @@
           "preview_tickers": ["207940", "000660", "005935"]
         },
         {
-          "id": "active_buy",
-          "name": "적극 매수 등급",
-          "description": "buy_grade == '적극매수'",
+          "id": "top_tier",
+          "name": "상위 구간",
+          "description": "buy_grade == '상위'",
           "match_count": 12
         },
         {
@@ -213,7 +213,7 @@ GET /api/screener/smart-lists/buy_signals/buy_score_top?page=1&size=30
       "market_cap_kr": "103.0조",
       
       "buy_score": 88.5,
-      "buy_grade": "적극매수",
+      "buy_grade": "상위",
       
       "per": 45.2,
       "pbr": 5.8,

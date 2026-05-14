@@ -1,8 +1,9 @@
 /**
- * v7.5 StockItem 컬럼 → Axis 라벨/포매터 매핑.
+ * StockItem 컬럼 → Axis 라벨/포매터 매핑.
  *
- * LEGAL: buy_grade ("적극매수"/"매수") 같은 권유성 라벨은 score_tier 중립
- * ("상위"/"준상위"/"중간"/"관찰")로 변환. 신규 LEGAL 단어 추가 시 여기서 일괄 처리.
+ * LEGAL: buy_grade는 백엔드(screener/core/metrics.py)에서 이미 중립 구간 라벨
+ * ("상위"/"준상위"/"중간"/"관찰")로 산출됨. fmtBuyGradeNeutral은 그대로 통과시키되
+ * 과거 데이터의 구버전 라벨("적극매수" 등)을 보정하는 안전망 역할.
  */
 
 export type Align = "left" | "right";
@@ -53,23 +54,21 @@ const fmtCompactKR = (v: unknown): string => {
 
 const fmtBool01 = (v: unknown): string => (Number(v) > 0 ? "✓" : "-");
 
-// LEGAL: buy_grade 변환 — score_tier 중립 라벨로
-// v7.5 metrics.py:515-518에서 부여되는 정식 값: 적극매수 / 매수 / 관심 / 관망
+// buy_grade는 metrics.py에서 이미 중립 구간 라벨(상위/준상위/중간/관찰)로 산출됨.
+// 정식 값은 그대로 통과시키고, 과거 데이터의 구버전 v7.5 라벨만 보정.
+const NEUTRAL_TIERS = new Set(["상위", "준상위", "중간", "관찰"]);
 const fmtBuyGradeNeutral = (v: unknown): string => {
   const s = String(v ?? "").trim();
-  const map: Record<string, string> = {
+  if (NEUTRAL_TIERS.has(s)) return s; // 정식 값 — 그대로
+  // 전환기 안전망: 구버전 v7.5 라벨 보정
+  const legacy: Record<string, string> = {
     "적극매수": "상위",
     "매수": "준상위",
-    "관심": "관찰",
-    "관망": "보류",
-    // 일부 경로에서 추가로 나타날 수 있는 값
-    "중립": "중간",
-    "관찰": "중간",
-    "주의": "관찰",
-    "부적합": "관찰",
+    "관심": "중간",
+    "관망": "관찰",
   };
   // LEGAL: 알 수 없는 값은 "기타"로 — 권유성 단어가 그대로 흘러나가지 않도록
-  return map[s] ?? (s ? "기타" : "-");
+  return legacy[s] ?? (s ? "기타" : "-");
 };
 
 // LEGAL 최종 방어선: 어떤 컬럼이든 권유성 단어가 raw로 통과하면 중립화
@@ -91,7 +90,7 @@ const colorByGrade = (v: unknown): string | undefined => {
   const tier = fmtBuyGradeNeutral(v);
   if (tier === "상위") return "text-amber-500 font-semibold";
   if (tier === "준상위") return "text-amber-400";
-  if (tier === "관찰" || tier === "보류") return "text-muted-foreground";
+  if (tier === "관찰") return "text-muted-foreground";
   return undefined;
 };
 
@@ -156,14 +155,13 @@ const COLUMN_META: Record<string, ColumnMeta> = {
 
   // ── 종합 점수 ──
   buy_score: { label: "종합점수", align: "right", format: fmtDecimal(1) },
-  // LEGAL: 권유성 라벨 → 중립 변환
-  buy_grade: { label: "관찰등급", align: "left", format: fmtBuyGradeNeutral, colorize: colorByGrade },
+  buy_grade: { label: "구간등급", align: "left", format: fmtBuyGradeNeutral, colorize: colorByGrade },
   risk_grade: {
     label: "리스크",
     align: "left",
     format: (v) => sanitizeGradeText(String(v ?? "-")),
   },
-  position_size: { label: "권장비중", align: "right", format: fmtPct },
+  position_size: { label: "참고 비중", align: "right", format: fmtPct },
   volatility_20d: { label: "변동성(20D)", align: "right", format: fmtPct },
   atr_14: { label: "ATR14", align: "right", format: fmtDecimal(2) },
 

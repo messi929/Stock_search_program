@@ -318,7 +318,7 @@ def _trial_reminder_html(days_left: int, ends_at: datetime, pricing_url: str) ->
 <div style="background:white;padding:32px;border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,.08);">
 <h1 style="color:#2563eb;margin:0 0 16px;font-size:22px;">⏰ 체험판 {urgency}</h1>
 <p style="font-size:15px;line-height:1.7;">StockFinder Pro 체험판이 <b>{ends_str}</b>에 만료됩니다.</p>
-<p style="font-size:15px;line-height:1.7;">계속 Pro 기능(전문가 포트폴리오, 매수 포인트, 백테스트 등)을 사용하시려면 아래 버튼에서 결제를 진행해주세요.</p>
+<p style="font-size:15px;line-height:1.7;">계속 Pro 기능(전문가 포트폴리오, 관찰 포인트, 백테스트 등)을 사용하시려면 아래 버튼에서 결제를 진행해주세요.</p>
 <p style="margin:32px 0;text-align:center;">
 <a href="{pricing_url}" style="background:#2563eb;color:white;padding:14px 28px;text-decoration:none;border-radius:8px;font-weight:600;display:inline-block;">Pro 결제하기 →</a>
 </p>

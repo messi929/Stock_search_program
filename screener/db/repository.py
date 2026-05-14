@@ -562,7 +562,7 @@ def save_score_history(date_str: str, scores: dict):
 
     Args:
         date_str: "2026-04-07" 형식
-        scores: {ticker: {"buy_score": 72, "buy_grade": "적극매수", "close": 196500}, ...}
+        scores: {ticker: {"buy_score": 72, "buy_grade": "상위", "close": 196500}, ...}
     """
     db = get_db()
     doc_ref = db.collection("score_history").document(date_str)

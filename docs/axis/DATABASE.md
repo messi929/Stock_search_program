@@ -66,7 +66,7 @@ firestore/
   
   # 시그널 (계산됨)
   "buy_score": 73.5,
-  "buy_grade": "매수",
+  "buy_grade": "준상위",
   "is_pre_surge": 0,
   "pre_surge_score": 2,
   "golden_cross": 1,

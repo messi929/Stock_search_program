@@ -409,7 +409,7 @@ Response:
       "current_price": 78500,
       "change_pct": 1.2,
       "buy_score": 72,
-      "buy_grade": "매수"
+      "buy_grade": "준상위"
     }
   ]
 }
