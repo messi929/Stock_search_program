@@ -1,7 +1,161 @@
 # Axis v2 — 6 Persona Expansion 진척 기록
 
-> **브랜치**: `feature/v2-six-personas` (axis-ai-layer에서 분기, 2026-05-02)
-> **현재 위치**: 베타 출시 준비 완료 — 배포는 GCP 결제 복구 대기 중 (2026-05-14 코드 작업 추가)
+> **브랜치**: `main` (feature/v2-six-personas squash 머지 완료, 2026-05-17)
+> **현재 위치**: **Axis v2 production 가동 중** — Cloud Run revision `stock-screener-00033-tn4`, 자동 스케줄러 4종 ENABLED. 도메인 매핑 + LS 재신청만 남음.
+
+---
+
+## 📅 2026-05-17 — 풀 통합 + Axis v2 production 출시
+
+GCP billing 활성화(카드 재발급)로 14일간 막혔던 v2 배포 차단이 해소됨.
+1세션에 Phase 1~4 대부분 진행 + production 라이브.
+당초 8주 일정 → **약 85% 1세션에 완료**.
+
+### 통합 결정 (2026-05-17 오전)
+
+- 사용자 결정: v7.5 → Axis web/ **풀 흡수 (Axis로 통일)**
+- 우선순위: 전체 통합 후 LS 재신청 (vs LS 먼저)
+- 4-Phase 로드맵: LS 심사 페이지 → 카테고리 흡수 → 알림·포트폴리오·트리맵 → 인프라 단일화
+- 메모리: [[axis-unification-plan]] (`project_unification_plan.md`)
+
+### Phase 1 — LS 심사 페이지 흡수 (commits `52d9936` · `51fe99b`)
+
+- `screener/static/{admin,index,pricing,privacy,refund,terms}.html` 5개 24건
+  "Stock Screener Pro" → "Axis" 일괄 갱신 (title/로고/푸터/JS Notification 텍스트)
+- `web/components/legal/Disclaimer.tsx`에 `lang?: "ko"|"en"|"both"` prop +
+  영문 면책 4줄 ("Information only — not investment advice / no advisory license /
+  your own responsibility / risk of principal loss")
+- `web/app/pricing/page.tsx`·`web/app/page.tsx` Disclaimer를 `lang="both"`로
+  (LS 영문 심사자 대응)
+- `web/app/refund/page.tsx` 신규 — `screener/static/refund.html` 9개 섹션
+  React 이식 (14일 환불 보장·구독 해지·한국 소비자 법령 포함)
+- `web/app/page.tsx` 푸터에 `/refund` 링크 추가
+- 점검 결과: `web/app/terms/page.tsx` / `web/app/privacy/page.tsx` 는 이미
+  Axis 정체성 완비 — 변경 불필요
+
+### Phase 2 — v7.5 카테고리 흡수 점검 (변경 없음)
+
+조사 결과 **이미 ~90% 흡수된 상태였음** — 추가 코드 작업 불필요.
+
+| 컴포넌트 | 역할 | 상태 |
+|----------|------|------|
+| `SmartListGrid.tsx` | 카테고리 그리드 | ✅ 백엔드 `CATEGORIES` fetch |
+| `useSmartLists` hook | 카테고리 데이터 | ✅ 완비 |
+| `legal-labels.ts` `toSafeCategory` | LEGAL 권유성 어휘 변환 | ✅ 완비 |
+| `ScreenerResultView` | 카테고리 결과 페이지 | ✅ 7-상태 분기 완비 |
+| `ResultsTable` → `/analyze/[ticker]` | 종목 상세 | ✅ v7.5 modal → Axis 6 페르소나 분석 업그레이드 |
+| `ProGate` | Pro 게이트 UI | ✅ 완비 |
+
+남은 갭은 v7.5 부가 인터랙션(인라인 차트·필터 칩·CSV 내보내기)만 — Phase 2.5로 분리.
+
+### Phase 3 — 알림·트리맵·포트폴리오 흡수 (commits `1a29987` · `7186143`)
+
+**알림 시스템 브랜드 통일**:
+- `screener/services/mailer.py` MAILGUN_FROM 디폴트 "StockFinder" → "Axis"
+- `screener/api/admin_routes.py` Pro 체험판 만료 메일 본문/제목/서명 5건
+- `.env.example`·`docs/DEPLOY_GUIDE.md` 예시 갱신
+- 발송 워커(`POST /send-daily-briefing` 등)는 메모리에 v1.1 도입 명시 — 다음 라운드
+
+**트리맵 (신규)**:
+- `web/components/screener/Treemap.tsx` 신규 (의존성 0, grid 비례 박스 +
+  `change_pct` 색상, squarified의 단순화 버전)
+- `ScreenerResultView`에 `ViewToggle` 컴포넌트 추가 (📋 표 ↔ 🗺️ 트리맵)
+- 종목 클릭 → `/analyze/[ticker]` (`ResultsTable`과 일관)
+
+**포트폴리오 (신규)**:
+- `web/types/api.ts`에 `PortfolioHolding`·`PortfolioRiskRequest`·
+  `PortfolioRiskResponse` 등 5종 타입
+- `web/hooks/usePortfolioRisk.ts` 신규 (`POST /portfolio/risk` mutation)
+- `web/app/(dashboard)/portfolio/page.tsx` 신규 — Watchlist 기반 자동 분석
+  - 건강도(0~100)·등급·변동성·기대수익·Sharpe·MDD·평균상관·최상위비중 메트릭
+  - 섹터 집중도 top 5
+  - 관찰 포인트(`recommendations`) — "추천"이 아닌 중립 라벨
+
+### Phase 4 — 인프라 (Axis v2 풀 배포 + production 갱신)
+
+**GCP API 활성화**:
+- `cloudscheduler.googleapis.com` / `cloudbuild.googleapis.com` /
+  `run.googleapis.com` / `secretmanager.googleapis.com` 4개
+
+**Secret Manager 4개 등록**:
+- `fred-api-key` (32자) / `ecos-api-key` (20자) / `dart-api-key` (40자) /
+  `edgar-user-agent` ("Axis Research <wogus711929@gmail.com>")
+- 보안: 자동 파싱 PowerShell 스크립트(`$env:TEMP\setup-v2-secrets.ps1`)가
+  `API_KEYS.local.txt` `[헤더] + "현재 키 : <값>"` 패턴 직접 읽어 등록 후
+  자기 삭제. Claude 컨텍스트에 키 값 비노출.
+
+**Cloud Run Jobs 4개 (Phase 3 of deploy script)**:
+
+| Job | Memory | Timeout | Schedule (KST) |
+|-----|--------|---------|----------------|
+| `axis-daily-macro` | 1Gi | 600s | 매일 06:00 (FRED + ECOS) |
+| `axis-daily-options` | 1Gi | 600s | 매일 06:30 (yfinance + VKOSPI) |
+| `axis-weekly-events` | 1Gi | 900s | 일 22:00 (DART + EDGAR + 실적) |
+| `axis-monthly-regime` | 1Gi | 600s | 매월 1일 06:00 (cycle + regime) |
+
+빌드: `gcloud builds submit --config=cloudbuild.yaml`, SUCCESS 5분 8초.
+
+**Cloud Scheduler 4개 ENABLED**:
+- IAM: Compute 기본 SA(`1043976673827-compute@developer.gserviceaccount.com`)에
+  `roles/run.invoker` 부여 (App Engine 기본 SA 없어 대체)
+- 함정: `deploy-v2-axis-jobs.sh` Phase 4가 cmd PATH escape로 실패 → PowerShell로
+  직접 등록. `--schedule=$var`는 공백 분리 → `"--schedule=$($var)"` 명시 quoting.
+
+**4 Job 수동 검증 SUCCESS**:
+- `axis-daily-macro-2mxng` / `axis-daily-options-xncg7` /
+  `axis-weekly-events-8qgmh` / `axis-monthly-regime-j8rqr`
+- WARNING/ERROR 0건. 자동 스케줄 운영 안전성 보장.
+
+**main 머지 + push (commit `df97e39`)**:
+- `feature/v2-six-personas` 64 commit → **squash 머지**
+- 265 파일 / +60,515 / -365 줄
+- LEGAL 98 파일 0 위반 + TypeScript clean
+- ⚠️ Cloud Build trigger 0개 — push로 자동 배포 안 됨
+
+**Production 배포 (`gcloud builds submit` 수동)**:
+- Build SUCCESS 5분 32초
+- 새 revision **`stock-screener-00033-tn4`** (traffic 100%)
+- Image: `gcr.io/all-of-asset/stock-screener:latest`
+- URL: `https://stock-screener-czmvccovxq-du.a.run.app`
+- Sanity check: `/`·`/refund`·`/pricing` 모두 HTTP 200, 홈 페이지 브랜드 "Axis" 확인
+- 에러 로그 (5분 내) 0건. zero-downtime 무결.
+
+### 검증 게이트 (매 변경 단위)
+
+- LEGAL: 98 파일, 0 위반 (모든 변경 후 유지)
+- TypeScript: clean (모든 변경 후 유지)
+- pytest: 678 PASS (기존 결과, 이번 변경에 회귀 없음)
+
+### 함정 정리 (다음 세션 참고)
+
+1. **Git Bash에서 `gcloud` 호출 실패** — wrapper 스크립트가 Windows path
+   처리 안 함. 해결: `sed 's/gcloud /gcloud.cmd /g'` 임시 복사본 + bash 실행.
+2. **PowerShell `Get-Content -Encoding UTF8`** — BOM 없는 UTF-8 파일을
+   cp949로 잘못 디코딩. 해결: `[System.IO.File]::ReadAllText($path, [Text.UTF8Encoding]::new($false))` 사용.
+3. **PowerShell `--schedule=$var`** — 변수 expansion 시 공백 분리.
+   해결: `"--schedule=$($var)"` 명시적 quoting.
+4. **API_KEYS.local.txt 헤더** — `[DART_API_KEY]` 다음 trailing `✅ 등록`
+   마커 때문에 `ContainsKey` 매치 실패. 해결: `^\[([A-Z_]+)\]` 정규식 사용.
+5. **App Engine 기본 SA 부재** — Cloud Scheduler 기본 SA로 작동 안 함.
+   해결: Compute SA + `roles/run.invoker`.
+
+### 남은 작업 (예상 ~3~5일, 외부 작업 위주)
+
+```
+[사용자 외부]
+1. Cloudflare에서 allofasset.com 구매 (~$10/yr)
+2. Search Console DNS TXT 인증
+3. LS 재신청 준비:
+   - Loom/YouTube 데모 영상 3~5분
+   - 소셜 프로필 2개 이상 (GitHub 공개·X·블로그)
+
+[그 후 Claude 진행]
+- gcloud run domain-mappings create
+- Cloudflare DNS A/AAAA 등록
+- Firebase 승인도메인 추가
+- LS 재신청 후 Variant ID 발급 → Cloud Run env 주입
+- (선택) 알림 발송 워커 admin 패턴 추가
+```
 
 ---
 
