@@ -63,12 +63,12 @@ class ScreenerFilter:
 
 
 # ──────────────────────────────────────────────
-# 15개 카테고리 — "지금 매수할 종목" 중심
+# 15개 카테고리 — 정량 스크리닝 기준별 종목 탐색
 # ──────────────────────────────────────────────
 
 CATEGORIES = {
     # ══════════════════════════════════════════
-    # 전략별 — 매수 타이밍 추천
+    # 전략별 — 정량 전략 기준
     # ══════════════════════════════════════════
     "surge": {
         "name": "급등 예보", "group": "strategy",
@@ -83,7 +83,7 @@ CATEGORIES = {
         "requires_phase": 3,
     },
     "growth": {
-        "name": "성장주 매수", "group": "strategy",
+        "name": "성장주", "group": "strategy",
         "desc": "수익성이 높으면서 적정 가격인 장기 성장 후보",
         "icon": "trending-up",
         "filter": ScreenerFilter(
@@ -94,8 +94,8 @@ CATEGORIES = {
         "columns": ["roe", "per", "pbr", "change_pct", "market_cap", "volume_ratio"],
     },
     "value": {
-        "name": "저평가 매수", "group": "strategy",
-        "desc": "실적 대비 저평가된 종목, 가격 회복 시 수익 기대",
+        "name": "저평가주", "group": "strategy",
+        "desc": "실적 대비 저평가된 것으로 관찰되는 종목",
         "icon": "gem",
         "filter": ScreenerFilter(
             per_min=0.1, per_max=10, pbr_min=0.1, pbr_max=1.0,
@@ -105,7 +105,7 @@ CATEGORIES = {
         "columns": ["per", "pbr", "roe", "div_yield", "market_cap", "change_pct"],
     },
     "dividend": {
-        "name": "배당주 매수", "group": "strategy",
+        "name": "배당주", "group": "strategy",
         "desc": "높은 배당을 꾸준히 지급하는 안정 수익형 종목",
         "icon": "coins",
         "filter": ScreenerFilter(
@@ -128,7 +128,7 @@ CATEGORIES = {
         "requires_phase": 3,
     },
     "turnaround": {
-        "name": "반등 매수", "group": "strategy",
+        "name": "반등주", "group": "strategy",
         "desc": "바닥권에서 거래가 살아나며 반등이 시작되는 종목",
         "icon": "refresh-cw",
         "filter": ScreenerFilter(
@@ -153,7 +153,7 @@ CATEGORIES = {
                      "revenue_growth", "fcf_yield", "ev_ebitda", "per"],
     },
     "recommend": {
-        "name": "종합 추천", "group": "strategy",
+        "name": "종합 분석", "group": "strategy",
         "desc": "기술적·모멘텀·수급·가치 종합 30점 이상 종목 (참고용, 투자 판단은 본인 책임)",
         "icon": "brain",
         "filter": ScreenerFilter(
@@ -218,7 +218,7 @@ CATEGORIES = {
     },
 
     # ══════════════════════════════════════════
-    # 시그널 — 실시간 매매 시그널
+    # 시그널 — 실시간 패턴 시그널
     # ══════════════════════════════════════════
     "accumulation": {
         "name": "매집 의심", "group": "signal",
@@ -256,8 +256,8 @@ CATEGORIES = {
         "requires_phase": 3,
     },
     "oversold": {
-        "name": "과매도 반등", "group": "signal",
-        "desc": "RSI 30 이하 과매도 종목, 반등 매수 기회",
+        "name": "과매도 구간", "group": "signal",
+        "desc": "RSI 30 이하 과매도 구간으로 관찰되는 종목",
         "icon": "activity",
         "filter": ScreenerFilter(
             rsi_min=1, rsi_max=30, market_cap_min=1000,
@@ -267,6 +267,16 @@ CATEGORIES = {
         ),
         "columns": ["rsi", "vs_high_52w", "volume_ratio", "change_pct", "pbr", "market_cap"],
         "requires_phase": 3,
+    },
+    # Axis 전용: 사용자 지정 필터 (커스텀 스크리너) — 빈 preset
+    # /api/scan?category=custom&per_min=...&pbr_max=... 형태로 사용자 필터만 적용됨.
+    # CATEGORY_PHASE에 등록 안 함 = phase 1 (모든 phase에서 사용 가능)
+    "custom": {
+        "name": "커스텀 스크리너", "group": "strategy",
+        "desc": "사용자가 직접 조건을 조합하는 스크리너 (Pro)",
+        "icon": "sliders",
+        "filter": ScreenerFilter(),  # 빈 preset — 모든 필터는 query param에서
+        "columns": ["per", "pbr", "roe", "rsi", "change_pct", "volume_ratio", "market_cap"],
     },
 }
 
@@ -452,7 +462,7 @@ def apply_filters(df: pd.DataFrame, f: ScreenerFilter) -> tuple[pd.DataFrame, in
     if f.breakout_score_min is not None and "breakout_score" in result.columns:
         result = result[result["breakout_score"] >= f.breakout_score_min]
 
-    # 매수 추천 점수 — 데이터 없으면 빈 결과
+    # 종합 점수 — 데이터 없으면 빈 결과
     if f.buy_score_min is not None:
         if "buy_score" not in result.columns or not (result["buy_score"] > 0).any():
             logger.debug("buy_score 데이터 없음 → 빈 결과")

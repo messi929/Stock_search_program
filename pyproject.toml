@@ -1,0 +1,14 @@
+[tool.pytest.ini_options]
+# pytest-asyncio: async def 테스트 자동 인식 (한 줄짜리 마커 불필요)
+asyncio_mode = "auto"
+
+# integration 마커 — 실 외부 API/Firestore 호출에 의존하는 통합 테스트.
+# 평소(pytest) 실행 시 자동 skip, --run-integration 옵션 시에만 실행.
+markers = [
+    "integration: 실 Claude API + Firestore 호출 테스트 (--run-integration 시에만 실행)",
+]
+
+testpaths = ["tests"]
+
+# 비동기 fixture 타임아웃 안전망 (실 API 30s 초과 시 abort)
+# pytest-asyncio v1+ 기본 무한 대기 → 실 통합 테스트는 마커 + per-test 타임아웃 적용 권장

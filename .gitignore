@@ -37,3 +37,25 @@ Desktop.ini
 
 # Assets (icons)
 assets/
+
+# Claude Code 로컬 세션 데이터
+.claude/
+
+# 임시 출력
+ERROR
+
+# Frontend
+web/node_modules/
+web/.next/
+web/.env.local
+web/tsconfig.tsbuildinfo
+
+# Playwright/테스트 산출물 (스크린샷·스냅샷)
+.playwright-mcp/
+web/.playwright-mcp/
+*.png
+
+# 로컬 API 키 메모 (사용자 개인 보관용 — 절대 commit 금지)
+API_KEYS.local.txt
+*.local.txt
+secrets/

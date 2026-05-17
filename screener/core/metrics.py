@@ -332,11 +332,13 @@ def detect_surging_stocks(df: pd.DataFrame) -> pd.DataFrame:
 # ──────────────────────────────────────────────
 
 def calculate_buy_score(df: pd.DataFrame) -> pd.DataFrame:
-    """종합 매수 추천 점수 (0~100).
+    """종합 정량 점수 (0~100) 및 중립 구간 등급(buy_grade) 산출.
 
     한국 주식: 기술(40) + 모멘텀(25) + 수급(20) + 가치(15)
     미국 주식: 기술(35) + 모멘텀(30) + 성장(20) + 가치(15)
       - US는 외국인/기관 순매수 데이터가 없으므로 수급 대신 성장 팩터 사용
+
+    buy_grade는 매수 권유가 아닌 중립 구간 라벨: 상위 / 준상위 / 중간 / 관찰.
     """
     df = df.copy()
     df["buy_score"] = 0.0
@@ -507,15 +509,16 @@ def calculate_buy_score(df: pd.DataFrame) -> pd.DataFrame:
     df["buy_score"] = df["buy_score"].round(1).clip(0, 100)
 
     # 히스토리 미수집 종목 페널티: 기술+모멘텀이 0이면 가치만으로 등급 부여 방지
-    # RSI=0이면 히스토리 없는 것 → 가치 점수만으로 "관심" 등급 받는 것 방지
+    # RSI=0이면 히스토리 없는 것 → 가치 점수만으로 "중간" 등급 받는 것 방지
     no_history = (df.get("rsi", pd.Series(0, index=df.index)) <= 0) & (df.get("ma20", pd.Series(0, index=df.index)) <= 0)
     df.loc[no_history, "buy_score"] = (df.loc[no_history, "buy_score"] * 0.3).round(1)  # 70% 감점
 
-    # 등급 부여
-    df["buy_grade"] = "관망"
-    df.loc[df["buy_score"] >= 70, "buy_grade"] = "적극매수"
-    df.loc[(df["buy_score"] >= 50) & (df["buy_score"] < 70), "buy_grade"] = "매수"
-    df.loc[(df["buy_score"] >= 30) & (df["buy_score"] < 50), "buy_grade"] = "관심"
+    # 등급 부여 — 중립 구간 라벨 (Axis "추천 금지" 원칙: 매수 권유 어휘 배제)
+    # 상위 ≥70 / 준상위 50~70 / 중간 30~50 / 관찰 <30
+    df["buy_grade"] = "관찰"
+    df.loc[df["buy_score"] >= 70, "buy_grade"] = "상위"
+    df.loc[(df["buy_score"] >= 50) & (df["buy_score"] < 70), "buy_grade"] = "준상위"
+    df.loc[(df["buy_score"] >= 30) & (df["buy_score"] < 50), "buy_grade"] = "중간"
 
     # v6 Phase 4: 포지션 사이징
     df["position_size"] = 0.0
@@ -527,7 +530,7 @@ def calculate_buy_score(df: pd.DataFrame) -> pd.DataFrame:
                 df.at[idx, "position_size"] = calculate_position_size(atr, close)
 
     high_count = (df["buy_score"] >= 50).sum()
-    logger.info(f"매수 추천 점수 계산 완료: 매수 이상 {high_count}종목")
+    logger.info(f"buy_score 계산 완료: 50점 이상 {high_count}종목")
     return df
 
 

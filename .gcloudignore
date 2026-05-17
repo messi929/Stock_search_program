@@ -1,0 +1,63 @@
+# Cloud Build 업로드 시 제외 — 백엔드 컨테이너에 필요 없는 항목
+# (없으면 .gitignore로 fallback. .gcloudignore가 있으면 우선됨.)
+
+# ── 프론트엔드 (Vercel 별도 배포, Cloud Run에 불필요) ──
+web/
+
+# ── Python 빌드 산출물 ──
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+*.spec
+
+# ── 가상환경 ──
+.venv/
+venv/
+
+# ── 환경/시크릿 (Cloud Run secrets 사용) ──
+.env
+.env.local
+*-adminsdk-*.json
+*firebase*.json
+serviceAccount*.json
+
+# ── 로컬 캐시/데이터 ──
+screener/cache/
+*.parquet
+*.log
+
+# ── 개발 도구 ──
+.vscode/
+.idea/
+.git/
+.github/
+.claude/
+
+# ── Windows 산출물 ──
+*.exe
+desktop.py
+desktop.bat
+collector.bat
+setup_scheduler.bat
+run.sh
+run.bat
+server.bat
+
+# ── OS 메타 ──
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+# ── 문서 ──
+docs/
+*.md
+!README.md
+
+# ── 에셋 (아이콘 등) ──
+assets/
+
+# ── 테스트 ──
+tests/
+ERROR

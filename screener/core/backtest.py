@@ -55,7 +55,7 @@ def backtest_signals(history: pd.DataFrame, snapshot: pd.DataFrame) -> dict:
         _detect_accumulation(close_pivot, volume_pivot), fwd_returns, "매집", benchmark_returns
     )
     results["rsi_oversold"] = _test_signal_multi(
-        _detect_rsi_oversold(close_pivot), fwd_returns, "RSI 과매도 반등", benchmark_returns
+        _detect_rsi_oversold(close_pivot), fwd_returns, "RSI 과매도 구간", benchmark_returns
     )
     results["ma_squeeze_breakout"] = _test_signal_multi(
         _detect_ma_squeeze(close_pivot), fwd_returns, "이평수렴 돌파", benchmark_returns
@@ -242,11 +242,11 @@ def _test_snapshot_signals(
     # snapshot에서 ticker 기준 조건 필터
     conditions = {
         "buy_70plus": {
-            "label": "적극매수 등급 (buy_score ≥ 70)",
+            "label": "상위 구간 (buy_score ≥ 70)",
             "filter": lambda df: df[df.get("buy_score", pd.Series(dtype=float)) >= 70]["ticker"] if "buy_score" in df.columns else pd.Series(dtype=str),
         },
         "buy_50plus": {
-            "label": "매수 등급 (buy_score ≥ 50)",
+            "label": "준상위 구간 (buy_score ≥ 50)",
             "filter": lambda df: df[df["buy_score"] >= 50]["ticker"] if "buy_score" in df.columns else pd.Series(dtype=str),
         },
         "pre_surge": {

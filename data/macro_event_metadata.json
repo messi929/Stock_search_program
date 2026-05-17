@@ -1,0 +1,94 @@
+{
+  "_meta": {
+    "schema_version": "1.0",
+    "description": "매크로 이벤트 카테고리별 통계 메타 (Event Analyst 페르소나용)",
+    "purpose": "이벤트 발표 전후 통상 변동성 윈도우 + 영향 자산군 표기. 단정 X — 참고용.",
+    "as_of": "2026-05-03",
+    "next_update": "2026-Q4 (반기 1회 수동 갱신 권장)",
+    "data_source": "공개 통계 보고서 + 학계 Event Study (대략적 추정).",
+    "fields": {
+      "event_type": "macro_calendar.json의 type 필드와 일치",
+      "country": "US | KR | GLOBAL",
+      "typical_volatility_window": "이벤트 D-day 기준 통상 변동성 영향 구간",
+      "historical_avg_abs_return_pct": "윈도우 내 절댓값 수익률 평균 (%, S&P500/KOSPI 기준)",
+      "historical_std_dev_pct": "위 평균의 표준편차",
+      "surprise_threshold": "예상치 vs 실제치 괴리가 의미 있다고 보는 임계 (%p 또는 %)",
+      "key_assets_affected": "1차 영향 미국 자산",
+      "kr_assets_affected": "1차 영향 한국 자산",
+      "fabrication_warning": "위 통계는 추정값이며 외부 검증 권장"
+    }
+  },
+  "events": {
+    "FOMC": {
+      "event_type": "central_bank_meeting",
+      "country": "US",
+      "typical_volatility_window": {"before": "D-3", "after": "D+1"},
+      "historical_avg_abs_return_pct": 1.8,
+      "historical_std_dev_pct": 1.2,
+      "surprise_threshold_bp": 25,
+      "key_assets_affected": ["SPY", "QQQ", "TLT", "DXY", "GLD", "VIX"],
+      "kr_assets_affected": ["KOSPI", "KOSDAQ", "USD/KRW", "KS11"]
+    },
+    "BOK_RATE": {
+      "event_type": "central_bank_meeting",
+      "country": "KR",
+      "typical_volatility_window": {"before": "D-2", "after": "D+1"},
+      "historical_avg_abs_return_pct": 0.9,
+      "historical_std_dev_pct": 0.7,
+      "surprise_threshold_bp": 25,
+      "key_assets_affected": ["USD/KRW"],
+      "kr_assets_affected": ["KOSPI", "KOSDAQ", "한국 국채 3년", "USD/KRW"]
+    },
+    "US_CPI": {
+      "event_type": "macro_release",
+      "country": "US",
+      "typical_volatility_window": {"before": "D-1", "after": "D"},
+      "historical_avg_abs_return_pct": 0.9,
+      "historical_std_dev_pct": 1.5,
+      "surprise_threshold_pct": 0.2,
+      "key_assets_affected": ["SPY", "TLT", "DXY", "GLD"],
+      "kr_assets_affected": ["KOSPI", "KOSDAQ", "USD/KRW"]
+    },
+    "KR_CPI": {
+      "event_type": "macro_release",
+      "country": "KR",
+      "typical_volatility_window": {"before": "D-1", "after": "D"},
+      "historical_avg_abs_return_pct": 0.4,
+      "historical_std_dev_pct": 0.5,
+      "surprise_threshold_pct": 0.2,
+      "key_assets_affected": [],
+      "kr_assets_affected": ["KOSPI", "한국 국채 3년", "USD/KRW"]
+    },
+    "US_GDP": {
+      "event_type": "macro_release",
+      "country": "US",
+      "typical_volatility_window": {"before": "D-1", "after": "D"},
+      "historical_avg_abs_return_pct": 0.7,
+      "historical_std_dev_pct": 0.9,
+      "surprise_threshold_pct": 0.3,
+      "key_assets_affected": ["SPY", "TLT", "DXY"],
+      "kr_assets_affected": ["KOSPI", "USD/KRW"]
+    },
+    "KR_GDP": {
+      "event_type": "macro_release",
+      "country": "KR",
+      "typical_volatility_window": {"before": "D-1", "after": "D"},
+      "historical_avg_abs_return_pct": 0.3,
+      "historical_std_dev_pct": 0.5,
+      "surprise_threshold_pct": 0.3,
+      "key_assets_affected": [],
+      "kr_assets_affected": ["KOSPI", "USD/KRW"]
+    },
+    "US_EMPLOYMENT": {
+      "event_type": "macro_release",
+      "country": "US",
+      "typical_volatility_window": {"before": "D-1", "after": "D"},
+      "historical_avg_abs_return_pct": 1.0,
+      "historical_std_dev_pct": 1.2,
+      "surprise_threshold_jobs_thousand": 50,
+      "key_assets_affected": ["SPY", "TLT", "DXY", "GLD"],
+      "kr_assets_affected": ["KOSPI", "USD/KRW"]
+    }
+  },
+  "fabrication_warning": "위 변동성 통계는 공개 자료 기반 대략적 추정값이며, 단일 이벤트의 실제 영향과 차이가 있을 수 있습니다. 분석 시 외부 데이터로 재검증 권장."
+}

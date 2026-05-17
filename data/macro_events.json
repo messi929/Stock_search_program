@@ -1,0 +1,26 @@
+[
+  {
+    "date": "2026-05-07",
+    "event": "FOMC 회의 결과 발표",
+    "impact": "high",
+    "category": "monetary_policy",
+    "country": "US",
+    "note": "예시 데이터 — 실제 일정은 수동 갱신 필요"
+  },
+  {
+    "date": "2026-04-30",
+    "event": "한국은행 기준금리 결정",
+    "impact": "high",
+    "category": "monetary_policy",
+    "country": "KR",
+    "note": "예시 데이터 — 실제 일정은 수동 갱신 필요"
+  },
+  {
+    "date": "2026-05-15",
+    "event": "한국 4월 소비자물가지수(CPI)",
+    "impact": "medium",
+    "category": "macro_indicator",
+    "country": "KR",
+    "note": "예시 데이터 — 실제 일정은 수동 갱신 필요"
+  }
+]

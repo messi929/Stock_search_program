@@ -39,11 +39,11 @@ async def rank_page(date: str):
         return HTMLResponse(_empty_html(date), status_code=200)
 
     sections = []
-    # 1) 종합 추천 TOP 10
+    # 1) 종합 점수 TOP 10
     if "buy_score" in df.columns:
         top = df.nlargest(10, "buy_score")
         top = top[top["buy_score"] > 0]
-        sections.append(("💎 종합 매수 추천 TOP 10", "buy_score", "점", top))
+        sections.append(("💎 종합 점수 TOP 10", "buy_score", "점", top))
 
     # 2) 급등 예보
     if "pre_surge_score" in df.columns:
@@ -138,8 +138,8 @@ def _render_section(title: str, value_col: str, unit: str, rows) -> str:
 
 
 def _render_html(date: str, sections: list, df) -> str:
-    title = f"{date} AI 매수 추천 TOP 종목 — Stock Screener Pro"
-    description = f"{date} 기준 한국 주식 AI 매수 추천 TOP 10, 급등 예보, 돌파 임박, 외국인·기관 동반매수 종목을 한눈에. 3,500+ 종목 실시간 분석."
+    title = f"{date} 종합 점수 TOP 종목 — Stock Screener Pro"
+    description = f"{date} 기준 한국 주식 종합 점수 TOP 10, 급등 예보, 돌파 임박, 외국인·기관 동반순매수 종목을 한눈에. 3,500+ 종목 실시간 분석."
     body_sections = "".join(_render_section(t, v, u, r) for t, v, u, r in sections)
     total = len(df) if df is not None else 0
 
@@ -230,8 +230,8 @@ footer .disclaim{{max-width:640px;margin:10px auto 0;padding:10px 14px;backgroun
 <div class="container">
   <div class="hero">
     <div class="date">📅 {escape(date)}</div>
-    <h1>오늘의 AI 매수 추천 종목</h1>
-    <p>기술적·모멘텀·수급·가치 지표를 종합한 AI 스코어 기반 TOP 리스트입니다.</p>
+    <h1>오늘의 종합 점수 상위 종목</h1>
+    <p>기술적·모멘텀·수급·가치 지표를 종합한 정량 스코어 기반 TOP 리스트입니다. 매수 권유가 아닌 참고 정보입니다.</p>
     <div class="stats">
       <span><strong>{total:,}</strong> 종목 실시간 분석</span>
       <span>·</span>
@@ -244,7 +244,7 @@ footer .disclaim{{max-width:640px;margin:10px auto 0;padding:10px 14px;backgroun
   {body_sections}
 
   <div class="cta-section">
-    <h3>📈 매일 갱신되는 AI 매수 추천</h3>
+    <h3>📈 매일 갱신되는 종합 점수 리스트</h3>
     <p>회원가입 후 7일간 Pro 기능 무료. 관심종목 저장·백테스트·포트폴리오 분석까지.</p>
     <a class="btn" href="/">무료로 시작하기 →</a>
   </div>
@@ -275,8 +275,8 @@ async def backtest_report():
     except Exception:
         data = {}
 
-    title = "시그널 백테스트 리포트 — AI 매수 추천 적중률"
-    description = "급등 예보, 돌파 임박, 종합 추천 등 각 시그널의 20일 보유 시 적중률·평균수익·샤프·알파 전체 기간 백테스트 결과. 한국 주식 3,500+ 종목 대상."
+    title = "시그널 백테스트 리포트 — 정량 시그널 적중률"
+    description = "급등 예보, 돌파 임박, 종합 점수 등 각 시그널의 20일 보유 시 적중률·평균수익·샤프·알파 전체 기간 백테스트 결과. 한국 주식 3,500+ 종목 대상."
 
     signals = data.get("signals") or {}
     score_tracking = data.get("score_tracking") or {}
@@ -456,7 +456,7 @@ async def og_rank_image(date: str = ""):
         top = df.nlargest(3, "buy_score")
         top_names = [str(n) for n in top["name"].tolist()[:3] if n]
 
-    top_line = " · ".join(top_names) if top_names else "AI 매수 추천"
+    top_line = " · ".join(top_names) if top_names else "종합 점수 상위"
     svg = f"""<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
   <defs>
     <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
@@ -474,7 +474,7 @@ async def og_rank_image(date: str = ""):
   <circle cx="200" cy="500" r="220" fill="#03b26c" opacity="0.06"/>
   <text x="80" y="130" font-family="-apple-system,system-ui,sans-serif" font-size="28" font-weight="700" fill="#a8b0c2">📊 Stock Screener Pro</text>
   <text x="80" y="230" font-family="-apple-system,system-ui,sans-serif" font-size="76" font-weight="900" fill="#ffffff">{escape(d)}</text>
-  <text x="80" y="310" font-family="-apple-system,system-ui,sans-serif" font-size="56" font-weight="900" fill="url(#accent)">AI 매수 추천 TOP</text>
+  <text x="80" y="310" font-family="-apple-system,system-ui,sans-serif" font-size="56" font-weight="900" fill="url(#accent)">종합 점수 TOP</text>
   <text x="80" y="420" font-family="-apple-system,system-ui,sans-serif" font-size="32" font-weight="600" fill="#e4e8f0">{escape(top_line[:80])}</text>
   <text x="80" y="480" font-family="-apple-system,system-ui,sans-serif" font-size="22" font-weight="500" fill="#6b7380">기술 · 모멘텀 · 수급 · 가치 종합 지표</text>
   <rect x="80" y="530" width="300" height="60" rx="30" fill="#3182f6"/>
@@ -498,7 +498,7 @@ async def og_backtest_image():
   <text x="80" y="130" font-family="-apple-system,system-ui,sans-serif" font-size="28" font-weight="700" fill="#a8b0c2">📊 Stock Screener Pro</text>
   <text x="80" y="250" font-family="-apple-system,system-ui,sans-serif" font-size="76" font-weight="900" fill="#ffffff">📊 백테스트 리포트</text>
   <text x="80" y="340" font-family="-apple-system,system-ui,sans-serif" font-size="44" font-weight="800" fill="#03b26c">AI 시그널 20일 적중률</text>
-  <text x="80" y="410" font-family="-apple-system,system-ui,sans-serif" font-size="26" font-weight="500" fill="#e4e8f0">급등 예보 · 돌파 임박 · 종합 추천 · 동반 매수</text>
+  <text x="80" y="410" font-family="-apple-system,system-ui,sans-serif" font-size="26" font-weight="500" fill="#e4e8f0">급등 예보 · 돌파 임박 · 종합 점수 · 외국인·기관 동반순매수</text>
   <text x="80" y="460" font-family="-apple-system,system-ui,sans-serif" font-size="22" font-weight="500" fill="#6b7380">무작위 기준 50% 대비 성과 공개</text>
   <rect x="80" y="520" width="300" height="60" rx="30" fill="#3182f6"/>
   <text x="230" y="560" font-family="-apple-system,system-ui,sans-serif" font-size="24" font-weight="800" fill="#fff" text-anchor="middle">리포트 확인 →</text>

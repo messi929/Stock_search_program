@@ -1,0 +1,25 @@
+{
+  "_meta": {
+    "schema_version": "1.0",
+    "description": "한국 공매도 정책 변동 이력. 정책 변동 시 즉시 수동 갱신.",
+    "source": "금융위원회 / 한국거래소 보도자료",
+    "last_updated": "2026-05-02"
+  },
+  "policy_history": [
+    {"date": "2008-10-01", "action": "전면 금지", "reason": "리먼브라더스 사태 — 시장 안정 조치"},
+    {"date": "2009-06-01", "action": "재개", "reason": "시장 안정 회복"},
+    {"date": "2011-08-10", "action": "전면 금지", "reason": "유럽 재정위기"},
+    {"date": "2011-11-10", "action": "재개", "reason": "유럽 위기 진정"},
+    {"date": "2020-03-16", "action": "전면 금지", "reason": "코로나19 시장 충격"},
+    {"date": "2021-05-03", "action": "부분 재개", "scope": "KOSPI 200 / KOSDAQ 150 종목만", "reason": "단계적 정상화"},
+    {"date": "2023-11-06", "action": "전면 금지", "reason": "불법공매도 점검 — 6개월 한시 → 연장"},
+    {"date": "2025-03-31", "action": "전면 재개", "scope": "KOSPI/KOSDAQ 전 종목", "reason": "제도 개편 완료 (시장조성자 의무 강화 등)"}
+  ],
+  "current_status": {
+    "as_of": "2026-05-02",
+    "status": "전면 재개",
+    "since": "2025-03-31",
+    "scope": "KOSPI/KOSDAQ 전 종목",
+    "note": "2025년 3월 재개 후 약 14개월 경과 — 정책 안정 단계"
+  }
+}

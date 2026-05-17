@@ -92,7 +92,7 @@ def _send_signal_alerts():
     """시그널 충족 종목 텔레그램 알림.
 
     장중 갱신 후 호출. 조건:
-    - buy_score >= 70 (적극매수)
+    - buy_score >= 70 (상위 구간)
     - is_pre_surge == 1 (급등 예보)
     - RSI <= 30 (과매도)
     """
@@ -110,12 +110,12 @@ def _send_signal_alerts():
 
         alerts = []
 
-        # 적극매수 종목 (buy_score >= 70)
+        # 종합 점수 상위 구간 (buy_score >= 70)
         if "buy_score" in kr.columns:
             top_buy = kr[kr["buy_score"] >= 70].nlargest(5, "buy_score")
             if not top_buy.empty:
                 lines = [f"  {r['name']}({r['ticker']}) {r['buy_score']:.0f}점" for _, r in top_buy.iterrows()]
-                alerts.append("🔥 <b>적극매수 시그널</b>\n" + "\n".join(lines))
+                alerts.append("🔥 <b>종합 점수 상위 구간</b>\n" + "\n".join(lines))
 
         # 급등 예보
         if "is_pre_surge" in kr.columns:
@@ -125,13 +125,13 @@ def _send_signal_alerts():
                 lines = [f"  {r['name']}({r['ticker']}) 예보{r['pre_surge_score']}/5" for _, r in top_ps.iterrows()]
                 alerts.append("🚀 <b>급등 예보</b>\n" + "\n".join(lines))
 
-        # 과매도 반등 (RSI <= 30, 시총 1000억+)
+        # 과매도 구간 (RSI <= 30, 시총 1000억+)
         if "rsi" in kr.columns:
             oversold = kr[(kr["rsi"] > 0) & (kr["rsi"] <= 30) & (kr["market_cap"] >= 1000)]
             if not oversold.empty:
                 top_os = oversold.nsmallest(min(5, len(oversold)), "rsi")
                 lines = [f"  {r['name']}({r['ticker']}) RSI {r['rsi']:.0f}" for _, r in top_os.iterrows()]
-                alerts.append("📉 <b>과매도 반등 기회</b>\n" + "\n".join(lines))
+                alerts.append("📉 <b>과매도 구간</b>\n" + "\n".join(lines))
 
         # v6 Phase 5-2: 스마트 복합 알림
         # 외국인 연속매수 + 기술적 반등

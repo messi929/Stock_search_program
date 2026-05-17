@@ -6,12 +6,23 @@ pyarrow>=12.0.0
 loguru>=0.7.0
 python-dotenv>=1.0.0
 openpyxl>=3.1.0
-pywebview>=4.0.0
 beautifulsoup4>=4.12.0
 lxml>=4.9.0
-pystray>=0.19.0
-Pillow>=10.0.0
 firebase-admin>=6.0.0
 httpx>=0.25.0
 yfinance>=0.2.0
 pykrx>=1.0.0
+
+# Axis AI Layer
+anthropic>=0.40.0
+langgraph>=0.2.0
+langchain-anthropic>=0.2.0
+pydantic>=2.0.0
+json-repair>=0.30.0
+
+# Axis v2 — Macro Data (Week B)
+fredapi>=0.5.0
+
+# Test
+pytest>=7.0.0
+pytest-asyncio>=1.0.0
