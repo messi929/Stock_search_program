@@ -13,10 +13,13 @@
  *   - Pro 카테고리 + free 플랜: ProGate (스캔 호출 안 함)
  *   - Scan 로딩/실패/빈 결과: 각 상태 카드
  *
+ * 뷰 모드: 표(table) ↔ 트리맵(treemap) 토글. 클라이언트 state만 사용.
+ *
  * LEGAL: buy_grade 같은 권유성 라벨은 columnMeta에서 중립 변환.
  *        하단 Disclaimer 필수.
  */
 
+import { useState } from "react";
 import Link from "next/link";
 
 import { Disclaimer } from "@/components/legal/Disclaimer";
@@ -28,12 +31,16 @@ import type { SmartListCategory } from "@/types/api";
 
 import { ProGate } from "./ProGate";
 import { ResultsTable, type StockRow } from "./ResultsTable";
+import { Treemap } from "./Treemap";
+
+type ViewMode = "table" | "treemap";
 
 interface Props {
   categoryId: string;
 }
 
 export function ScreenerResultView({ categoryId }: Props) {
+  const [viewMode, setViewMode] = useState<ViewMode>("table");
   const {
     data: smartLists,
     isLoading: smartListsLoading,
@@ -156,16 +163,53 @@ export function ScreenerResultView({ categoryId }: Props) {
     );
   }
 
-  // ─── 결과 표 ─────────────────────────────
+  // ─── 결과 (표 ↔ 트리맵 토글) ─────────────
+  const caption = `${category.name} 스마트 리스트 결과 (총 ${total.toLocaleString("ko-KR")}건)`;
+  const sizeKey = category.columns.includes("buy_score")
+    ? "buy_score"
+    : category.columns.includes("market_cap")
+      ? "market_cap"
+      : category.columns[0];
+
   return (
     <div className="space-y-4">
       <Header category={category} total={total} />
-      <ResultsTable
-        columns={category.columns}
-        stocks={stocks}
-        caption={`${category.name} 스마트 리스트 결과 (총 ${total.toLocaleString("ko-KR")}건)`}
-      />
+      <ViewToggle mode={viewMode} onChange={setViewMode} />
+      {viewMode === "table" ? (
+        <ResultsTable columns={category.columns} stocks={stocks} caption={caption} />
+      ) : (
+        <Treemap stocks={stocks} sizeKey={sizeKey} caption={caption} />
+      )}
       <Disclaimer />
+    </div>
+  );
+}
+
+function ViewToggle({
+  mode,
+  onChange,
+}: {
+  mode: ViewMode;
+  onChange: (m: ViewMode) => void;
+}) {
+  const tab = (m: ViewMode, label: string) => (
+    <button
+      type="button"
+      aria-pressed={mode === m}
+      onClick={() => onChange(m)}
+      className={`px-3 py-1.5 text-sm rounded-md transition focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 ${
+        mode === m
+          ? "bg-muted text-foreground"
+          : "text-muted-foreground hover:text-foreground"
+      }`}
+    >
+      {label}
+    </button>
+  );
+  return (
+    <div className="inline-flex rounded-md border p-0.5 gap-0.5" role="tablist">
+      {tab("table", "📋 표")}
+      {tab("treemap", "🗺️ 트리맵")}
     </div>
   );
 }

@@ -459,3 +459,48 @@ export type UsageResponse = {
   reset_at: string;
   upgrade_url: string;
 };
+
+// ─── /portfolio/risk (v7.5) ────────────────
+export type PortfolioHolding = {
+  ticker: string;
+  buy_price?: number;
+  qty?: number;
+};
+
+export type PortfolioRiskRequest = {
+  tickers?: string[];
+  holdings?: PortfolioHolding[];
+};
+
+export type PortfolioPosition = {
+  ticker: string;
+  name: string;
+  sector: string;
+  weight_pct: number;
+};
+
+export type PortfolioRecommendation = {
+  level: "success" | "info" | "warning" | string;
+  msg: string;
+};
+
+export type PortfolioRiskResponse = {
+  tickers: string[];
+  positions: PortfolioPosition[];
+  correlation_matrix: number[][];
+  portfolio_volatility: number;
+  annualized_return: number;
+  sharpe_ratio: number;
+  max_drawdown: number;
+  health_score: number;
+  health_grade: string;
+  avg_correlation: number;
+  top_weight_ticker: string;
+  top_weight_name: string;
+  top_weight_pct: number;
+  sector_concentration: Record<string, number>;
+  market_split: Record<string, number>;
+  recommendations?: PortfolioRecommendation[];
+  risk_warning?: string;
+  error?: string;
+};
