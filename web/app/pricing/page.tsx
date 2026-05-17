@@ -166,7 +166,7 @@ export default function PricingPage() {
         </section>
 
         <div className="mt-16">
-          <Disclaimer />
+          <Disclaimer lang="both" />
         </div>
       </div>
     </main>

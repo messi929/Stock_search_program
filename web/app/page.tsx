@@ -185,13 +185,19 @@ export default function Home() {
             개인정보처리방침
           </Link>
           <Link
+            href="/refund"
+            className="inline-flex items-center min-h-[44px] px-3 hover:text-foreground hover:underline"
+          >
+            환불정책
+          </Link>
+          <Link
             href="/login"
             className="inline-flex items-center min-h-[44px] px-3 hover:text-foreground hover:underline"
           >
             로그인
           </Link>
         </nav>
-        <Disclaimer />
+        <Disclaimer lang="both" />
       </footer>
     </main>
   );
