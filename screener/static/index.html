@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Stock Screener Pro</title>
+<title>Axis</title>
 <link rel="icon" href="/static/favicon.ico" type="image/x-icon">
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css" rel="stylesheet">
@@ -832,7 +832,7 @@ tbody tr{animation:fadeIn .2s ease;}
 <div class="onboarding" id="onboarding">
   <div class="onboarding-card">
     <div class="ob-header">
-      <h2>Stock Screener Pro</h2>
+      <h2>Axis</h2>
       <p>데이터 기반 매수 타이밍 스크리닝 시스템</p>
     </div>
     <div class="ob-steps">
@@ -1490,7 +1490,7 @@ tbody tr{animation:fadeIn .2s ease;}
 <!-- ── Site Footer ── -->
 <footer class="site-footer">
   <div class="container">
-    <div class="site-footer-brand">Stock Screener <span>Pro</span></div>
+    <div class="site-footer-brand">Axis</div>
     <nav class="site-footer-nav" aria-label="사이트 안내">
       <a href="/pricing">요금제</a>
       <span style="color:var(--text3);">·</span>
@@ -1503,7 +1503,7 @@ tbody tr{animation:fadeIn .2s ease;}
       <a href="javascript:void(0)" onclick="showContactModal(event)">문의</a>
     </nav>
     <div class="site-footer-meta">
-      © 2026 Stock Screener Pro · 결제: Lemon Squeezy (Merchant of Record)
+      © 2026 Axis · 결제: Lemon Squeezy (Merchant of Record)
     </div>
     <div class="site-footer-disclaimer">
       본 서비스는 공개된 시장 데이터의 스크리닝·리서치 도구로, 투자자문·증권중개·자산운용 서비스가 아닙니다. 제공되는 모든 정보는 교육·정보 제공 목적이며, 투자 결정과 결과에 대한 책임은 이용자 본인에게 있습니다.
@@ -2932,7 +2932,7 @@ function checkAlerts(stocks){
   // 토스트 + 브라우저 알림 (권한 있을 때만)
   alerts.slice(0,3).forEach(a=>showToast(a,'info',6000));
   if(Notification.permission==='granted'){
-    try{new Notification('Stock Screener Pro',{body:alerts.slice(0,5).join('\n'),icon:'/static/favicon.png'});}catch{}
+    try{new Notification('Axis',{body:alerts.slice(0,5).join('\n'),icon:'/static/favicon.png'});}catch{}
   }
 }
 
