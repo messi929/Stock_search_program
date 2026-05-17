@@ -467,7 +467,7 @@ echo -n "key-xxxxxx" | gcloud secrets versions add mailgun-api-key --data-file=-
 ```bash
 gcloud run services update stock-screener \
   --region=asia-northeast3 \
-  --update-env-vars="MAILGUN_DOMAIN=mg.yourdomain.com,MAILGUN_FROM=StockFinder <noreply@mg.yourdomain.com>,MAILGUN_REGION=us" \
+  --update-env-vars="MAILGUN_DOMAIN=mg.yourdomain.com,MAILGUN_FROM=Axis <noreply@mg.yourdomain.com>,MAILGUN_REGION=us" \
   --update-secrets="MAILGUN_API_KEY=mailgun-api-key:latest"
 ```
 

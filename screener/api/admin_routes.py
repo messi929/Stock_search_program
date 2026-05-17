@@ -317,7 +317,7 @@ def _trial_reminder_html(days_left: int, ends_at: datetime, pricing_url: str) ->
 <html lang="ko"><body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;max-width:600px;margin:0 auto;padding:40px 20px;color:#1e293b;background:#f8fafc;">
 <div style="background:white;padding:32px;border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,.08);">
 <h1 style="color:#2563eb;margin:0 0 16px;font-size:22px;">⏰ 체험판 {urgency}</h1>
-<p style="font-size:15px;line-height:1.7;">StockFinder Pro 체험판이 <b>{ends_str}</b>에 만료됩니다.</p>
+<p style="font-size:15px;line-height:1.7;">Axis Pro 체험판이 <b>{ends_str}</b>에 만료됩니다.</p>
 <p style="font-size:15px;line-height:1.7;">계속 Pro 기능(전문가 포트폴리오, 관찰 포인트, 백테스트 등)을 사용하시려면 아래 버튼에서 결제를 진행해주세요.</p>
 <p style="margin:32px 0;text-align:center;">
 <a href="{pricing_url}" style="background:#2563eb;color:white;padding:14px 28px;text-decoration:none;border-radius:8px;font-weight:600;display:inline-block;">Pro 결제하기 →</a>
@@ -331,10 +331,10 @@ def _trial_reminder_text(days_left: int, ends_at: datetime, pricing_url: str) ->
     ends_str = ends_at.astimezone(timezone.utc).strftime("%Y-%m-%d")
     urgency = "오늘 만료됩니다" if days_left == 0 else f"{days_left}일 남았습니다"
     return (
-        f"StockFinder Pro 체험판 {urgency}\n\n"
+        f"Axis Pro 체험판 {urgency}\n\n"
         f"체험판 만료일: {ends_str}\n\n"
         f"계속 Pro 기능을 사용하시려면 아래 링크에서 결제해주세요:\n{pricing_url}\n\n"
-        f"--\nStockFinder"
+        f"--\nAxis"
     )
 
 
@@ -364,7 +364,7 @@ async def send_trial_reminders(request: Request, days: int = 2):
         if dd.get("trial_reminder_sent_at"):
             skipped += 1
             continue
-        subject = f"[StockFinder] Pro 체험판 {days_left}일 남았습니다"
+        subject = f"[Axis] Pro 체험판 {days_left}일 남았습니다"
         ok = send_email(
             email,
             subject,

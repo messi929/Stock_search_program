@@ -3,7 +3,7 @@
 환경변수:
   MAILGUN_API_KEY     — Mailgun API 키
   MAILGUN_DOMAIN      — 인증된 도메인 (예: mg.yourdomain.com)
-  MAILGUN_FROM        — 발신자 (예: "StockFinder <noreply@mg.yourdomain.com>")
+  MAILGUN_FROM        — 발신자 (예: "Axis <noreply@mg.yourdomain.com>")
   MAILGUN_REGION      — us(기본) 또는 eu
 """
 
@@ -17,7 +17,7 @@ MAILGUN_API_KEY = os.environ.get("MAILGUN_API_KEY", "")
 MAILGUN_DOMAIN = os.environ.get("MAILGUN_DOMAIN", "")
 MAILGUN_FROM = os.environ.get(
     "MAILGUN_FROM",
-    f"StockFinder <noreply@{MAILGUN_DOMAIN}>" if MAILGUN_DOMAIN else "",
+    f"Axis <noreply@{MAILGUN_DOMAIN}>" if MAILGUN_DOMAIN else "",
 )
 MAILGUN_REGION = os.environ.get("MAILGUN_REGION", "us").lower()
 
