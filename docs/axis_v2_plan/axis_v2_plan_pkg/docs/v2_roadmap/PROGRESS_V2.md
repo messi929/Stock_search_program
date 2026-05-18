@@ -1,7 +1,104 @@
 # Axis v2 — 6 Persona Expansion 진척 기록
 
 > **브랜치**: `main` (feature/v2-six-personas squash 머지 완료, 2026-05-17)
-> **현재 위치**: **Axis v2 production 가동 중** — Cloud Run revision `stock-screener-00033-tn4`, 자동 스케줄러 4종 ENABLED. 도메인 매핑 + LS 재신청만 남음.
+> **현재 위치**: **Axis v2 production 가동 중** — Cloud Run revision `stock-screener-00033-tn4`, 자동 스케줄러 4종 ENABLED. 도메인 매핑 진행 중 (Cloudflare Proxy 우회 + SNI 설정).
+
+---
+
+## 📅 2026-05-18 — 도메인 등록 + Cloud Run 매핑 (진행 중)
+
+### 도메인 최종 채택: `axislytics.com`
+
+원래 메모리 결정 `allofasset.com` + 추가 후보들 시도 결과 대부분 점유.
+
+| 시도 도메인 | 결과 |
+|-------------|------|
+| `axis.com` | 점유 (프리미엄 가격) |
+| `getaxis.com` / `axisai.com` / `axis.io` | 점유 |
+| `allofasset.com` | 점유 (메모리 결정 무효) |
+| `axisresearch.com` / `assetaxis.com` / `axisone.com` | 점유 추정 |
+| **`axislytics.com`** | ✅ **가용 → 등록** (~$10/yr, Cloudflare Registrar) |
+
+**채택 사유**: Axis + Analytics. 데이터 분석 정체성 명확, 14자, .com TLD, LS 심사 친화적.
+
+### Search Console 소유권 검증 ✅
+
+- 속성 추가 → 도메인 → `axislytics.com`
+- TXT `google-site-verification=...` → Cloudflare DNS (Proxy OFF) 등록
+- "인증된 소유자" 확인
+
+### Cloud Run domain mapping 실패 → Cloudflare Proxy 우회
+
+**함정 1: asia-northeast3 region은 Cloud Run domain mappings 미지원**
+```
+ERROR: (gcloud.beta.run.domain-mappings.create)
+       "Creating domain mappings is not allowed in asia-northeast3."
+       UNIMPLEMENTED (HTTP 501)
+```
+
+대안 비교:
+- A. Cloudflare Proxy 우회 (CNAME + Proxy ON) — 무료, 5분, **채택**
+- B. HTTP(S) Load Balancer + Serverless NEG — ~$18/월, 30분
+- C. Cloud Run region 이전 (us-central / asia-northeast1) — 1시간+, Firestore 영향
+
+### Cloudflare DNS 설정 ✅
+
+```
+CNAME  @     stock-screener-czmvccovxq-du.a.run.app  Proxy 🟧 ON
+CNAME  www   stock-screener-czmvccovxq-du.a.run.app  Proxy 🟧 ON
+SSL/TLS mode: Full (auto-mode disabled)
+```
+
+DNS 전파 + SSL 발급 정상 작동.
+
+### **함정 2: Host Header만으로는 부족 — SNI 재작성도 필요**
+
+DNS·SSL 모두 작동했지만 `https://axislytics.com` 응답이 404.
+
+진단:
+```
+Server: cloudflare  ✓
+CF-RAY: ...HKG       ✓ Cloudflare PoP 도달
+cfOrigin;dur=126     ✓ Origin에 요청 도달
+Response Body: Google Frontend의 "Error 404 (Not Found)" 페이지
+```
+
+→ Cloud Run frontend가 **SNI hostname**으로 service 라우팅하는데, Cloudflare가
+   기본적으로 visitor의 SNI(`axislytics.com`)를 그대로 origin에 전달 → 매칭 실패.
+
+**해결**: Cloudflare Origin Rules에서 **Host Header + SNI 둘 다** 재작성.
+
+```
+Cloudflare → Rules → Origin Rules → Create rule
+
+Rule name: Cloud Run Host + SNI
+When incoming requests match: All incoming requests
+Then:
+  • Host Header: stock-screener-czmvccovxq-du.a.run.app
+  • Server Name Indication (SNI): stock-screener-czmvccovxq-du.a.run.app  ← 핵심
+Deploy
+```
+
+**현재 상태**: 사용자가 Origin Rules 설정 중. 검증 대기.
+
+### 남은 도메인 단계 (Origin Rules 적용 후)
+
+```
+1. https://axislytics.com 응답 검증 (200 OK 기대)
+2. Firebase Console 승인도메인에 axislytics.com 추가 (Google 로그인)
+3. Cloud Run env FRONTEND_URL=https://axislytics.com 갱신
+4. 법적 페이지(/terms·/privacy·/refund·/pricing) 내 URL 레퍼런스 점검
+5. (선택) www → apex 리디렉트 Rule
+```
+
+### 함정 정리 (2026-05-18 추가)
+
+6. **asia-northeast3 Cloud Run domain mapping 미지원** — 한국 region 선택 시
+   Cloudflare/Load Balancer 우회 필수. 새 프로젝트는 asia-northeast1(도쿄)
+   고려하면 native domain mapping 가능.
+7. **Cloud Run의 Host + SNI 이중 검증** — 호스트 헤더만 재작성하면 404
+   (Google Frontend가 SSL 핸드셰이크 시 SNI로 service 결정). Cloudflare
+   Origin Rules는 두 필드 모두 지원.
 
 ---
 
