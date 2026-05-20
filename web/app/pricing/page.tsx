@@ -101,7 +101,7 @@ export default function PricingPage() {
               <CardContent className="p-6 space-y-4">
                 {t.highlight && (
                   <span className="inline-block text-xs font-medium px-2 py-0.5 rounded bg-amber-500 text-black">
-                    추천
+                    인기
                   </span>
                 )}
                 <div>

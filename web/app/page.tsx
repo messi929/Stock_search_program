@@ -145,8 +145,8 @@ export default function Home() {
               </a>
             ) : (
               <p className="text-xs text-muted-foreground italic">
-                신청 폼은 곧 오픈됩니다. 알림을 받으시려면 X에서{" "}
-                <span className="font-medium">@axis_kr</span>을 팔로우해 주세요.
+                신청 폼은 곧 오픈됩니다. 오픈되면 순차적으로 안내 이메일을
+                보내드립니다.
               </p>
             )}
             <p className="text-xs text-muted-foreground pt-2">

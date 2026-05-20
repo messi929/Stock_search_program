@@ -66,20 +66,17 @@ TODO: `scripts/deploy-axis-staging.sh` 작성 ([REDESIGN.md §8.1](REDESIGN.md))
 
 ## 🛡️ 빈 LEGAL/정책 항목
 
-### A. API 응답 자동 필터링 미적용 ⏳ 미해결
-**현재**: `BaseAgent.filter_forbidden()` 메서드 존재하지만 자동 호출 X. 시스템 프롬프트에 의존.
-**해결**: `api/routes/ai.py`의 응답 빌더에 자동 후처리 추가
-- `_build_full_response()` (analyze) — 모든 string 필드 traversal + filter
-- `discover` 응답 — 동일
-- `validate` 응답 — Contrarian/blind_spots 필터
-**예상 작업량**: 1시간 (REDESIGN.md §6.1)
+### A. API 응답 자동 필터링 ✅ 완료 (2026-05-20 확인)
+**구현됨**: `api/routes/ai.py`에 `_sanitize_response()`(재귀 dict/list/str traversal +
+`BaseAgent.filter_forbidden()`) + `_wrap_legal()`(non-streaming) + `_sse()`(streaming) 적용.
+`_build_full_response()`가 `_wrap_legal()`로 마감, 모든 SSE 이벤트는 `_sse()`로 자동 필터.
+필터링 발생 시 `logger.warning([LEGAL] ...)` 기록.
 
-### B. `scripts/legal_check.py` 미구현 ⏳ 미해결
-**LEGAL.md 명시**: 배포 전 코드/문서에서 금지 단어 자동 검출하여 CI 차단.
-**해결**: 신규 작성 — `agents/`, `personas/`, `api/`, `web/app/`, `web/components/` 검색.
-- 시스템 프롬프트 안의 "금지 단어 리스트 자체"는 화이트리스트 처리 (정의 vs 사용 구분)
-- 실패 시 exit 1
-**예상 작업량**: 30분 (REDESIGN.md §6.2)
+### B. `scripts/legal_check.py` ✅ 완료 (2026-05-20 실행 확인)
+**구현됨**: 정규식 기반(`agents/base.py` FORBIDDEN_PATTERNS와 동일) + 화이트리스트
+(따옴표 인접 정의/예시, `legal-check: allow` 어노테이션, 주석 줄, node_modules/.next 등) +
+exit code(0/1). 검사 대상: agents/personas/api/web/{app,components,hooks}/scripts.
+**최근 실행 (2026-05-20)**: `py scripts/legal_check.py` → 98 파일, 0 위반 통과.
 
 ### C. `/terms`, `/privacy` 페이지 ✅ 완료
 **상태**: Week 6에서 신규 작성 + 배포 완료. 라운드 1 워크스루에서 정상 렌더 확인.
