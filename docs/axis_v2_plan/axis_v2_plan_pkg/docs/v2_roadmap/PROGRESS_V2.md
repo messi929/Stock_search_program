@@ -1,11 +1,11 @@
 # Axis v2 — 6 Persona Expansion 진척 기록
 
 > **브랜치**: `main` (feature/v2-six-personas squash 머지 완료, 2026-05-17)
-> **현재 위치**: **Axis v2 production 가동 중** — Cloud Run revision `stock-screener-00033-tn4`, 자동 스케줄러 4종 ENABLED. 도메인 매핑 진행 중 (Cloudflare Proxy 우회 + SNI 설정).
+> **현재 위치**: **Axis v2 production 가동 중** — Cloud Run revision `stock-screener-00033-tn4`, 자동 스케줄러 4종 ENABLED. **도메인 `axislytics.com` 라이브** (2026-05-21 200 OK 검증, www→apex 307 정상). 남은 건 Firebase 승인도메인 추가(사용자)뿐.
 
 ---
 
-## 📅 2026-05-18 — 도메인 등록 + Cloud Run 매핑 (진행 중)
+## 📅 2026-05-18~21 — 도메인 등록 + Cloud Run 매핑 (✅ 라이브)
 
 ### 도메인 최종 채택: `axislytics.com`
 
@@ -79,16 +79,17 @@ Then:
 Deploy
 ```
 
-**현재 상태**: 사용자가 Origin Rules 설정 중. 검증 대기.
+**현재 상태**: ✅ Origin Rules(Host+SNI) 적용 완료 → `axislytics.com` 200 OK 검증 (2026-05-21).
 
-### 남은 도메인 단계 (Origin Rules 적용 후)
+### 남은 도메인 단계 — 2026-05-21 정산
 
 ```
-1. https://axislytics.com 응답 검증 (200 OK 기대)
-2. Firebase Console 승인도메인에 axislytics.com 추가 (Google 로그인)
-3. Cloud Run env FRONTEND_URL=https://axislytics.com 갱신
-4. 법적 페이지(/terms·/privacy·/refund·/pricing) 내 URL 레퍼런스 점검
-5. (선택) www → apex 리디렉트 Rule
+1. ✅ https://axislytics.com 응답 검증 — 200 OK (curl 확인)
+2. ⬜ Firebase Console 승인도메인에 axislytics.com 추가 (Google 로그인) — 사용자 직접, 마지막 블로커
+3. ✅(무효) Cloud Run env FRONTEND_URL — 백엔드 미사용(CORS=*), 갱신 불필요로 확인
+4. ✅ 법적 페이지(/terms·/privacy·/refund·/pricing) URL 점검 — 하드코딩 URL 0건(전부 env 기반)
+5. ✅ www → apex 리디렉트 — 307 정상 동작 확인
++  ✅ OG/SEO 브랜딩 교체 — rank_page.py 옛 "Stock Screener Pro"/"stock-screener.run.app" → "Axis"/"axislytics.com" (6곳)
 ```
 
 ### 함정 정리 (2026-05-18 추가)

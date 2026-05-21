@@ -138,7 +138,7 @@ def _render_section(title: str, value_col: str, unit: str, rows) -> str:
 
 
 def _render_html(date: str, sections: list, df) -> str:
-    title = f"{date} 종합 점수 TOP 종목 — Stock Screener Pro"
+    title = f"{date} 종합 점수 TOP 종목 — Axis"
     description = f"{date} 기준 한국 주식 종합 점수 TOP 10, 급등 예보, 돌파 임박, 외국인·기관 동반순매수 종목을 한눈에. 3,500+ 종목 실시간 분석."
     body_sections = "".join(_render_section(t, v, u, r) for t, v, u, r in sections)
     total = len(df) if df is not None else 0
@@ -149,7 +149,7 @@ def _render_html(date: str, sections: list, df) -> str:
       "@type": "Article",
       "headline": "{title}",
       "datePublished": "{date}",
-      "author": {{"@type": "Organization", "name": "Stock Screener Pro"}},
+      "author": {{"@type": "Organization", "name": "Axis"}},
       "description": "{description}"
     }}</script>"""
 
@@ -224,7 +224,7 @@ footer .disclaim{{max-width:640px;margin:10px auto 0;padding:10px 14px;backgroun
 </head>
 <body>
 <header class="top">
-  <h1>Stock <span>Screener</span> Pro</h1>
+  <h1><span>Axis</span></h1>
   <a class="cta" href="/">🔍 전체 종목 탐색</a>
 </header>
 <div class="container">
@@ -381,7 +381,7 @@ footer a{{color:var(--text3);margin:0 6px;}}
 .disclaim{{max-width:640px;margin:10px auto 0;padding:10px 14px;background:var(--bg3);border-radius:8px;font-size:10px;line-height:1.6;}}
 </style>
 </head><body>
-<header class="top"><h1>Stock <span>Screener</span> Pro</h1><a class="cta" href="/">🔍 탐색 시작</a></header>
+<header class="top"><h1><span>Axis</span></h1><a class="cta" href="/">🔍 탐색 시작</a></header>
 <div class="wrap">
   <div class="hero">
     <h1>📊 시그널 백테스트 리포트</h1>
@@ -472,14 +472,14 @@ async def og_rank_image(date: str = ""):
   <rect width="1200" height="630" fill="url(#bg)"/>
   <circle cx="1000" cy="100" r="180" fill="#3182f6" opacity="0.08"/>
   <circle cx="200" cy="500" r="220" fill="#03b26c" opacity="0.06"/>
-  <text x="80" y="130" font-family="-apple-system,system-ui,sans-serif" font-size="28" font-weight="700" fill="#a8b0c2">📊 Stock Screener Pro</text>
+  <text x="80" y="130" font-family="-apple-system,system-ui,sans-serif" font-size="28" font-weight="700" fill="#a8b0c2">📊 Axis</text>
   <text x="80" y="230" font-family="-apple-system,system-ui,sans-serif" font-size="76" font-weight="900" fill="#ffffff">{escape(d)}</text>
   <text x="80" y="310" font-family="-apple-system,system-ui,sans-serif" font-size="56" font-weight="900" fill="url(#accent)">종합 점수 TOP</text>
   <text x="80" y="420" font-family="-apple-system,system-ui,sans-serif" font-size="32" font-weight="600" fill="#e4e8f0">{escape(top_line[:80])}</text>
   <text x="80" y="480" font-family="-apple-system,system-ui,sans-serif" font-size="22" font-weight="500" fill="#6b7380">기술 · 모멘텀 · 수급 · 가치 종합 지표</text>
   <rect x="80" y="530" width="300" height="60" rx="30" fill="#3182f6"/>
   <text x="230" y="570" font-family="-apple-system,system-ui,sans-serif" font-size="24" font-weight="800" fill="#fff" text-anchor="middle">무료로 시작하기 →</text>
-  <text x="1120" y="600" font-family="-apple-system,system-ui,sans-serif" font-size="18" font-weight="500" fill="#6b7380" text-anchor="end">stock-screener.run.app</text>
+  <text x="1120" y="600" font-family="-apple-system,system-ui,sans-serif" font-size="18" font-weight="500" fill="#6b7380" text-anchor="end">axislytics.com</text>
 </svg>"""
     return Response(content=svg, media_type="image/svg+xml", headers={"Cache-Control": "public, max-age=3600"})
 
@@ -495,7 +495,7 @@ async def og_backtest_image():
     </linearGradient>
   </defs>
   <rect width="1200" height="630" fill="url(#bg2)"/>
-  <text x="80" y="130" font-family="-apple-system,system-ui,sans-serif" font-size="28" font-weight="700" fill="#a8b0c2">📊 Stock Screener Pro</text>
+  <text x="80" y="130" font-family="-apple-system,system-ui,sans-serif" font-size="28" font-weight="700" fill="#a8b0c2">📊 Axis</text>
   <text x="80" y="250" font-family="-apple-system,system-ui,sans-serif" font-size="76" font-weight="900" fill="#ffffff">📊 백테스트 리포트</text>
   <text x="80" y="340" font-family="-apple-system,system-ui,sans-serif" font-size="44" font-weight="800" fill="#03b26c">AI 시그널 20일 적중률</text>
   <text x="80" y="410" font-family="-apple-system,system-ui,sans-serif" font-size="26" font-weight="500" fill="#e4e8f0">급등 예보 · 돌파 임박 · 종합 점수 · 외국인·기관 동반순매수</text>
