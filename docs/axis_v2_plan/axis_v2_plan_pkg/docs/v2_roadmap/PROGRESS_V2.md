@@ -1,7 +1,7 @@
 # Axis v2 — 6 Persona Expansion 진척 기록
 
 > **브랜치**: `main` (feature/v2-six-personas squash 머지 완료, 2026-05-17)
-> **현재 위치**: **Axis v2 production 가동 중** — Cloud Run revision `stock-screener-00033-tn4`, 자동 스케줄러 4종 ENABLED. **도메인 `axislytics.com` 라이브** (2026-05-21 200 OK 검증, www→apex 307 정상). 남은 건 Firebase 승인도메인 추가(사용자)뿐.
+> **현재 위치**: **Axis v2 production 가동 중** — Cloud Run revision `stock-screener-00033-tn4`, 자동 스케줄러 4종 ENABLED. **도메인 `axislytics.com` 라이브 + Google 로그인 정상** (2026-05-21 200 OK + OAuth 핸들러 검증 완료). 도메인 출시 마무리 ✅.
 
 ---
 
@@ -85,7 +85,7 @@ Deploy
 
 ```
 1. ✅ https://axislytics.com 응답 검증 — 200 OK (curl 확인)
-2. ⬜ Firebase Console 승인도메인에 axislytics.com 추가 (Google 로그인) — 사용자 직접, 마지막 블로커
+2. ✅ Firebase 승인도메인에 axislytics.com 추가 (프로젝트 `stock-search-program`) — Google 로그인 OAuth 핸들러→accounts.google.com 진행 확인 (2026-05-21 Playwright 검증)
 3. ✅(무효) Cloud Run env FRONTEND_URL — 백엔드 미사용(CORS=*), 갱신 불필요로 확인
 4. ✅ 법적 페이지(/terms·/privacy·/refund·/pricing) URL 점검 — 하드코딩 URL 0건(전부 env 기반)
 5. ✅ www → apex 리디렉트 — 307 정상 동작 확인
