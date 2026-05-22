@@ -545,7 +545,15 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Stock Screener Pro", version="5.0.0", lifespan=lifespan)
 
-# CORS — 데스크톱 클라이언트가 원격 서버에 접속 허용
+# ⚠️ 미들웨어 순서 주의: Starlette은 '마지막에 add한 것이 최외곽(먼저 실행)'.
+# CORS를 최외곽에 둬야 Auth/에러 응답에도 CORS 헤더가 붙음 → 브라우저 CORS 차단 방지.
+# 따라서 AuthMiddleware를 먼저 add(안쪽), CORSMiddleware를 나중에 add(바깥쪽).
+
+# 인증 + 티어 미들웨어 (AUTH_ENABLED=true 시 활성화) — 안쪽
+from screener.middleware import AuthMiddleware
+app.add_middleware(AuthMiddleware)
+
+# CORS — 최외곽 (Auth 거부/에러 응답에도 헤더 보장)
 from fastapi.middleware.cors import CORSMiddleware
 app.add_middleware(
     CORSMiddleware,
@@ -553,10 +561,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-# 인증 + 티어 미들웨어 (AUTH_ENABLED=true 시 활성화)
-from screener.middleware import AuthMiddleware
-app.add_middleware(AuthMiddleware)
 
 from screener.api.lemon_routes import router as payment_router
 from screener.api.user_routes import router as user_router
