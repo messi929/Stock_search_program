@@ -11,7 +11,7 @@ lxml>=4.9.0
 firebase-admin>=6.0.0
 httpx>=0.25.0
 yfinance>=0.2.0
-pykrx>=1.0.0
+pykrx>=1.2.8
 
 # Axis AI Layer
 anthropic>=0.40.0
