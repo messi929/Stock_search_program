@@ -11,9 +11,9 @@ import { useAuth } from "@/hooks/useAuth";
 import { useUserProfile } from "@/hooks/useUserProfile";
 
 const PERSONA_LABEL: Record<string, string> = {
-  blackrock: "🏛 블랙록",
-  ark: "🚀 ARK",
-  graham: "📚 그레이엄",
+  blackrock: "🏛 안정·리스크관리",
+  ark: "🚀 고성장·혁신",
+  graham: "📚 가치·저평가",
 };
 
 export default function DashboardHome() {

@@ -42,9 +42,9 @@ const HOLDING_PERIOD_OPTIONS: { id: HoldingPeriod; label: string }[] = [
 ];
 
 const PERSONA_OPTIONS: { id: PersonaId; icon: string; name: string; tagline: string }[] = [
-  { id: "blackrock", icon: "🏛", name: "블랙록", tagline: "리스크 우선, 장기 가치" },
-  { id: "ark", icon: "🚀", name: "ARK", tagline: "파괴적 혁신, 5년 시계" },
-  { id: "graham", icon: "📚", name: "그레이엄", tagline: "안전마진, 저평가" },
+  { id: "blackrock", icon: "🏛", name: "안정·리스크관리", tagline: "리스크 우선, 장기 가치" },
+  { id: "ark", icon: "🚀", name: "고성장·혁신", tagline: "파괴적 혁신, 5년 시계" },
+  { id: "graham", icon: "📚", name: "가치·저평가", tagline: "안전마진, 저평가" },
 ];
 
 export default function OnboardingPage() {

@@ -28,7 +28,7 @@ const FEATURES = [
   {
     icon: "🎭",
     title: "페르소나 전환",
-    desc: "블랙록(리스크) / ARK(혁신) / 그레이엄(가치) — 같은 종목, 3가지 관점",
+    desc: "안정·리스크관리 / 고성장·혁신 / 가치·저평가 — 같은 종목, 3가지 관점",
   },
   {
     icon: "🔔",
@@ -38,9 +38,9 @@ const FEATURES = [
 ];
 
 const PERSONAS = [
-  { id: "blackrock", icon: "🏛", name: "블랙록", tagline: "리스크 우선, 장기 가치" },
-  { id: "ark", icon: "🚀", name: "ARK", tagline: "파괴적 혁신, 5년 시계" },
-  { id: "graham", icon: "📚", name: "그레이엄", tagline: "안전마진, 저평가" },
+  { id: "blackrock", icon: "🏛", name: "안정·리스크관리", tagline: "리스크 우선, 장기 가치" },
+  { id: "ark", icon: "🚀", name: "고성장·혁신", tagline: "파괴적 혁신, 5년 시계" },
+  { id: "graham", icon: "📚", name: "가치·저평가", tagline: "안전마진, 저평가" },
 ];
 
 export default function Home() {
@@ -57,8 +57,8 @@ export default function Home() {
           <span className="text-amber-500">AI 애널리스트</span>와 함께
         </h1>
         <p className="mt-6 text-lg text-muted-foreground max-w-2xl mx-auto">
-          블랙록처럼 분석합니다. ARK처럼 미래를 봅니다. 그레이엄처럼 가치를
-          찾습니다.
+          리스크를 먼저 따집니다. 성장을 발굴합니다. 가치를 찾습니다. 같은
+          종목을 3가지 원칙으로 분석합니다.
         </p>
         <p className="mt-2 text-base text-muted-foreground">
           1~5년차 투자자를 위한 AI 분석 파트너 — 정보 제공 도구입니다.

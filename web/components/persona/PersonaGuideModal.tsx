@@ -77,8 +77,8 @@ export function PersonaGuideModal() {
 
         <div className="mt-4 text-xs text-muted-foreground border-t pt-3">
           <p>
-            <strong>관점 기반</strong> 페르소나(블랙록/ARK/그레이엄)는 동일한 데이터를
-            서로 다른 투자 철학으로 해석합니다.
+            <strong>관점 기반</strong> 페르소나(안정·리스크관리 / 고성장·혁신 / 가치·저평가)는
+            동일한 데이터를 서로 다른 투자 원칙으로 해석합니다.
           </p>
           <p className="mt-1">
             <strong>데이터 기반</strong> 페르소나(이벤트/매크로/한국 시장)는 각자

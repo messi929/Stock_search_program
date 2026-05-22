@@ -7,9 +7,9 @@ import {
 import type { StrategistResult } from "@/types/api";
 
 const PERSONA_NAME: Record<string, string> = {
-  blackrock: "블랙록",
-  ark: "ARK",
-  graham: "그레이엄",
+  blackrock: "안정·리스크관리",
+  ark: "고성장·혁신",
+  graham: "가치·저평가",
 };
 
 export function StrategistCard({

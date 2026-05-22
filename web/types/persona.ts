@@ -29,27 +29,30 @@ export type PersonaMeta = {
 
 export const PERSONA_META: readonly PersonaMeta[] = [
   {
+    // 내부 매핑: 블랙록 스타일 (시스템프롬프트 personas/blackrock.md). UI는 원칙명만 노출.
     id: "blackrock",
     icon: "🏛",
-    name: "블랙록",
+    name: "안정·리스크관리",
     tagline: "리스크 우선, 장기 가치",
     group: "strategist",
     time_horizon: "long",
     accent: "slate",
   },
   {
+    // 내부 매핑: ARK 스타일 (personas/ark.md)
     id: "ark",
     icon: "🚀",
-    name: "ARK",
+    name: "고성장·혁신",
     tagline: "파괴적 혁신, 5년 시계",
     group: "strategist",
     time_horizon: "long",
     accent: "violet",
   },
   {
+    // 내부 매핑: 그레이엄 스타일 (personas/graham.md)
     id: "graham",
     icon: "📚",
-    name: "그레이엄",
+    name: "가치·저평가",
     tagline: "안전마진, 저평가",
     group: "strategist",
     time_horizon: "long",
