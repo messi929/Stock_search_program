@@ -212,6 +212,28 @@ export type ScenarioAnalysis = {
   bearish_case: ScenarioCase;
 };
 
+export type TopHolder = {
+  holder: string;
+  pct_held?: number | null;
+  shares?: number | null;
+  value?: number | null;
+  date_reported?: string | null;
+  pct_change?: number | null;
+};
+
+// 미국 종목 기관 보유 스냅샷 (정보 제공용 — 신호/점수 아님, 분기 13F 스냅샷)
+export type InstitutionalOwnership = {
+  available: boolean;
+  institutions_pct?: number | null;
+  insiders_pct?: number | null;
+  institutions_float_pct?: number | null;
+  institutions_count?: number | null;
+  top_holders: TopHolder[];
+  as_of?: string | null;
+  data_source?: string;
+  note?: string;
+};
+
 export type EventAnalystResult = {
   ticker: string;
   market: "KR" | "US" | string;
@@ -225,6 +247,7 @@ export type EventAnalystResult = {
   scenario_analysis: ScenarioAnalysis;
   key_risks: string[];
   what_to_watch: string[];
+  institutional_ownership?: InstitutionalOwnership | null;
   summary_neutral: string;
   persona: "event";
   timestamp: string;

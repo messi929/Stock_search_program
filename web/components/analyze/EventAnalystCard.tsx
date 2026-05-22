@@ -93,6 +93,11 @@ export function EventAnalystCard({
             </section>
           )}
 
+          {/* 기관 보유 스냅샷 (US — 정보 제공용, 신호/점수 아님) */}
+          {data.institutional_ownership?.available && (
+            <InstitutionalOwnershipPanel io={data.institutional_ownership} />
+          )}
+
           {/* 통계 신뢰도 + fabrication */}
           <section className="rounded-md border bg-muted/20 p-3 text-xs space-y-1">
             <div>
@@ -233,6 +238,71 @@ function ImpactPanel({ data }: { data: EventAnalystResult }) {
           </div>
         ))}
       </div>
+    </section>
+  );
+}
+
+/** 미국 기관 보유 스냅샷 — 분기 13F 기반 정적 참고 정보 (신호 아님). */
+function InstitutionalOwnershipPanel({
+  io,
+}: {
+  io: NonNullable<EventAnalystResult["institutional_ownership"]>;
+}) {
+  const fmtPct = (v?: number | null) => (v == null ? "-" : `${v.toFixed(1)}%`);
+  const fmtCount = (v?: number | null) =>
+    v == null ? "-" : v.toLocaleString("en-US");
+
+  return (
+    <section className="rounded-md border bg-muted/20 p-3 space-y-2">
+      <div className="flex items-center justify-between">
+        <h4 className="text-xs font-medium text-muted-foreground">
+          🏛️ 기관 보유 현황 (참고)
+        </h4>
+        {io.as_of && (
+          <span className="text-[10px] text-muted-foreground">기준 {io.as_of}</span>
+        )}
+      </div>
+      <div className="grid grid-cols-3 gap-2 text-center">
+        <div className="p-2 rounded-md bg-muted/30">
+          <div className="text-[10px] text-muted-foreground">기관 보유</div>
+          <div className="font-mono text-sm font-medium">
+            {fmtPct(io.institutions_pct)}
+          </div>
+        </div>
+        <div className="p-2 rounded-md bg-muted/30">
+          <div className="text-[10px] text-muted-foreground">내부자 보유</div>
+          <div className="font-mono text-sm font-medium">
+            {fmtPct(io.insiders_pct)}
+          </div>
+        </div>
+        <div className="p-2 rounded-md bg-muted/30">
+          <div className="text-[10px] text-muted-foreground">기관 수</div>
+          <div className="font-mono text-sm font-medium">
+            {fmtCount(io.institutions_count)}
+          </div>
+        </div>
+      </div>
+      {io.top_holders.length > 0 && (
+        <div className="space-y-0.5">
+          <div className="text-[10px] text-muted-foreground">상위 보유 기관</div>
+          {io.top_holders.slice(0, 5).map((h, i) => (
+            <div
+              key={i}
+              className="flex items-center justify-between text-xs"
+            >
+              <span className="truncate mr-2">{h.holder}</span>
+              <span className="font-mono text-muted-foreground shrink-0">
+                {fmtPct(h.pct_held)}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+      {io.note && (
+        <div className="text-[10px] text-muted-foreground leading-relaxed">
+          ℹ️ {io.note}
+        </div>
+      )}
     </section>
   );
 }

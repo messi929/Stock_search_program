@@ -19,7 +19,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 from loguru import logger
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from agents.base import BaseAgent, DISCLAIMER
 from utils.claude_client import MODEL_SONNET
@@ -76,6 +76,34 @@ class SignalBlock(BaseModel):
     key_observations: list[str] = Field(default_factory=list)
 
 
+class TopHolder(BaseModel):
+    holder: str = ""
+    pct_held: Optional[float] = None
+    shares: Optional[int] = None
+    value: Optional[int] = None
+    date_reported: Optional[str] = None
+    pct_change: Optional[float] = None
+
+
+class InstitutionalOwnership(BaseModel):
+    """미국 종목 기관 보유 스냅샷 (정보 제공용 — LLM 미경유 passthrough, 신호/점수 아님).
+
+    분기 13F 기반 정적 스냅샷(약 45일 지연). 일별 수급과 다름.
+    """
+
+    model_config = ConfigDict(extra="ignore")
+
+    available: bool = False
+    institutions_pct: Optional[float] = None
+    insiders_pct: Optional[float] = None
+    institutions_float_pct: Optional[float] = None
+    institutions_count: Optional[int] = None
+    top_holders: list[TopHolder] = Field(default_factory=list)
+    as_of: Optional[str] = None
+    data_source: str = ""
+    note: str = ""
+
+
 class HistoricalStatistics(BaseModel):
     comparable_events_count: int = 0
     sample_reliability: str = "❌ 통계 미제시"
@@ -120,6 +148,8 @@ class EventAnalystResult(BaseModel):
     scenario_analysis: ScenarioAnalysis = Field(default_factory=ScenarioAnalysis)
     key_risks: list[str] = Field(default_factory=list)
     what_to_watch: list[str] = Field(default_factory=list)
+    # US 종목 기관 보유 스냅샷 — LLM 미경유 passthrough(사실 정보), 신호 아님. KR/미보유 시 None.
+    institutional_ownership: Optional[InstitutionalOwnership] = None
     summary_neutral: str = ""
     persona: str = "event"
     timestamp: str = ""
@@ -284,6 +314,18 @@ class EventAnalystAgent(BaseAgent):
             )
             result.summary_neutral = filtered
 
+        # 10) 기관 보유 스냅샷 직접 주입 (US — LLM 미경유 사실 passthrough, 신호 아님)
+        io_data = bundle.get("institutional_ownership")
+        if isinstance(io_data, dict) and io_data.get("available"):
+            try:
+                result.institutional_ownership = InstitutionalOwnership.model_validate(
+                    io_data
+                )
+            except Exception as e:
+                logger.debug(
+                    f"[event_analyst] institutional_ownership 주입 실패: {type(e).__name__}"
+                )
+
         return result
 
     # ──────────────────────────────────────────
@@ -353,6 +395,14 @@ class EventAnalystAgent(BaseAgent):
                 inp.ticker,
             )
 
+        # 5b) 기관 보유 스냅샷 (US 종목, 정보 제공용 — LLM 미경유 passthrough)
+        if market == "US":
+            bundle["institutional_ownership"] = self._safe_call(
+                "institutional_ownership",
+                self._fetch_institutional_ownership,
+                inp.ticker,
+            )
+
         # 6) LLM 유사 이벤트 추론 (event_target과 primary 모두 있을 때)
         if inp.event_target and (inp.primary_ticker or inp.event_type):
             bundle["llm_similar_events"] = await self._safe_async_call(
@@ -401,6 +451,13 @@ class EventAnalystAgent(BaseAgent):
         )
 
         return fetch_yfinance_events(ticker)
+
+    def _fetch_institutional_ownership(self, ticker: str):
+        from utils.data_collectors.us_ownership import (
+            fetch_us_institutional_ownership,
+        )
+
+        return fetch_us_institutional_ownership(ticker)
 
     async def _fetch_similar_events(self, inp: EventAnalystInput):
         from utils.data_collectors.event_inference_cache import (
