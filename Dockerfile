@@ -16,7 +16,8 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # 서버 전용 requirements (데스크톱 UI 제외)
-RUN pip uninstall -y pywebview pystray Pillow 2>/dev/null || true
+# Pillow는 제거하지 않음 — pykrx→matplotlib가 PIL을 필요로 함 (한국 수급 수집 Job)
+RUN pip uninstall -y pywebview pystray 2>/dev/null || true
 
 # 소스 복사 — v7.5(screener/) + Axis(api/agents/personas/utils/data/) + v2 Jobs(jobs/)
 COPY screener/ screener/
