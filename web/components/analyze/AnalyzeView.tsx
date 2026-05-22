@@ -3,13 +3,15 @@
 /**
  * 분석 페이지 클라이언트 컨테이너 — 6 페르소나 SSE 스트리밍 오케스트레이션.
  *
- * 페르소나 그룹별 흐름:
- *  - **Strategist 흐름** (blackrock/ark/graham):
- *      start → research_complete → analyst_complete → validator_complete → strategist_complete → complete
- *  - **데이터 페르소나** (event/macro/korean):
- *      start → {persona}_complete → complete   (단일 노드)
+ * UX 흐름 (2단 구조):
+ *  1. 종목 진입 → PersonaChooser로 "분석 방식 + 관점"을 의도적으로 선택 (자동 실행 X)
+ *  2. "분석 시작" → 선택한 페르소나로 1회 실행 (불필요한 과금 방지)
+ *  3. 결과 후 PersonaSwitch로 다른 관점 재실행 가능
  *
- * persona 변경 시 새 분석 시작 (default_cache 히트면 즉시 응답).
+ * 페르소나 그룹별 흐름:
+ *  - Strategist (blackrock/ark/graham):
+ *      start → research/analyst → validator → strategist → complete
+ *  - 데이터 페르소나 (event/macro/korean): start → {persona}_complete → complete
  */
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -19,6 +21,7 @@ import { AnalystCard } from "@/components/analyze/AnalystCard";
 import { EventAnalystCard } from "@/components/analyze/EventAnalystCard";
 import { KoreanSpecialistCard } from "@/components/analyze/KoreanSpecialistCard";
 import { MacroPmCard } from "@/components/analyze/MacroPmCard";
+import { PersonaChooser } from "@/components/analyze/PersonaChooser";
 import { ResearchCard } from "@/components/analyze/ResearchCard";
 import { SaveEntryPointsButton } from "@/components/analyze/SaveEntryPointsButton";
 import { StrategistCard } from "@/components/analyze/StrategistCard";
@@ -85,9 +88,13 @@ const initialDataDrivenStatus: DataDrivenStatus = {
 };
 
 export function AnalyzeView({ ticker }: { ticker: string }) {
-  const persona = usePersonaStore((s) => s.current);
+  const storePersona = usePersonaStore((s) => s.current);
+  const setStorePersona = usePersonaStore((s) => s.setPersona);
   const { profile } = useUserProfile();
-  const isStrategist = isStrategistPersona(persona);
+
+  // runPersona: 실제로 실행할 페르소나. null이면 미선택 → 선택 화면 표시(자동 실행 X).
+  const [runPersona, setRunPersona] = useState<PersonaId | null>(null);
+  const isStrategist = runPersona ? isStrategistPersona(runPersona) : false;
 
   // 분석이 끝나기 전(~10s)에도 종목명을 노출 — Analyst가 채워주기 전 fallback.
   const { data: stockSearch } = useStockSearch(ticker, 1);
@@ -120,10 +127,19 @@ export function AnalyzeView({ ticker }: { ticker: string }) {
   const [runError, setRunError] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
+  // 종목이 바뀌면 선택 화면으로 되돌림(의도적 재선택 + 자동 실행 방지).
   useEffect(() => {
+    setRunPersona(null);
+  }, [ticker]);
+
+  useEffect(() => {
+    // 페르소나 미선택 시 실행하지 않음(과금 방지).
+    if (!runPersona) return;
+
     const ac = new AbortController();
     abortRef.current?.abort();
     abortRef.current = ac;
+    const runStrategist = isStrategistPersona(runPersona);
 
     // reset
     setStrategistFlow({
@@ -136,7 +152,7 @@ export function AnalyzeView({ ticker }: { ticker: string }) {
     setOverallElapsed(null);
     setRunError(null);
 
-    if (isStrategist) {
+    if (runStrategist) {
       setStrategistStatus({
         research: "running",
         analyst: "running",
@@ -146,11 +162,10 @@ export function AnalyzeView({ ticker }: { ticker: string }) {
       setDataDrivenStatus(initialDataDrivenStatus);
     } else {
       setStrategistStatus(initialStrategistStatus);
-      // 데이터 페르소나는 현재 persona만 running, 나머지 pending
       setDataDrivenStatus({
-        event: persona === "event" ? "running" : "pending",
-        macro: persona === "macro" ? "running" : "pending",
-        korean: persona === "korean" ? "running" : "pending",
+        event: runPersona === "event" ? "running" : "pending",
+        macro: runPersona === "macro" ? "running" : "pending",
+        korean: runPersona === "korean" ? "running" : "pending",
       });
     }
 
@@ -169,7 +184,7 @@ export function AnalyzeView({ ticker }: { ticker: string }) {
       {
         ticker,
         query: `${ticker} 분석`,
-        persona,
+        persona: runPersona,
         stream: true,
         user_profile: userProfile,
       },
@@ -271,7 +286,7 @@ export function AnalyzeView({ ticker }: { ticker: string }) {
             : "분석 실패";
       setRunError(msg);
       toast.error(msg);
-      if (isStrategist) {
+      if (runStrategist) {
         setStrategistStatus({
           research: "error",
           analyst: "error",
@@ -280,15 +295,21 @@ export function AnalyzeView({ ticker }: { ticker: string }) {
         });
       } else {
         setDataDrivenStatus({
-          event: persona === "event" ? "error" : "pending",
-          macro: persona === "macro" ? "error" : "pending",
-          korean: persona === "korean" ? "error" : "pending",
+          event: runPersona === "event" ? "error" : "pending",
+          macro: runPersona === "macro" ? "error" : "pending",
+          korean: runPersona === "korean" ? "error" : "pending",
         });
       }
     });
 
     return () => ac.abort();
-  }, [ticker, persona, profile, isStrategist]);
+  }, [ticker, runPersona, profile]);
+
+  // 분석 시작(또는 관점 전환) — store에 기억 + 실행 트리거.
+  const startAnalysis = (id: PersonaId) => {
+    setStorePersona(id);
+    setRunPersona(id);
+  };
 
   // 종목명 표시 — Strategist 흐름은 analyst가 채워줌, 데이터 페르소나는 earlyName fallback
   const displayName = strategistFlow.analyst?.name ?? earlyName;
@@ -306,20 +327,23 @@ export function AnalyzeView({ ticker }: { ticker: string }) {
                 {displayName}
                 {displayPrice != null
                   ? ` · ${displayPrice.toLocaleString()}원`
-                  : !isStrategist
-                    ? ""
-                    : " · 가격 조회 중..."}
+                  : runPersona && isStrategist
+                    ? " · 가격 조회 중..."
+                    : ""}
               </p>
             ) : null}
           </div>
-          <div className="flex items-center gap-2">
-            <PersonaSwitch current={persona} />
-            <PersonaGuideModal />
-          </div>
+          {/* 결과 단계에서만 관점 전환 노출(재실행). 선택 단계에선 chooser가 담당. */}
+          {runPersona && (
+            <div className="flex items-center gap-2">
+              <PersonaSwitch current={runPersona} onSelect={startAnalysis} />
+              <PersonaGuideModal />
+            </div>
+          )}
         </div>
 
-        {/* Action buttons — Strategist 흐름 결과 의존이라 데이터 페르소나에선 숨김 */}
-        {isStrategist && (
+        {/* Action buttons — 결과 단계 + Strategist 흐름에서만 */}
+        {runPersona && isStrategist && (
           <div className="flex flex-wrap items-start gap-2">
             <AddToWatchlistButton ticker={ticker} />
             <ValidateButton
@@ -336,58 +360,72 @@ export function AnalyzeView({ ticker }: { ticker: string }) {
             />
           </div>
         )}
-        {!isStrategist && (
+        {runPersona && !isStrategist && (
           <div className="flex flex-wrap items-start gap-2">
             <AddToWatchlistButton ticker={ticker} />
           </div>
         )}
       </header>
 
-      {/* Overall status */}
-      {runError ? (
+      {/* 선택 단계 — 분석 방식/관점 선택 (자동 실행 없음) */}
+      {!runPersona ? (
         <Card>
-          <CardContent className="p-4 text-sm text-destructive">
-            ⚠️ {runError}
+          <CardContent className="p-5">
+            <PersonaChooser
+              defaultPersona={storePersona}
+              onStart={startAnalysis}
+            />
           </CardContent>
         </Card>
-      ) : overallElapsed !== null ? (
-        <p className="text-xs text-muted-foreground">
-          전체 분석 완료 ({overallElapsed}초)
-        </p>
       ) : (
-        <p className="text-xs text-muted-foreground">분석 진행 중...</p>
-      )}
-
-      {/* 페르소나 그룹별 카드 분기 */}
-      {isStrategist ? (
         <>
-          <StrategistCard
-            data={strategistFlow.strategist}
-            status={strategistStatus.strategist}
-          />
-          <ValidatorCard
-            data={strategistFlow.validator}
-            status={strategistStatus.validator}
-          />
-          <AnalystCard
-            data={strategistFlow.analyst}
-            status={strategistStatus.analyst}
-          />
-          <ResearchCard
-            data={strategistFlow.research}
-            status={strategistStatus.research}
-          />
+          {/* Overall status */}
+          {runError ? (
+            <Card>
+              <CardContent className="p-4 text-sm text-destructive">
+                ⚠️ {runError}
+              </CardContent>
+            </Card>
+          ) : overallElapsed !== null ? (
+            <p className="text-xs text-muted-foreground">
+              전체 분석 완료 ({overallElapsed}초)
+            </p>
+          ) : (
+            <p className="text-xs text-muted-foreground">분석 진행 중...</p>
+          )}
+
+          {/* 페르소나 그룹별 카드 분기 */}
+          {isStrategist ? (
+            <>
+              <StrategistCard
+                data={strategistFlow.strategist}
+                status={strategistStatus.strategist}
+              />
+              <ValidatorCard
+                data={strategistFlow.validator}
+                status={strategistStatus.validator}
+              />
+              <AnalystCard
+                data={strategistFlow.analyst}
+                status={strategistStatus.analyst}
+              />
+              <ResearchCard
+                data={strategistFlow.research}
+                status={strategistStatus.research}
+              />
+            </>
+          ) : runPersona === "event" ? (
+            <EventAnalystCard data={dataDriven.event} status={dataDrivenStatus.event} />
+          ) : runPersona === "macro" ? (
+            <MacroPmCard data={dataDriven.macro} status={dataDrivenStatus.macro} />
+          ) : runPersona === "korean" ? (
+            <KoreanSpecialistCard
+              data={dataDriven.korean}
+              status={dataDrivenStatus.korean}
+            />
+          ) : null}
         </>
-      ) : persona === "event" ? (
-        <EventAnalystCard data={dataDriven.event} status={dataDrivenStatus.event} />
-      ) : persona === "macro" ? (
-        <MacroPmCard data={dataDriven.macro} status={dataDrivenStatus.macro} />
-      ) : persona === "korean" ? (
-        <KoreanSpecialistCard
-          data={dataDriven.korean}
-          status={dataDrivenStatus.korean}
-        />
-      ) : null}
+      )}
 
       <Disclaimer />
     </div>
