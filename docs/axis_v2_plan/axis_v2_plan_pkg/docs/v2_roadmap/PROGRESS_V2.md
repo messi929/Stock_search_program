@@ -5,6 +5,37 @@
 
 ---
 
+## 📅 2026-05-22~23 — KR 수급 5년 백필 (✅ 완료 / ⚠️ 외국인 누락)
+
+### 백필 실행 결과 (execution `axis-backfill-korea-supply-mdw6q`)
+- **기간**: 2021-01-04 ~ 2026-05-21 (1405 영업일, 5.4년)
+- **시장**: KOSPI + KOSDAQ
+- **소요**: 19834초 = **5시간 31분** (06h timeout 내 정상 완료, exit 0)
+- **호출**: calls=11240 (ok=5276 / **empty=5964** / fail=0)
+- **저장**: `historical_supply` 컬렉션에 **3,319,106 docs** (005930 1319건 등 거의 모든 영업일 채움)
+- **선결조건**:
+  - KRX 로그인(messi929) Secret(`krx-id`/`krx-pw`) 등록 ✓
+  - pykrx>=1.2.8 (이전 1.2.4는 로그인 미지원, 빈 응답) ✓
+  - Dockerfile Pillow 유지(pykrx→matplotlib 의존) ✓
+
+### ⚠️ 데이터 결함 발견: 외국인 카테고리 전량 누락
+샘플 검증(005930·000020 등) 결과 **`foreign_*_value` 필드 자체가 없음**(institution/individual은 정상).
+원인: **KRX가 investor 카테고리명을 변경** — pykrx에 `investor="외국인합계"` 호출하면 rows=0 + 내부 KeyError, `investor="외국인"`은 rows=907로 정상.
+collector(`utils/data_collectors/korea_supply.py`)의 `CORE_INVESTORS = ("외국인합계", ...)`에서 **"외국인합계"만 잘못된 이름**. 다른 3 카테고리(기관합계/연기금등/개인)는 그대로 작동 → 5964 empty 호출 대부분이 외국인 카테고리.
+
+**영향**: 3.3M docs 중 **외국인 데이터만 누락**(약 1/4). 한국 시장 분석에서 외국인 수급은 핵심 신호라 Korean Specialist 페르소나 가치 ↓.
+
+**해결 (TODO)**:
+1. `CORE_INVESTORS`에서 "외국인합계" → **"외국인"**, `INVESTOR_FIELD_PREFIX["외국인"] = "foreign"` 매핑.
+2. 이미지 재빌드.
+3. **외국인 카테고리만 재백필** (잡 args에 `--investor 외국인` 옵션 추가 또는 별도 잡). 전체 재백필 불필요 — 다른 3 카테고리 완비.
+4. 예상 시간: 약 1.5시간 (전체 1/4).
+
+### Firestore 인덱스 자동 안내
+`historical_supply` 컬렉션의 `ticker + date DESC` 복합 쿼리 시 Firestore가 자동 생성 안내(콘솔 링크). 첫 사용 시 1회 클릭으로 생성. 단순 ID 기반(`<ticker>_<date>`) 조회는 인덱스 불필요.
+
+---
+
 ## 📅 2026-05-18~21 — 도메인 등록 + Cloud Run 매핑 (✅ 라이브)
 
 ### 도메인 최종 채택: `axislytics.com`
