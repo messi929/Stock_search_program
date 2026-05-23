@@ -25,11 +25,14 @@ collector(`utils/data_collectors/korea_supply.py`)의 `CORE_INVESTORS = ("외국
 
 **영향**: 3.3M docs 중 **외국인 데이터만 누락**(약 1/4). 한국 시장 분석에서 외국인 수급은 핵심 신호라 Korean Specialist 페르소나 가치 ↓.
 
-**해결 (TODO)**:
-1. `CORE_INVESTORS`에서 "외국인합계" → **"외국인"**, `INVESTOR_FIELD_PREFIX["외국인"] = "foreign"` 매핑.
-2. 이미지 재빌드.
-3. **외국인 카테고리만 재백필** (잡 args에 `--investor 외국인` 옵션 추가 또는 별도 잡). 전체 재백필 불필요 — 다른 3 카테고리 완비.
-4. 예상 시간: 약 1.5시간 (전체 1/4).
+**해결 ✅ (2026-05-23 완료, commit `bc17ff0`)**:
+1. `CORE_INVESTORS` "외국인합계" → "외국인", INVESTOR_FIELD_PREFIX 동기화.
+2. `jobs/backfill_korea_supply.py`에 `--investors` CLI flag 추가(부분 백필).
+3. 이미지 재빌드 → `axis-backfill-korea-supply` 잡 args `--mode full --investors 외국인`.
+4. execution `d2xcl` 2h4m 소요, **calls=2812 / ok=2640(93.9%) / empty=172 / fail=0**,
+   외국인 docs=3,257,087 추가 저장(merge=True로 다른 카테고리 보존).
+5. 검증: 005930의 20210104·20240102·20260521 모두 foreign_net_buy_value 정상.
+   ok 비율 47%→94% 점프로 카테고리명 수정 효과 결정적 확인.
 
 ### Firestore 인덱스 자동 안내
 `historical_supply` 컬렉션의 `ticker + date DESC` 복합 쿼리 시 Firestore가 자동 생성 안내(콘솔 링크). 첫 사용 시 1회 클릭으로 생성. 단순 ID 기반(`<ticker>_<date>`) 조회는 인덱스 불필요.
