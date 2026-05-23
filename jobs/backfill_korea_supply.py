@@ -103,6 +103,7 @@ def run_backfill(
     sample_tickers: list[str] | None,
     sleep_sec: float,
     dry_run: bool,
+    investors: Iterable[str] | None = None,
 ) -> dict:
     """백필 실행.
 
@@ -112,15 +113,19 @@ def run_backfill(
         sample_tickers: None이면 보유 시계열 skip, 리스트면 해당 종목들만 보유 시계열 수집
         sleep_sec: pykrx 호출 간격
         dry_run: True면 Firestore 쓰기 skip (호출만 진행, 카운트 보고)
+        investors: 수집 대상 투자자 카테고리 subset. None=CORE_INVESTORS 전체.
+                   예: ("외국인",) — 외국인만 재백필(다른 카테고리는 merge=True로 보존됨).
 
     Returns:
         실행 통계 dict
     """
-    from utils.data_collectors.korea_supply import KoreaSupplyCollector
+    from utils.data_collectors.korea_supply import CORE_INVESTORS, KoreaSupplyCollector
 
     # dry-run에서는 db 호출이 발생하지 않도록 mock 주입
     db = _DryRunDb() if dry_run else None
-    collector = KoreaSupplyCollector(db=db, sleep_sec=sleep_sec)
+    collector = KoreaSupplyCollector(
+        db=db, sleep_sec=sleep_sec, investors=tuple(investors) if investors else CORE_INVESTORS
+    )
 
     business_days = list_business_days(fromdate, todate)
     total_days = len(business_days)
@@ -251,7 +256,18 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Firestore 쓰기 skip (호출/파싱만 검증)",
     )
+    parser.add_argument(
+        "--investors",
+        default=None,
+        help=(
+            "수집할 투자자 카테고리 쉼표구분(예: '외국인' 또는 '외국인,기관합계'). "
+            "기본값(미지정)=CORE_INVESTORS 전체. 외국인만 재백필 시 '외국인' 지정."
+        ),
+    )
     args = parser.parse_args(argv)
+    investors_filter = (
+        tuple(s.strip() for s in args.investors.split(",") if s.strip()) if args.investors else None
+    )
 
     # 모드별 기본 기간 결정
     if args.mode == "sample":
@@ -289,6 +305,7 @@ def main(argv: list[str] | None = None) -> int:
         sample_tickers=sample_tickers,
         sleep_sec=args.sleep,
         dry_run=args.dry_run,
+        investors=investors_filter,
     )
     elapsed = time.time() - started
 
