@@ -22,7 +22,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 from loguru import logger
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from agents.base import BaseAgent
 from agents.event_analyst import is_kr_ticker
@@ -62,6 +62,34 @@ class KoreanSpecialistResult(BaseModel):
     summary_neutral: str = ""
     persona: str = "korean"
     timestamp: str = ""
+
+    # LLM이 dict 필드를 null/string 등 잘못된 타입으로 반환하는 경우 빈 dict로 강제 정규화.
+    # default_factory는 '필드 누락' 시만 발동 — '잘못된 타입'은 별도 가드 필요.
+    @field_validator(
+        "korea_specific_analysis",
+        "foreign_supply_analysis",
+        "chaebol_structure_analysis",
+        "value_up_analysis",
+        "theme_cycle_analysis",
+        "policy_risk_analysis",
+        mode="before",
+    )
+    @classmethod
+    def _coerce_dict(cls, v):
+        return v if isinstance(v, dict) else {}
+
+    @field_validator("korea_specific_score", mode="before")
+    @classmethod
+    def _coerce_score(cls, v):
+        # KoreaSpecificScore 또는 dict면 Pydantic이 알아서 처리. None/string 등은 빈 객체로.
+        if isinstance(v, (KoreaSpecificScore, dict)):
+            return v
+        return KoreaSpecificScore()
+
+    @field_validator("what_to_watch_korea_specific", mode="before")
+    @classmethod
+    def _coerce_list(cls, v):
+        return v if isinstance(v, list) else []
 
 
 # ──────────────────────────────────────────────
