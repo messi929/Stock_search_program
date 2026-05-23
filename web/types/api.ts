@@ -72,6 +72,8 @@ export type BuyScoreInterpretation = {
 export type AnalystResult = {
   ticker: string;
   name: string;
+  /** 거래소 — KOSPI / KOSDAQ / NASDAQ / NYSE 등 (백엔드 _fetch_stock_data가 제공). */
+  market?: string;
   technical: TechnicalAnalysis;
   fundamental: FundamentalAnalysis;
   buy_score: BuyScoreInterpretation;

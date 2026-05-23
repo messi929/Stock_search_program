@@ -326,18 +326,47 @@ export function AnalyzeView({ ticker }: { ticker: string }) {
   const displayName = strategistFlow.analyst?.name ?? earlyName;
   const displayPrice = strategistFlow.analyst?.technical.current_price;
 
+  // 시장 구분 — 6자리 숫자 = KR, 그 외 = US. analyst 결과에 KOSPI/KOSDAQ/NASDAQ 등
+  // 실제 거래소가 있으면 사용, 없으면 국가만 표시.
+  const isKR = /^\d{6}$/.test(ticker);
+  const analystMarket = strategistFlow.analyst?.market?.toUpperCase?.() ?? "";
+  const exchangeLabel = analystMarket.includes("KOSPI")
+    ? "KOSPI"
+    : analystMarket.includes("KOSDAQ")
+      ? "KOSDAQ"
+      : analystMarket.includes("NASDAQ")
+        ? "NASDAQ"
+        : analystMarket.includes("NYSE")
+          ? "NYSE"
+          : isKR
+            ? "한국 시장"
+            : "미국 시장";
+  const marketFlag = isKR ? "🇰🇷" : "🇺🇸";
+
   return (
     <div className="space-y-6 max-w-5xl">
       {/* Header */}
       <header className="space-y-4">
         <div className="flex items-start justify-between gap-4 flex-wrap">
           <div>
-            <h1 className="text-2xl font-bold font-mono">{ticker}</h1>
+            <div className="flex items-center gap-2 flex-wrap">
+              <h1 className="text-2xl font-bold font-mono">{ticker}</h1>
+              <span
+                className={`text-xs px-2 py-0.5 rounded-full border font-medium ${
+                  isKR
+                    ? "bg-rose-500/10 text-rose-700 border-rose-500/30"
+                    : "bg-sky-500/10 text-sky-700 border-sky-500/30"
+                }`}
+                title={isKR ? "한국 시장 — 일별 외국인·기관 수급, Korean Specialist 페르소나 적용" : "미국 시장 — 일별 수급 데이터 없음, Korean Specialist 비활성"}
+              >
+                {marketFlag} {exchangeLabel}
+              </span>
+            </div>
             {displayName ? (
               <p className="text-sm text-muted-foreground mt-1">
                 {displayName}
                 {displayPrice != null
-                  ? ` · ${displayPrice.toLocaleString()}원`
+                  ? ` · ${displayPrice.toLocaleString()}${isKR ? "원" : "달러"}`
                   : runPersona && isStrategist
                     ? " · 가격 조회 중..."
                     : ""}
@@ -383,6 +412,7 @@ export function AnalyzeView({ ticker }: { ticker: string }) {
         <Card>
           <CardContent className="p-5">
             <PersonaChooser
+              ticker={ticker}
               defaultPersona={storePersona}
               onStart={startAnalysis}
             />
