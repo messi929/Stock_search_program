@@ -89,7 +89,24 @@ export async function apiStream(
   });
 
   if (!response.ok || !response.body) {
-    throw new APIError("STREAM_FAILED", `${response.status}`, response.status);
+    // apiCall과 동일하게 백엔드 detail(code/message)을 추출 — 402 등 정책 응답을
+    // 사용자에게 그대로 노출(예: "매크로는 Pro 페르소나입니다").
+    let code = "STREAM_FAILED";
+    let message = response.statusText || `${response.status}`;
+    try {
+      const body = await response.json();
+      if (typeof body.detail === "object" && body.detail !== null) {
+        code = body.detail.code ?? code;
+        message = body.detail.message ?? body.detail.detail ?? message;
+      } else if (typeof body.detail === "string") {
+        message = body.detail;
+      } else if (typeof body.message === "string") {
+        message = body.message;
+      }
+    } catch {
+      /* ignore parse error */
+    }
+    throw new APIError(code, message, response.status);
   }
 
   const reader = response.body.getReader();

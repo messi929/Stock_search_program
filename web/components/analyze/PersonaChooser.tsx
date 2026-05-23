@@ -12,9 +12,11 @@
  *
  * 마지막 선택(defaultPersona)을 미리 선택해 1탭 재실행을 지원.
  */
+import Link from "next/link";
 import { useState } from "react";
 
 import { Card, CardContent } from "@/components/ui/card";
+import { usePersonas } from "@/hooks/usePersonas";
 import {
   DATA_DRIVEN_PERSONAS,
   isStrategistPersona,
@@ -36,6 +38,20 @@ export function PersonaChooser({
     isStrategistPersona(defaultPersona) ? "strategist" : "data_driven",
   );
   const [selected, setSelected] = useState<PersonaId>(defaultPersona);
+
+  // 사용자 플랜 + 페르소나별 free 허용 여부 — Pro 잠금 표시·실행 차단에 사용.
+  const { data: personasData } = usePersonas();
+  const isFree = (personasData?.user_plan ?? "free") === "free";
+  const freeMap = new Map(
+    (personasData?.personas ?? []).map((p) => [p.id, p.available_to_free]),
+  );
+  const isLocked = (id: PersonaId): boolean => {
+    if (!isFree) return false;
+    // 메타 미수신 시 보수적으로 blackrock(=안정·리스크관리)만 무료로 간주.
+    const free = freeMap.get(id) ?? id === "blackrock";
+    return !free;
+  };
+  const selectedLocked = isLocked(selected);
 
   const tier2 = group === "strategist" ? STRATEGIST_PERSONAS : DATA_DRIVEN_PERSONAS;
 
@@ -80,6 +96,7 @@ export function PersonaChooser({
           {tier2.map((id) => {
             const meta = PERSONA_BY_ID[id];
             const active = selected === id;
+            const locked = isLocked(id);
             return (
               <button
                 key={id}
@@ -92,9 +109,16 @@ export function PersonaChooser({
                     : "hover:bg-muted/50"
                 }`}
               >
-                <div className="font-medium text-sm">
-                  <span className="mr-1">{meta.icon}</span>
-                  {meta.name}
+                <div className="font-medium text-sm flex items-center justify-between gap-2">
+                  <span>
+                    <span className="mr-1">{meta.icon}</span>
+                    {meta.name}
+                  </span>
+                  {locked && (
+                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-700 shrink-0">
+                      🔒 Pro
+                    </span>
+                  )}
                 </div>
                 <div className="text-xs text-muted-foreground mt-0.5">
                   {meta.tagline}
@@ -105,17 +129,34 @@ export function PersonaChooser({
         </div>
       </section>
 
-      <button
-        type="button"
-        onClick={() => onStart(selected)}
-        className="w-full sm:w-auto px-6 py-2.5 rounded-md bg-primary text-primary-foreground font-medium text-sm hover:bg-primary/90 transition"
-      >
-        🔍 {PERSONA_BY_ID[selected].name} 관점으로 분석 시작
-      </button>
-      <p className="text-xs text-muted-foreground">
-        분석은 선택한 방식으로 1회 실행됩니다. 결과 후 다른 관점으로 다시 분석할 수
-        있습니다.
-      </p>
+      {selectedLocked ? (
+        <div className="space-y-2">
+          <Link
+            href="/pricing"
+            className="inline-flex items-center w-full sm:w-auto px-6 py-2.5 rounded-md bg-amber-500/90 text-white font-medium text-sm hover:bg-amber-500 transition"
+          >
+            🔒 {PERSONA_BY_ID[selected].name}는 Pro 페르소나 — 업그레이드 안내
+          </Link>
+          <p className="text-xs text-muted-foreground">
+            Free 플랜은 <strong>안정·리스크관리</strong> 한 가지만 사용 가능합니다.
+            다른 5개 관점은 Pro에서 모두 열립니다.
+          </p>
+        </div>
+      ) : (
+        <>
+          <button
+            type="button"
+            onClick={() => onStart(selected)}
+            className="w-full sm:w-auto px-6 py-2.5 rounded-md bg-primary text-primary-foreground font-medium text-sm hover:bg-primary/90 transition"
+          >
+            🔍 {PERSONA_BY_ID[selected].name} 관점으로 분석 시작
+          </button>
+          <p className="text-xs text-muted-foreground">
+            분석은 선택한 방식으로 1회 실행됩니다. 결과 후 다른 관점으로 다시 분석할
+            수 있습니다.
+          </p>
+        </>
+      )}
     </div>
   );
 }
