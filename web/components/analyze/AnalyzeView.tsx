@@ -44,7 +44,7 @@ import type {
   StrategistResult,
   ValidatorResult,
 } from "@/types/api";
-import { isStrategistPersona, type PersonaId } from "@/types/persona";
+import { isStrategistPersona, PERSONA_BY_ID, type PersonaId } from "@/types/persona";
 
 type AgentStatus = "pending" | "running" | "done" | "error";
 
@@ -305,10 +305,21 @@ export function AnalyzeView({ ticker }: { ticker: string }) {
     return () => ac.abort();
   }, [ticker, runPersona, profile]);
 
-  // 분석 시작(또는 관점 전환) — store에 기억 + 실행 트리거.
+  // 분석 시작(chooser → 의도적 1회) — store 기억 + 실행 트리거. 확인 없음.
   const startAnalysis = (id: PersonaId) => {
     setStorePersona(id);
     setRunPersona(id);
+  };
+
+  // PersonaSwitch 클릭(이미 결과가 있는 상태에서 관점 전환) — 비용 발생 인지 강제.
+  // 같은 페르소나는 no-op. 사용자 지갑 보호용 confirm.
+  const switchPersona = (id: PersonaId) => {
+    if (id === runPersona) return;
+    const meta = PERSONA_BY_ID[id];
+    const ok = window.confirm(
+      `'${meta.name}' 관점으로 다시 분석합니다.\n새 분석 1회 비용이 발생합니다. 진행하시겠어요?`,
+    );
+    if (ok) startAnalysis(id);
   };
 
   // 종목명 표시 — Strategist 흐름은 analyst가 채워줌, 데이터 페르소나는 earlyName fallback
@@ -336,7 +347,7 @@ export function AnalyzeView({ ticker }: { ticker: string }) {
           {/* 결과 단계에서만 관점 전환 노출(재실행). 선택 단계에선 chooser가 담당. */}
           {runPersona && (
             <div className="flex items-center gap-2">
-              <PersonaSwitch current={runPersona} onSelect={startAnalysis} />
+              <PersonaSwitch current={runPersona} onSelect={switchPersona} />
               <PersonaGuideModal />
             </div>
           )}

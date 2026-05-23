@@ -56,6 +56,9 @@ export function MacroPmCard({
         ) : null
       ) : (
         <div className="space-y-4">
+          {/* 데이터 희소 안내 — 정량 사이클이 비고 신뢰도도 낮으면 사용자에게 정직히 알림 */}
+          {isDataSparse(data) && <DataSparseBanner />}
+
           {/* 6 국면 + 신뢰도 */}
           <RegimePanel data={data} />
 
@@ -180,20 +183,48 @@ function CycleRow({
   label: string;
   stage: CycleStage;
 }) {
+  const empty = !stage?.stage?.trim();
   return (
-    <div className="rounded-md border p-2.5">
+    <div className={`rounded-md border p-2.5 ${empty ? "bg-muted/10 border-dashed" : ""}`}>
       <div className="flex items-center justify-between mb-0.5">
         <span className="text-xs text-muted-foreground">
           {emoji} {label} 사이클
         </span>
       </div>
-      <div className="text-sm font-medium">{stage.stage || "—"}</div>
-      {stage.rationale && (
+      {empty ? (
+        <div className="text-xs text-muted-foreground italic">데이터 누적 중</div>
+      ) : (
+        <div className="text-sm font-medium">{stage.stage}</div>
+      )}
+      {!empty && stage.rationale && (
         <p className="mt-1 text-xs text-muted-foreground leading-relaxed line-clamp-2">
           {stage.rationale}
         </p>
       )}
     </div>
+  );
+}
+
+/** 정량 사이클이 모두 비고 신뢰도가 매우 낮으면 데이터 희소 상태로 간주. */
+function isDataSparse(data: MacroPmResult): boolean {
+  const conf = data.macro_regime?.regime_confidence ?? 0;
+  const allCyclesEmpty = (["interest_rate", "business_cycle", "currency_cycle", "inflation_cycle"] as const)
+    .every((k) => !data.cycle_analysis?.[k]?.stage?.trim());
+  return conf < 0.1 && allCyclesEmpty;
+}
+
+function DataSparseBanner() {
+  return (
+    <section className="rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-xs leading-relaxed">
+      <p className="font-medium text-amber-700 mb-1">
+        ℹ️ 매크로 정량 데이터 누적 중
+      </p>
+      <p className="text-muted-foreground">
+        FRED·ECOS 일일 지표가 충분히 누적되면 4 사이클·국면 신뢰도가 채워집니다.
+        현재 결과는 <strong>LLM 일반 추론 기반 참고용</strong>이며, 정량 판정이
+        아닙니다.
+      </p>
+    </section>
   );
 }
 

@@ -95,20 +95,33 @@ export default function DashboardLayout({
         </Button>
       </header>
 
-      <main className="flex-1 p-4 md:p-6">{children}</main>
+      {/* pb-20: 모바일 fixed bottom nav(약 60px) + safe-area 여유. md+에선 사이드바라 0. */}
+      <main className="flex-1 p-4 md:p-6 pb-20 md:pb-6">{children}</main>
 
-      {/* Mobile bottom nav */}
-      <nav className="md:hidden flex justify-around py-2 border-t bg-background">
-        {NAV.slice(0, 4).map((item) => (
-          <Link
-            key={item.href}
-            href={item.href}
-            className="flex flex-col items-center text-xs"
-          >
-            <span className="text-lg">{item.icon}</span>
-            <span>{item.label}</span>
-          </Link>
-        ))}
+      {/* Mobile bottom nav — 항상 화면 하단 고정(긴 페이지에서도 노출). 5개 항목 + 활성 표시 + iOS safe-area. */}
+      <nav
+        className="md:hidden fixed bottom-0 left-0 right-0 z-40 flex justify-around py-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] border-t bg-background/95 backdrop-blur"
+        aria-label="모바일 주 메뉴"
+      >
+        {NAV.map((item) => {
+          const active =
+            item.href === "/dashboard"
+              ? pathname === "/dashboard"
+              : pathname?.startsWith(item.href);
+          return (
+            <Link
+              key={item.href}
+              href={item.href}
+              aria-current={active ? "page" : undefined}
+              className={`flex flex-col items-center text-[11px] gap-0.5 px-2 transition ${
+                active ? "text-primary font-semibold" : "text-muted-foreground"
+              }`}
+            >
+              <span className="text-lg leading-none">{item.icon}</span>
+              <span className="whitespace-nowrap">{item.label}</span>
+            </Link>
+          );
+        })}
       </nav>
     </div>
   );

@@ -1,11 +1,14 @@
 "use client";
 
 import Link from "next/link";
+import { useQueries } from "@tanstack/react-query";
 
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { usePersonas } from "@/hooks/usePersonas";
 import { useWatchlist } from "@/hooks/useWatchlist";
+import { apiCall } from "@/lib/api";
+import type { StockSearchResponse } from "@/types/api";
 
 export function WatchlistPreview() {
   // user_plan은 personas API에 포함됨 — pro/premium은 30개, free는 5개.
@@ -15,6 +18,27 @@ export function WatchlistPreview() {
   const limit = isPaid ? 30 : 5;
   const { data, isLoading, isError } = useWatchlist();
   const tickers = data?.watchlist ?? [];
+  const visibleTickers = tickers.slice(0, limit);
+
+  // 티커별 종목명 병렬 조회(react-query 캐시 공유 — staleTime 1h, 종목명은 거의 안 변함).
+  const nameQueries = useQueries({
+    queries: visibleTickers.map((t) => ({
+      queryKey: ["stock-search", t, 1],
+      queryFn: () =>
+        apiCall<StockSearchResponse>(
+          `/api/all-stocks?q=${encodeURIComponent(t)}&limit=1`,
+        ),
+      enabled: t.length > 0,
+      staleTime: 60 * 60_000,
+    })),
+  });
+  const nameByTicker: Record<string, string | null> = {};
+  visibleTickers.forEach((t, i) => {
+    const found = nameQueries[i]?.data?.stocks?.find(
+      (s) => s.ticker.toUpperCase() === t.toUpperCase(),
+    );
+    nameByTicker[t] = found?.name ?? null;
+  });
 
   return (
     <Card>
@@ -44,20 +68,34 @@ export function WatchlistPreview() {
           </div>
         ) : (
           <ul className="space-y-1">
-            {tickers.slice(0, limit).map((t) => (
-              <li
-                key={t}
-                className="flex items-center justify-between p-2 rounded-md hover:bg-muted text-sm"
-              >
-                <span className="font-mono">{t}</span>
-                <Link
-                  href={`/analyze/${t}`}
-                  className="text-xs text-amber-500 hover:underline"
+            {visibleTickers.map((t) => {
+              const name = nameByTicker[t];
+              return (
+                <li
+                  key={t}
+                  className="flex items-center justify-between p-2 rounded-md hover:bg-muted text-sm gap-2"
                 >
-                  분석 →
-                </Link>
-              </li>
-            ))}
+                  <span className="min-w-0 truncate">
+                    {name ? (
+                      <>
+                        <span className="font-medium">{name}</span>
+                        <span className="ml-2 font-mono text-xs text-muted-foreground">
+                          {t}
+                        </span>
+                      </>
+                    ) : (
+                      <span className="font-mono">{t}</span>
+                    )}
+                  </span>
+                  <Link
+                    href={`/analyze/${t}`}
+                    className="text-xs text-amber-500 hover:underline shrink-0"
+                  >
+                    분석 →
+                  </Link>
+                </li>
+              );
+            })}
           </ul>
         )}
 

@@ -68,7 +68,7 @@ export default function Home() {
             href="#beta"
             className={buttonVariants({ size: "lg" })}
           >
-            베타 신청하기
+            베타 안내 보기
           </a>
           <Link
             href="/pricing"
