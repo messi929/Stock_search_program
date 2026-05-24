@@ -145,17 +145,37 @@ async def validator_node(state: AnalysisState) -> dict:
 
 async def strategist_node(state: AnalysisState) -> dict:
     agent = StrategistAgent()
-    result = await agent.run(
-        StrategistInput(
-            research_output=state["research_output"],
-            analyst_output=state["analyst_output"],
-            validator_output=state["validator_output"],
-            user_profile=state.get("user_profile") or UserProfile(),
-            persona=state.get("persona", "blackrock"),
-            query=state.get("query", ""),
-        ),
-        uid=state.get("user_uid", ""),
-    )
+    persona = state.get("persona", "blackrock")
+    try:
+        result = await agent.run(
+            StrategistInput(
+                research_output=state["research_output"],
+                analyst_output=state["analyst_output"],
+                validator_output=state["validator_output"],
+                user_profile=state.get("user_profile") or UserProfile(),
+                persona=persona,
+                query=state.get("query", ""),
+            ),
+            uid=state.get("user_uid", ""),
+        )
+    except Exception as e:
+        logger.error(
+            f"[graph:strategist] Strategist 실행 실패: {type(e).__name__}: {e}"
+        )
+        from agents.strategist import StrategistResult
+        result = StrategistResult(
+            persona_used=persona,
+            persona_perspective="",
+            summary=f"종합 분석 중 오류가 발생했습니다. 사유: {_friendly_error_msg(e)}",
+            entry_points=None,
+            exit_points=None,
+            alert_conditions=[],
+            user_principles_alignment={},
+            follow_up_questions=[],
+            confidence_note=None,
+            disclaimer="",
+            timestamp="",
+        )
     return {"strategist_output": result}
 
 
