@@ -209,15 +209,15 @@ async def event_analyst_node(state: AnalysisState) -> dict:
             historical_statistics=__import__(
                 "agents.event_analyst", fromlist=["HistoricalStatistics"]
             ).HistoricalStatistics(
-                fabrication_warning=f"분석 실행 실패: {type(e).__name__}"
+                fabrication_warning=f"분석 실행 실패: {_friendly_error_msg(e)}"
             ),
             reference_observation_zones=__import__(
                 "agents.event_analyst", fromlist=["ReferenceZones"]
             ).ReferenceZones(),
             scenario_analysis=_fallback_scenario_analysis(),
             summary_neutral=(
-                f"{ticker} 이벤트 분석 중 오류가 발생했습니다 ({type(e).__name__}). "
-                "잠시 후 다시 시도해주세요."
+                f"{ticker} 이벤트 분석 중 오류가 발생했습니다. "
+                f"사유: {_friendly_error_msg(e)}"
             ),
             persona="event",
         )
@@ -243,7 +243,7 @@ async def macro_pm_node(state: AnalysisState) -> dict:
         )
     except Exception as e:
         logger.error(f"[graph:macro] MacroPm 실행 실패: {type(e).__name__}: {e}")
-        result = _fallback_macro_result(market or "GLOBAL", str(e)[:120])
+        result = _fallback_macro_result(market or "GLOBAL", _friendly_error_msg(e))
     return {"macro_output": result}
 
 
@@ -260,13 +260,36 @@ async def korean_specialist_node(state: AnalysisState) -> dict:
         logger.error(
             f"[graph:korean] KoreanSpecialist 실행 실패: {type(e).__name__}: {e}"
         )
-        result = _fallback_korean_result(ticker, str(e)[:120])
+        result = _fallback_korean_result(ticker, _friendly_error_msg(e))
     return {"korean_output": result}
 
 
 # ──────────────────────────────────────────────
 # Fallback 응답 빌더 (graceful degradation)
 # ──────────────────────────────────────────────
+
+
+def _friendly_error_msg(e: Exception) -> str:
+    """예외를 사용자에게 노출 가능한 친화 메시지로 변환.
+
+    - Claude API 크레딧 부족·rate limit·overload·timeout 등 알려진 패턴은
+      한국어로 매핑. 그 외는 클래스명+detail 일부 노출.
+    """
+    raw = str(e)
+    low = raw.lower()
+    if "credit balance" in low or "billing" in low or "insufficient" in low:
+        return "Claude API 크레딧 부족 — 관리자가 충전한 뒤 다시 시도해주세요."
+    if "rate limit" in low or "429" in low:
+        return "AI 호출 한도 도달 — 잠시 후 다시 시도해주세요."
+    if "overload" in low or "529" in low:
+        return "AI 일시 과부하 — 잠시 후 다시 시도해주세요."
+    if "timeout" in low or "timed out" in low:
+        return "응답 지연 — 잠시 후 다시 시도해주세요."
+    if "unauthorized" in low or "authentication" in low or "401" in low:
+        return "AI 인증 실패 — 관리자에게 문의해주세요."
+    # generic — 클래스명 + 메시지 앞부분
+    snippet = raw[:120]
+    return f"{type(e).__name__}: {snippet}"
 
 
 def _fallback_event_summary():

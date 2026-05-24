@@ -65,6 +65,29 @@ const STEPS = [
 export default function Home() {
   return (
     <main className="flex-1">
+      {/* Sticky 상단 헤더 — 첫 방문자가 로고/로그인 즉시 발견 */}
+      <header className="sticky top-0 z-40 w-full border-b bg-background/90 backdrop-blur">
+        <div className="max-w-5xl mx-auto px-6 h-14 flex items-center justify-between">
+          <Link href="/" className="text-lg font-bold tracking-tight">
+            Axis
+          </Link>
+          <nav className="flex items-center gap-2">
+            <Link
+              href="/pricing"
+              className="text-sm text-muted-foreground hover:text-foreground px-3 py-1.5"
+            >
+              요금제
+            </Link>
+            <Link
+              href="/login"
+              className={buttonVariants({ size: "sm" })}
+            >
+              로그인
+            </Link>
+          </nav>
+        </div>
+      </header>
+
       {/* Hero */}
       <section className="px-6 py-20 max-w-5xl mx-auto text-center">
         <h1 className="text-4xl md:text-6xl font-bold tracking-tight">

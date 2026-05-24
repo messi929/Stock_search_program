@@ -430,9 +430,19 @@ export function AnalyzeView({ ticker }: { ticker: string }) {
           ) : overallElapsed !== null ? (
             <p className="text-xs text-muted-foreground">
               전체 분석 완료 ({overallElapsed}초)
+              {overallElapsed < 2 && (
+                <span
+                  className="ml-2 px-1.5 py-0.5 rounded bg-sky-500/15 text-sky-700 text-[10px] font-medium"
+                  title="이전 분석 결과가 캐시돼 즉시 응답됨 (분석 비용 없음)"
+                >
+                  ⚡ 캐시된 결과
+                </span>
+              )}
             </p>
           ) : (
-            <p className="text-xs text-muted-foreground">분석 진행 중...</p>
+            <p className="text-xs text-muted-foreground">
+              분석 진행 중... (보통 30~90초, 캐시 시 즉시)
+            </p>
           )}
 
           {/* 페르소나 그룹별 카드 분기 */}

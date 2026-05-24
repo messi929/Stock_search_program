@@ -60,8 +60,9 @@ export default function AnalyzeIndexPage() {
           ))}
         </div>
         <p className="text-xs text-muted-foreground">
-          분석은 4개 AI 에이전트(Research·Analyst·Validator·Strategist)가
-          5~10초간 순차 실행됩니다.
+          종목 선택 후 분석 방식·관점을 골라 의도적으로 실행합니다 — 종합 전략(4
+          에이전트, 약 60~90초) 또는 데이터 특화(이벤트·매크로·한국 시장, 약
+          40~70초). 같은 종목은 캐시되어 즉시 응답됩니다.
         </p>
       </section>
 

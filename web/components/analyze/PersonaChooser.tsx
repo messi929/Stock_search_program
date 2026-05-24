@@ -101,14 +101,14 @@ export function PersonaChooser({
             active={group === "strategist"}
             icon="🧭"
             title="종합 전략 분석"
-            desc="리서치 → 분석 → 검증 → 종합 4단계로 한 종목을 깊게. (약 5~10초)"
+            desc="리서치 → 분석 → 검증 → 종합 4단계로 한 종목을 깊게. (약 60~90초, 캐시 시 즉시)"
             onClick={() => pickGroup("strategist")}
           />
           <GroupCard
             active={group === "data_driven"}
             icon="📡"
             title="데이터 특화 분석"
-            desc="이벤트·매크로·한국 시장 등 특정 데이터셋에 집중. (빠름)"
+            desc="이벤트·매크로·한국 시장 등 특정 데이터셋에 집중. (약 40~70초, 캐시 시 즉시)"
             onClick={() => pickGroup("data_driven")}
           />
         </div>

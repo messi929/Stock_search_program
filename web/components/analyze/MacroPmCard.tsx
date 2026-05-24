@@ -174,6 +174,24 @@ function RegimePanel({ data }: { data: MacroPmResult }) {
   );
 }
 
+/** 빈 stage로 간주할 sentinel 문자열 — LLM/백엔드 fallback이 다양한 표현 사용. */
+const EMPTY_STAGE_SENTINELS = new Set([
+  "데이터 부재",
+  "데이터 미수신",
+  "데이터 없음",
+  "n/a",
+  "na",
+  "—",
+  "-",
+  "unknown",
+  "미확인",
+]);
+
+function isStageEmpty(s?: string | null): boolean {
+  const v = (s || "").trim().toLowerCase();
+  return !v || EMPTY_STAGE_SENTINELS.has(v);
+}
+
 function CycleRow({
   emoji,
   label,
@@ -183,7 +201,7 @@ function CycleRow({
   label: string;
   stage: CycleStage;
 }) {
-  const empty = !stage?.stage?.trim();
+  const empty = isStageEmpty(stage?.stage);
   return (
     <div className={`rounded-md border p-2.5 ${empty ? "bg-muted/10 border-dashed" : ""}`}>
       <div className="flex items-center justify-between mb-0.5">
@@ -205,11 +223,12 @@ function CycleRow({
   );
 }
 
-/** 정량 사이클이 모두 비고 신뢰도가 매우 낮으면 데이터 희소 상태로 간주. */
+/** 정량 사이클이 모두 비고 신뢰도가 매우 낮으면 데이터 희소 상태로 간주.
+ *  sentinel 문자열('데이터 부재' 등)도 빈 값으로 처리. */
 function isDataSparse(data: MacroPmResult): boolean {
   const conf = data.macro_regime?.regime_confidence ?? 0;
   const allCyclesEmpty = (["interest_rate", "business_cycle", "currency_cycle", "inflation_cycle"] as const)
-    .every((k) => !data.cycle_analysis?.[k]?.stage?.trim());
+    .every((k) => isStageEmpty(data.cycle_analysis?.[k]?.stage));
   return conf < 0.1 && allCyclesEmpty;
 }
 
