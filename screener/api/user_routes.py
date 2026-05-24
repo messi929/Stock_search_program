@@ -1,4 +1,6 @@
-"""사용자 프로필·세션·어뷰징 방지 API."""
+"""사용자 프로필·세션·어뷰징 방지·계정 삭제 API."""
+
+from loguru import logger
 
 from fastapi import APIRouter, Request
 from starlette.responses import JSONResponse
@@ -18,6 +20,32 @@ from screener.services.subscription import (
 )
 
 router = APIRouter(prefix="/api")
+
+
+@router.delete("/user/account")
+async def delete_account(request: Request):
+    """계정 영구 삭제 — Firestore 사용자 문서 삭제 + Firebase Auth user 삭제.
+    개인정보 보호 요구(GDPR·개인정보보호법) 충족. 되돌릴 수 없음.
+    """
+    user = getattr(request.state, "user", None) or {}
+    uid = user.get("uid", "")
+    email = user.get("email", "")
+    if not uid:
+        return JSONResponse(status_code=401, content={"detail": "로그인 필요"})
+    try:
+        # 1) Firestore users/{uid} 문서 삭제 (axis_profile·watchlist·tier 등 모두 포함)
+        _users_ref().document(uid).delete()
+        # 2) Firebase Auth 계정 삭제 (Google OAuth 연결 끊김)
+        from firebase_admin import auth as fb_auth
+        fb_auth.delete_user(uid)
+        logger.info(f"[account-delete] uid={uid} email={email} 삭제 완료")
+        return {"ok": True, "message": "계정이 영구 삭제되었습니다."}
+    except Exception as e:
+        logger.error(f"[account-delete] uid={uid} 실패: {type(e).__name__}: {e}")
+        return JSONResponse(
+            status_code=500,
+            content={"detail": f"계정 삭제 실패: {type(e).__name__}"},
+        )
 
 
 @router.get("/user/profile")

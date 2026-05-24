@@ -96,11 +96,14 @@ export function AnalyzeView({ ticker }: { ticker: string }) {
   const [runPersona, setRunPersona] = useState<PersonaId | null>(null);
   const isStrategist = runPersona ? isStrategistPersona(runPersona) : false;
 
-  // 분석이 끝나기 전(~10s)에도 종목명을 노출 — Analyst가 채워주기 전 fallback.
+  // 분석이 끝나기 전(~10s)에도 종목명·현재가를 노출 — Analyst가 채워주기 전 fallback.
+  // 데이터 페르소나 흐름(이벤트/매크로/한국)은 Analyst를 안 돌리므로 이 fallback이 영구.
   const { data: stockSearch } = useStockSearch(ticker, 1);
-  const earlyName = stockSearch?.stocks?.find(
+  const earlyStock = stockSearch?.stocks?.find(
     (s) => s.ticker === ticker.toUpperCase(),
-  )?.name ?? null;
+  );
+  const earlyName = earlyStock?.name ?? null;
+  const earlyPrice = earlyStock?.close ?? null;
 
   // Strategist 흐름 상태
   const [strategistFlow, setStrategistFlow] = useState<StrategistFlowState>({
@@ -311,6 +314,16 @@ export function AnalyzeView({ ticker }: { ticker: string }) {
     setRunPersona(id);
   };
 
+  // 분석 결과 공유 — 현재 URL 클립보드 복사 + 토스트.
+  const handleShare = async () => {
+    try {
+      await navigator.clipboard.writeText(window.location.href);
+      toast.success("분석 링크가 복사되었습니다");
+    } catch {
+      toast.error("링크 복사 실패");
+    }
+  };
+
   // PersonaSwitch 클릭(이미 결과가 있는 상태에서 관점 전환) — 비용 발생 인지 강제.
   // 같은 페르소나는 no-op. 사용자 지갑 보호용 confirm.
   const switchPersona = (id: PersonaId) => {
@@ -324,7 +337,10 @@ export function AnalyzeView({ ticker }: { ticker: string }) {
 
   // 종목명 표시 — Strategist 흐름은 analyst가 채워줌, 데이터 페르소나는 earlyName fallback
   const displayName = strategistFlow.analyst?.name ?? earlyName;
-  const displayPrice = strategistFlow.analyst?.technical.current_price;
+  // 데이터 페르소나(이벤트/매크로/한국) 흐름은 Analyst가 안 돌므로 earlyPrice fallback이 영구.
+  const displayPrice = strategistFlow.analyst?.technical.current_price ?? earlyPrice;
+  // 데이터 갱신 시각 — Analyst 결과 있을 때만 (KR 스크리너 updated_at).
+  const displayUpdatedAt = strategistFlow.analyst?.timestamp ?? null;
 
   // 시장 구분 — 6자리 숫자 = KR, 그 외 = US. analyst 결과에 KOSPI/KOSDAQ/NASDAQ 등
   // 실제 거래소가 있으면 사용, 없으면 국가만 표시.
@@ -367,9 +383,17 @@ export function AnalyzeView({ ticker }: { ticker: string }) {
                 {displayName}
                 {displayPrice != null
                   ? ` · ${displayPrice.toLocaleString()}${isKR ? "원" : "달러"}`
-                  : runPersona && isStrategist
-                    ? " · 가격 조회 중..."
-                    : ""}
+                  : ""}
+                {displayUpdatedAt && (
+                  <span className="ml-2 text-[10px]" title="Analyst 분석 시점">
+                    ⏱ {new Date(displayUpdatedAt).toLocaleString("ko-KR", {
+                      month: "numeric",
+                      day: "numeric",
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })}
+                  </span>
+                )}
               </p>
             ) : null}
           </div>
@@ -398,11 +422,27 @@ export function AnalyzeView({ ticker }: { ticker: string }) {
               ticker={ticker}
               strategist={strategistFlow.strategist}
             />
+            <button
+              type="button"
+              onClick={handleShare}
+              title="현재 분석 페이지 링크를 클립보드에 복사"
+              className="inline-flex items-center h-9 px-3 rounded-md border text-sm hover:bg-muted/50 transition"
+            >
+              🔗 공유
+            </button>
           </div>
         )}
         {runPersona && !isStrategist && (
           <div className="flex flex-wrap items-start gap-2">
             <AddToWatchlistButton ticker={ticker} />
+            <button
+              type="button"
+              onClick={handleShare}
+              title="현재 분석 페이지 링크를 클립보드에 복사"
+              className="inline-flex items-center h-9 px-3 rounded-md border text-sm hover:bg-muted/50 transition"
+            >
+              🔗 공유
+            </button>
           </div>
         )}
       </header>

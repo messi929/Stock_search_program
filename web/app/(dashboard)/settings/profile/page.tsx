@@ -21,6 +21,8 @@ import {
   type InvestingExperience,
   type PersonaId,
 } from "@/hooks/useUserProfile";
+import { apiCall } from "@/lib/api";
+import { signOut } from "@/lib/auth-actions";
 
 // 온보딩과 동일 구성 — 추후 변경 시 양쪽 동기화 필요.
 const EXPERIENCE_OPTIONS: { id: InvestingExperience; label: string }[] = [
@@ -296,6 +298,75 @@ export default function SettingsProfilePage() {
           {busy ? "저장 중..." : "💾 저장"}
         </Button>
       </div>
+
+      {/* 위험 영역 — 계정 영구 삭제 (개인정보 보호 권리) */}
+      <DangerZone />
     </div>
+  );
+}
+
+function DangerZone() {
+  const router = useRouter();
+  const [confirming, setConfirming] = useState(false);
+  const [busy, setBusy] = useState(false);
+
+  const handleDelete = async () => {
+    const ok = window.confirm(
+      "정말 계정을 영구 삭제하시겠어요?\n\n· 프로필·관심 종목·진입선·구독 정보가 모두 삭제됩니다.\n· 되돌릴 수 없습니다.\n· 같은 Google 계정으로 다시 가입하실 수 있습니다.",
+    );
+    if (!ok) return;
+    setBusy(true);
+    try {
+      await apiCall<{ ok: boolean }>("/api/user/account", { method: "DELETE" });
+      await signOut();
+      toast.success("계정이 삭제되었습니다.");
+      router.replace("/");
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "삭제 실패";
+      toast.error(msg);
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Card className="border-destructive/40 bg-destructive/5 mt-8">
+      <CardContent className="p-5 space-y-3">
+        <h2 className="font-semibold text-destructive">⚠️ 위험 영역</h2>
+        <p className="text-xs text-muted-foreground leading-relaxed">
+          계정 영구 삭제 — Firestore 사용자 데이터(프로필·관심종목·진입선·티어)
+          전체 + Firebase 인증 계정이 즉시 삭제됩니다. 되돌릴 수 없습니다.
+          같은 Google 계정으로 새로 가입은 가능합니다.
+        </p>
+        {!confirming ? (
+          <Button
+            type="button"
+            variant="outline"
+            className="border-destructive/50 text-destructive hover:bg-destructive/10"
+            onClick={() => setConfirming(true)}
+          >
+            계정 삭제 시작
+          </Button>
+        ) : (
+          <div className="flex flex-col sm:flex-row gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setConfirming(false)}
+              disabled={busy}
+            >
+              취소
+            </Button>
+            <Button
+              type="button"
+              onClick={handleDelete}
+              disabled={busy}
+              className="bg-destructive hover:bg-destructive/90"
+            >
+              {busy ? "삭제 중..." : "🗑 영구 삭제 확인"}
+            </Button>
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 }
