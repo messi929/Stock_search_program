@@ -48,7 +48,15 @@ export default function DashboardHome() {
       {/* Profile summary */}
       <Card>
         <CardContent className="p-6 space-y-3">
-          <h2 className="font-semibold">내 투자 프로필</h2>
+          <div className="flex items-center justify-between gap-2">
+            <h2 className="font-semibold">내 투자 프로필</h2>
+            <Link
+              href="/settings/profile"
+              className="text-xs text-amber-500 hover:underline shrink-0"
+            >
+              ⚙️ 수정 →
+            </Link>
+          </div>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
             <div>
               <p className="text-muted-foreground">선호 페르소나</p>

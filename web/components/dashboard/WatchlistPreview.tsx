@@ -2,11 +2,12 @@
 
 import Link from "next/link";
 import { useQueries } from "@tanstack/react-query";
+import { toast } from "sonner";
 
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { usePersonas } from "@/hooks/usePersonas";
-import { useWatchlist } from "@/hooks/useWatchlist";
+import { useUpdateWatchlist, useWatchlist } from "@/hooks/useWatchlist";
 import { apiCall } from "@/lib/api";
 import type { StockSearchResponse } from "@/types/api";
 
@@ -17,8 +18,22 @@ export function WatchlistPreview() {
     personas?.user_plan === "pro" || personas?.user_plan === "premium";
   const limit = isPaid ? 30 : 5;
   const { data, isLoading, isError } = useWatchlist();
+  const update = useUpdateWatchlist();
   const tickers = data?.watchlist ?? [];
   const visibleTickers = tickers.slice(0, limit);
+
+  const handleRemove = (ticker: string, name?: string | null) => {
+    const label = name ? `${name} (${ticker})` : ticker;
+    if (!window.confirm(`'${label}'을(를) 관심 종목에서 제거할까요?`)) return;
+    const next = tickers.filter((t) => t !== ticker);
+    update.mutate(next, {
+      onSuccess: () => toast.success(`'${label}' 제거됨`),
+      onError: (err: unknown) => {
+        const msg = err instanceof Error ? err.message : "제거 실패";
+        toast.error(msg);
+      },
+    });
+  };
 
   // 티커별 종목명 병렬 조회(react-query 캐시 공유 — staleTime 1h, 종목명은 거의 안 변함).
   const nameQueries = useQueries({
@@ -87,12 +102,24 @@ export function WatchlistPreview() {
                       <span className="font-mono">{t}</span>
                     )}
                   </span>
-                  <Link
-                    href={`/analyze/${t}`}
-                    className="text-xs text-amber-500 hover:underline shrink-0"
-                  >
-                    분석 →
-                  </Link>
+                  <div className="flex items-center gap-1 shrink-0">
+                    <Link
+                      href={`/analyze/${t}`}
+                      className="text-xs text-amber-500 hover:underline px-1.5"
+                    >
+                      분석 →
+                    </Link>
+                    <button
+                      type="button"
+                      onClick={() => handleRemove(t, name)}
+                      disabled={update.isPending}
+                      aria-label={`${name ?? t} 관심 종목에서 제거`}
+                      title="관심 종목에서 제거"
+                      className="text-xs text-muted-foreground hover:text-destructive px-1.5 disabled:opacity-50"
+                    >
+                      ✕
+                    </button>
+                  </div>
                 </li>
               );
             })}
