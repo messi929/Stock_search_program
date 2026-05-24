@@ -108,16 +108,20 @@ def check_korean_completeness(result: KoreanSpecialistResult) -> list[str]:
         missing.append("summary_neutral")
 
     s = result.korea_specific_score
-    if not s.interpretation.strip() and not any(
-        (
-            s.foreign_supply,
-            s.governance,
-            s.valueup_alignment,
-            s.theme_position,
-            s.policy_friendliness,
-        )
-    ):
+    score_vals = (
+        s.foreign_supply,
+        s.governance,
+        s.valueup_alignment,
+        s.theme_position,
+        s.policy_friendliness,
+    )
+    all_zero = all(v == 0 for v in score_vals)
+    if not s.interpretation.strip() and all_zero:
+        # 점수도 다 0이고 interpretation도 비면 사실상 빈 응답 → 재요청.
         missing.append("korea_specific_score")
+    elif all_zero and not s.interpretation.strip():
+        # 점수 다 0인데 사유 명시 안 하면(데이터 미수신 안내 누락) 재요청.
+        missing.append("korea_specific_score:all_zero_without_reason")
 
     if not any(
         (
@@ -420,13 +424,26 @@ class KoreanSpecialistAgent(BaseAgent):
                     lines.append(f"- {k}: {v}")
 
         lines.append(
-            "\n# 출력 지시\n"
-            "위 데이터로 시스템 프롬프트 JSON 스키마에 맞춰 응답하세요. "
-            "각 도메인 점수(0~10)를 정량적으로 매기고, weighted_total은 시스템이 후처리로 재계산하니 비워두거나 추정만 적으세요. "
-            "6개 분석 블록·korea_specific_score·summary_neutral은 **반드시** 채울 것 (생략 시 빈 카드 노출). "
-            "단정어 사용 금지 — '관찰', '통상 패턴' 등 중립 표현만. "
-            "거버넌스는 자체 평가임을 명시 (governance_disclaimer 필드 채울 것). "
-            "수치는 위 입력 그대로 사용, 새 수치 만들지 마세요."
+            "\n# 출력 지시 (반드시 준수)\n"
+            "위 입력 데이터로 시스템 프롬프트 JSON 스키마에 맞춰 응답하세요.\n"
+            "\n"
+            "## ⭐ korea_specific_score 5필드 — 모두 필수, 0.0 금지 (단 예외 명시)\n"
+            "다음 5개 점수 필드를 **반드시 1~10 사이 float로 매겨야 합니다**:\n"
+            "  • foreign_supply (외국인 수급): 5축 평균 정상값 5.0. 강한 매수 7~9, 강한 매도 1~3.\n"
+            "  • governance (거버넌스): 위 자체 점수 그대로 활용(예: 6/10 → 6.0).\n"
+            "  • valueup_alignment (밸류업 부합도): 인덱스 편입+소각 9, 편입만 6, 미편입 3.\n"
+            "  • theme_position (테마 위치): 주도 테마면 7~9, 무관 3~4, 비관 1~2.\n"
+            "  • policy_friendliness (정책 친화): 공매도 안정 단계 6~8, 변동 3~5, 위험 1~3.\n"
+            "\n"
+            "**0.0은 '데이터 미수신' 외엔 금지**. 0.0으로 둘 경우 반드시 interpretation 필드에 "
+            "'X 데이터 미수신으로 N개 항목 0점'을 명시할 것. 데이터가 일부라도 있으면 1~10 범위에서 산출.\n"
+            "weighted_total은 시스템이 후처리로 재계산하니 비워두세요.\n"
+            "\n"
+            "## 그 외 필수\n"
+            "- 6개 분석 블록·summary_neutral: 모두 채울 것 (생략 시 빈 카드 노출).\n"
+            "- 단정어 사용 금지 — '관찰', '통상 패턴' 등 중립 표현만.\n"
+            "- 거버넌스는 자체 평가임을 명시 (governance_disclaimer 필드).\n"
+            "- 수치는 위 입력 그대로 사용, 새 수치 만들지 마세요."
         )
         return "\n".join(lines)
 
