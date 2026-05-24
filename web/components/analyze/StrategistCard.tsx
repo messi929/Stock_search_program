@@ -12,12 +12,38 @@ const PERSONA_NAME: Record<string, string> = {
   graham: "가치·저평가",
 };
 
+/** 페르소나별 진입 철학 한 줄 — 사용자가 "왜 이 가격?"을 즉시 이해. */
+const PERSONA_PHILOSOPHY: Record<string, string> = {
+  blackrock:
+    "보수적 진입 — 큰 폭 조정 시 단계적 참고. 리스크 우선·하방 보호 중심.",
+  ark:
+    "공격적 진입 — 소폭 조정에도 적극 참고. 장기 성장 잠재 우선.",
+  graham:
+    "매우 보수적 — 안전마진 큰 폭 확보 후 참고. 본질 가치 대비 할인 중심.",
+};
+
+function pctFromCurrent(price: number, current: number | null | undefined): string {
+  if (!current || current <= 0) return "";
+  const diff = ((price - current) / current) * 100;
+  const sign = diff >= 0 ? "+" : "";
+  return `${sign}${diff.toFixed(1)}%`;
+}
+
+function pctTone(price: number, current: number | null | undefined): string {
+  if (!current || current <= 0) return "text-muted-foreground";
+  const diff = price - current;
+  return diff > 0 ? "text-emerald-600" : "text-rose-600";
+}
+
 export function StrategistCard({
   data,
   status,
+  currentPrice = null,
 }: {
   data: StrategistResult | null;
   status: AgentStatus;
+  /** Analyst 결과의 현재가 — 진입/회복 관찰선 거리(%) 계산용. */
+  currentPrice?: number | null;
 }) {
   return (
     <AgentCardShell
@@ -52,23 +78,45 @@ export function StrategistCard({
             </p>
           </section>
 
-          {/* Entry points */}
+          {/* 진입 관찰 구간 — 거리 % + 페르소나 철학 */}
           {data.entry_points && (
             <section>
-              <h4 className="text-xs font-medium text-muted-foreground mb-2">
-                📌 참고 관찰 구간
-              </h4>
+              <div className="flex items-baseline justify-between mb-1 gap-2 flex-wrap">
+                <h4 className="text-xs font-medium text-muted-foreground">
+                  📌 진입 관찰 구간
+                </h4>
+                {currentPrice != null && (
+                  <span className="text-[10px] text-muted-foreground font-mono">
+                    현재가 {currentPrice.toLocaleString()}원
+                  </span>
+                )}
+              </div>
+              {PERSONA_PHILOSOPHY[data.persona_used] && (
+                <p className="text-[11px] text-muted-foreground mb-2 italic">
+                  💭 {PERSONA_PHILOSOPHY[data.persona_used]}
+                </p>
+              )}
               <div className="grid grid-cols-3 gap-2 text-sm">
-                {(["tier_1", "tier_2", "tier_3"] as const).map((k, i) => (
-                  <div key={k} className="p-2 rounded-md bg-muted/30">
-                    <div className="text-xs text-muted-foreground">
-                      {i + 1}차 관찰 구간
+                {(["tier_1", "tier_2", "tier_3"] as const).map((k, i) => {
+                  const price = data.entry_points![k];
+                  const pct = pctFromCurrent(price, currentPrice);
+                  const tone = pctTone(price, currentPrice);
+                  return (
+                    <div key={k} className="p-2 rounded-md bg-muted/30">
+                      <div className="text-xs text-muted-foreground">
+                        {i + 1}차 관찰 구간
+                      </div>
+                      <div className="font-medium font-mono">
+                        {price.toLocaleString()}원
+                      </div>
+                      {pct && (
+                        <div className={`text-[10px] font-mono ${tone}`}>
+                          {pct}
+                        </div>
+                      )}
                     </div>
-                    <div className="font-medium font-mono">
-                      {data.entry_points![k].toLocaleString()}원
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
               {data.entry_points.technical_basis.length > 0 && (
                 <ul className="mt-2 space-y-0.5 text-xs text-muted-foreground">
@@ -77,6 +125,44 @@ export function StrategistCard({
                   ))}
                 </ul>
               )}
+            </section>
+          )}
+
+          {/* 회복·차익 실현 참고선 (exit_points) — LEGAL: '목표가' 단어 금지, 참고선 표현 */}
+          {data.exit_points && (
+            <section>
+              <h4 className="text-xs font-medium text-muted-foreground mb-2">
+                🎯 회복·차익 실현 참고선
+                <span className="ml-2 text-[10px] text-muted-foreground font-normal">
+                  (매도 권유 아닌 참고)
+                </span>
+              </h4>
+              <div className="grid grid-cols-3 gap-2 text-sm">
+                {([
+                  { key: "stop_loss", label: "손실 한도 참고선", emoji: "🛑" },
+                  { key: "take_profit_1", label: "1차 차익 실현 참고선", emoji: "🌱" },
+                  { key: "take_profit_final", label: "최종 참고선", emoji: "🌳" },
+                ] as const).map(({ key, label, emoji }) => {
+                  const price = data.exit_points![key];
+                  const pct = pctFromCurrent(price, currentPrice);
+                  const tone = pctTone(price, currentPrice);
+                  return (
+                    <div key={key} className="p-2 rounded-md bg-muted/30">
+                      <div className="text-xs text-muted-foreground">
+                        {emoji} {label}
+                      </div>
+                      <div className="font-medium font-mono">
+                        {price.toLocaleString()}원
+                      </div>
+                      {pct && (
+                        <div className={`text-[10px] font-mono ${tone}`}>
+                          {pct}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
             </section>
           )}
 
