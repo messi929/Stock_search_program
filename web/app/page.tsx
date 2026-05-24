@@ -1,18 +1,16 @@
 /**
  * 랜딩 페이지 (/) — 비로그인 방문자 대상.
- * docs/axis/frontend/pages.md Hero / Features / Pricing 섹션 기반.
  *
- * 베타 단계: 상단 "Closed Beta" 배지 + 본문 끝에 신청 CTA.
- *   NEXT_PUBLIC_BETA_FORM_URL — Google Forms / Tally / Notion 폼 URL
- *   (없으면 "곧 오픈" 안내)
+ * 정식 오픈 기준 (베타 게이팅 제거):
+ *  - Hero CTA = 'Google로 시작하기'(/login) + '요금제 보기'(/pricing)
+ *  - '3단계로 시작' 가이드로 처음 방문자에게 다음 행동을 명시
+ *  - 마지막 '지금 시작' CTA로 다시 한 번 유입
  */
 import Link from "next/link";
 
 import { Disclaimer } from "@/components/legal/Disclaimer";
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-
-const BETA_FORM_URL = process.env.NEXT_PUBLIC_BETA_FORM_URL ?? "";
 
 const FEATURES = [
   {
@@ -27,13 +25,13 @@ const FEATURES = [
   },
   {
     icon: "🎭",
-    title: "페르소나 전환",
-    desc: "안정·리스크관리 / 고성장·혁신 / 가치·저평가 — 같은 종목, 3가지 관점",
+    title: "페르소나 전환 (6종)",
+    desc: "안정·리스크관리 / 고성장·혁신 / 가치·저평가 + 이벤트·매크로·한국 시장 — 같은 종목을 6가지 관점으로",
   },
   {
     icon: "🔔",
     title: "진입선 알림 (v1.1 도입 예정)",
-    desc: "관찰 구간 도달 시 이메일·카카오 알림. 베타 기간 중 토글 미리 켜두실 수 있습니다.",
+    desc: "관찰 구간 도달 시 이메일·카카오 알림. 지금 미리 토글 켜두면 출시 시 자동 수신.",
   },
 ];
 
@@ -43,14 +41,32 @@ const PERSONAS = [
   { id: "graham", icon: "📚", name: "가치·저평가", tagline: "안전마진, 저평가" },
 ];
 
+const STEPS = [
+  {
+    num: "1",
+    icon: "🚀",
+    title: "Google로 가입",
+    desc: "30초, 신용카드 불필요. 투자 성향 4문항 온보딩.",
+  },
+  {
+    num: "2",
+    icon: "🔍",
+    title: "종목·관점 선택",
+    desc: "관심 종목 검색하거나 스마트 리스트에서. 6가지 분석 관점 중 하나 선택.",
+  },
+  {
+    num: "3",
+    icon: "📊",
+    title: "분석 + 실시간 검증",
+    desc: "AI 에이전트 결과를 보고, 수치는 항상 현재 시점 데이터로 재검증.",
+  },
+];
+
 export default function Home() {
   return (
     <main className="flex-1">
       {/* Hero */}
       <section className="px-6 py-20 max-w-5xl mx-auto text-center">
-        <span className="inline-block text-xs font-medium px-3 py-1 rounded-full border border-amber-500/40 bg-amber-500/10 text-amber-500 mb-6">
-          🚧 Closed Beta · 한정 인원 모집 중
-        </span>
         <h1 className="text-4xl md:text-6xl font-bold tracking-tight">
           유튜버 말고,
           <br />
@@ -58,18 +74,18 @@ export default function Home() {
         </h1>
         <p className="mt-6 text-lg text-muted-foreground max-w-2xl mx-auto">
           리스크를 먼저 따집니다. 성장을 발굴합니다. 가치를 찾습니다. 같은
-          종목을 3가지 원칙으로 분석합니다.
+          종목을 6가지 원칙으로 분석합니다.
         </p>
         <p className="mt-2 text-base text-muted-foreground">
           1~5년차 투자자를 위한 AI 분석 파트너 — 정보 제공 도구입니다.
         </p>
-        <div className="mt-10 flex justify-center gap-4">
-          <a
-            href="#beta"
+        <div className="mt-10 flex flex-col sm:flex-row justify-center gap-3">
+          <Link
+            href="/login"
             className={buttonVariants({ size: "lg" })}
           >
-            베타 안내 보기
-          </a>
+            🚀 무료로 시작하기
+          </Link>
           <Link
             href="/pricing"
             className={buttonVariants({ size: "lg", variant: "outline" })}
@@ -77,13 +93,54 @@ export default function Home() {
             요금제 보기
           </Link>
         </div>
+        <p className="mt-4 text-xs text-muted-foreground">
+          Google 계정으로 30초 가입 · 신용카드 불필요 · Free 플랜 즉시 사용
+        </p>
+      </section>
+
+      {/* 3단계로 시작 — 처음 방문자가 '뭘 해야할지' 한눈에 */}
+      <section className="px-6 py-12 max-w-5xl mx-auto">
+        <h2 className="text-2xl font-semibold text-center mb-2">
+          3단계로 시작
+        </h2>
+        <p className="text-sm text-muted-foreground text-center mb-8">
+          첫 분석까지 2분이면 충분합니다.
+        </p>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {STEPS.map((s, i) => (
+            <div key={s.num} className="relative">
+              <Card className="h-full">
+                <CardContent className="p-6 space-y-2">
+                  <div className="flex items-baseline gap-2">
+                    <span className="text-xs font-bold text-primary bg-primary/10 px-2 py-0.5 rounded">
+                      {s.num}
+                    </span>
+                    <span className="text-2xl">{s.icon}</span>
+                  </div>
+                  <h3 className="font-semibold">{s.title}</h3>
+                  <p className="text-sm text-muted-foreground leading-relaxed">
+                    {s.desc}
+                  </p>
+                </CardContent>
+              </Card>
+              {i < STEPS.length - 1 && (
+                <div className="hidden md:block absolute top-1/2 -right-2 text-muted-foreground" aria-hidden="true">
+                  →
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
       </section>
 
       {/* Personas */}
       <section className="px-6 py-12 max-w-5xl mx-auto">
-        <h2 className="text-2xl font-semibold text-center mb-8">
+        <h2 className="text-2xl font-semibold text-center mb-2">
           같은 종목, 3가지 다른 관점
         </h2>
+        <p className="text-sm text-muted-foreground text-center mb-8">
+          (이벤트·매크로·한국 시장 등 데이터 특화 3종까지 총 6 페르소나)
+        </p>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {PERSONAS.map((p) => (
             <Card key={p.id}>
@@ -122,39 +179,35 @@ export default function Home() {
         </blockquote>
       </section>
 
-      {/* Beta signup */}
-      <section id="beta" className="px-6 py-16 max-w-3xl mx-auto">
-        <Card className="border-amber-500/40 bg-amber-500/5">
+      {/* 지금 시작 CTA — 페이지 마지막 추진력 */}
+      <section className="px-6 py-16 max-w-3xl mx-auto">
+        <Card className="border-primary/30 bg-primary/5">
           <CardContent className="p-8 text-center space-y-4">
-            <div className="text-3xl">🚧</div>
-            <h2 className="text-2xl font-semibold">Closed Beta 신청</h2>
+            <h2 className="text-2xl font-semibold">지금 시작하세요</h2>
             <p className="text-sm text-muted-foreground max-w-xl mx-auto leading-relaxed">
-              실시간 검증 + 4개 에이전트 분석을 먼저 사용해보세요.
-              <br />
-              현재 한정 인원 모집 중이며, 승인되면 안내 이메일을 보내드립니다.
-              피드백 1건 이상 주신 분께는 Pro 1개월을 드립니다.
+              Free 플랜으로 즉시 시작 · 신용카드 불필요 · 분석 월 20회, 실시간
+              검증 월 10회 무료 제공. Pro로 업그레이드 시 6 페르소나·무제한 분석.
             </p>
-            {BETA_FORM_URL ? (
-              <a
-                href={BETA_FORM_URL}
-                target="_blank"
-                rel="noreferrer"
+            <div className="flex flex-col sm:flex-row justify-center gap-3 pt-2">
+              <Link
+                href="/login"
                 className={buttonVariants({ size: "lg" })}
               >
-                폼으로 신청 →
-              </a>
-            ) : (
-              <p className="text-xs text-muted-foreground italic">
-                신청 폼은 곧 오픈됩니다. 오픈되면 순차적으로 안내 이메일을
-                보내드립니다.
-              </p>
-            )}
+                🚀 Google로 무료 시작
+              </Link>
+              <Link
+                href="/pricing"
+                className={buttonVariants({ size: "lg", variant: "outline" })}
+              >
+                요금제 자세히
+              </Link>
+            </div>
             <p className="text-xs text-muted-foreground pt-2">
-              이미 초대를 받으셨다면{" "}
+              이미 회원이라면{" "}
               <Link href="/login" className="underline hover:text-foreground">
                 로그인
               </Link>
-              하세요.
+              .
             </p>
           </CardContent>
         </Card>

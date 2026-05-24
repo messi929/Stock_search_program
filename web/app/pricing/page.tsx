@@ -1,8 +1,8 @@
 /**
- * /pricing — 요금제 페이지 (베타 단계 placeholder).
+ * /pricing — 요금제 페이지.
  *
- * 베타 기간 중에는 결제 미연결 (Lemon Squeezy 도입은 v1.1).
- * 정식 런칭 시점에 결제 버튼 활성화.
+ * Free 즉시 시작. Pro 결제는 Lemon Squeezy 연결 시 활성화(LEMONSQUEEZY_API_KEY env).
+ * 현재 prod에 키 미설정 — Pro CTA 클릭→/login→대시보드에서 안내.
  */
 import Link from "next/link";
 
@@ -22,8 +22,8 @@ const TIERS = [
     price: "0원",
     period: "",
     desc: "처음 시작하는 투자자",
-    cta: "베타 안내 보기",
-    ctaHref: "/#beta",
+    cta: "🚀 무료로 시작",
+    ctaHref: "/login",
     highlight: false,
     features: [
       "관심 종목 5개",
@@ -39,8 +39,8 @@ const TIERS = [
     price: "9,900원",
     period: "/월",
     desc: "꾸준히 분석하는 투자자",
-    cta: "베타 안내 보기",
-    ctaHref: "/#beta",
+    cta: "💎 Pro로 시작",
+    ctaHref: "/login",
     highlight: true,
     features: [
       "관심 종목 30개",
@@ -82,13 +82,10 @@ export default function PricingPage() {
         </Link>
 
         <header className="mt-6 mb-12 text-center">
-          <span className="inline-block text-xs font-medium px-3 py-1 rounded-full border border-amber-500/40 bg-amber-500/10 text-amber-500 mb-4">
-            🚧 베타 기간 중에는 모든 기능 무료
-          </span>
           <h1 className="text-3xl md:text-5xl font-bold">요금제</h1>
           <p className="mt-4 text-muted-foreground max-w-xl mx-auto">
-            정식 런칭 시 결제가 활성화됩니다. 베타 사용자는 1개월 Pro 무료 혜택이
-            예정되어 있습니다.
+            Free 플랜으로 즉시 시작 · 신용카드 불필요. 필요할 때 Pro로
+            업그레이드.
           </p>
         </header>
 
