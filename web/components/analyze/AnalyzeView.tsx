@@ -31,6 +31,7 @@ import { Disclaimer } from "@/components/legal/Disclaimer";
 import { PersonaGuideModal } from "@/components/persona/PersonaGuideModal";
 import { PersonaSwitch } from "@/components/persona/PersonaSwitch";
 import { Card, CardContent } from "@/components/ui/card";
+import { useKisPrice } from "@/hooks/useKisPrice";
 import { useStockSearch } from "@/hooks/useStockSearch";
 import { useUserProfile } from "@/hooks/useUserProfile";
 import { apiStream, APIError } from "@/lib/api";
@@ -104,6 +105,15 @@ export function AnalyzeView({ ticker }: { ticker: string }) {
   );
   const earlyName = earlyStock?.name ?? null;
   const earlyPrice = earlyStock?.close ?? null;
+
+  // KIS 라이브 가격 — KR 종목만, 백엔드 5초 캐시. 분석 미완료 단계에서 헤더에 노출.
+  const { data: kisPriceData } = useKisPrice(ticker);
+  const kisPrice = kisPriceData?.data?.stck_prpr
+    ? Number(kisPriceData.data.stck_prpr)
+    : null;
+  const kisChangePct = kisPriceData?.data?.prdy_ctrt
+    ? Number(kisPriceData.data.prdy_ctrt)
+    : null;
 
   // Strategist 흐름 상태
   const [strategistFlow, setStrategistFlow] = useState<StrategistFlowState>({
@@ -337,8 +347,13 @@ export function AnalyzeView({ ticker }: { ticker: string }) {
 
   // 종목명 표시 — Strategist 흐름은 analyst가 채워줌, 데이터 페르소나는 earlyName fallback
   const displayName = strategistFlow.analyst?.name ?? earlyName;
-  // 데이터 페르소나(이벤트/매크로/한국) 흐름은 Analyst가 안 돌므로 earlyPrice fallback이 영구.
-  const displayPrice = strategistFlow.analyst?.technical.current_price ?? earlyPrice;
+  // 가격 우선순위: Analyst 결과 > KIS 라이브(KR) > 스크리너 캐시 fallback.
+  // KIS는 5초 백엔드 캐시라 거의 실시간. 분석 진행 중에도 헤더가 갱신됨.
+  const displayPrice =
+    strategistFlow.analyst?.technical.current_price ?? kisPrice ?? earlyPrice;
+  // 등락률 — KIS 라이브가 있을 때만 (Analyst는 등락률을 별도 필드로 안 줌)
+  const displayChangePct =
+    !strategistFlow.analyst && kisChangePct != null ? kisChangePct : null;
   // 데이터 갱신 시각 — Analyst 결과 있을 때만 (KR 스크리너 updated_at).
   const displayUpdatedAt = strategistFlow.analyst?.timestamp ?? null;
 
@@ -384,6 +399,21 @@ export function AnalyzeView({ ticker }: { ticker: string }) {
                 {displayPrice != null
                   ? ` · ${displayPrice.toLocaleString()}${isKR ? "원" : "달러"}`
                   : ""}
+                {displayChangePct != null && (
+                  <span
+                    className={`ml-1 text-xs font-medium ${
+                      displayChangePct > 0
+                        ? "text-red-500"
+                        : displayChangePct < 0
+                          ? "text-blue-500"
+                          : "text-gray-500"
+                    }`}
+                    title="KIS 라이브 등락률 (백엔드 5초 캐시)"
+                  >
+                    {displayChangePct > 0 ? "+" : ""}
+                    {displayChangePct.toFixed(2)}%
+                  </span>
+                )}
                 {displayUpdatedAt && (
                   <span className="ml-2 text-[10px]" title="Analyst 분석 시점">
                     ⏱ {new Date(displayUpdatedAt).toLocaleString("ko-KR", {
