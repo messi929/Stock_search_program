@@ -674,26 +674,85 @@ def _fetch_foreign_inst_pykrx() -> dict:
     return result
 
 
+def _fetch_foreign_inst_kis(tickers: list[str]) -> dict:
+    """KIS OpenAPI 투자자별 매매동향 수집 (외국인 + 기관 합계, 주 단위).
+
+    pykrx 실패 시 폴백. 네이버보다 우선 — 공식 API, 회색지대 X.
+    종목당 1회 호출, 초당 5회 한도 (kis_client sleep 자동 적용).
+    KIS_APP_KEY/SECRET 미설정 시 빈 결과 → 다음 폴백(네이버)로.
+    """
+    if not os.environ.get("KIS_APP_KEY") and not os.environ.get("KIS_PAPER_APP_KEY"):
+        logger.info("KIS 키 미설정 — KIS 폴백 스킵")
+        return {}
+
+    try:
+        from utils.data_collectors.kis_client import KisClient
+    except ImportError as e:
+        logger.warning(f"KIS 클라이언트 import 실패: {e}")
+        return {}
+
+    try:
+        kis = KisClient()
+    except Exception as e:
+        logger.warning(f"KIS 클라이언트 초기화 실패: {type(e).__name__}: {e}")
+        return {}
+
+    result = {}
+    failed = 0
+    for i, ticker in enumerate(tickers, 1):
+        try:
+            rows = kis.get_investor_trend(ticker)
+            if not rows:
+                failed += 1
+                continue
+            # 가장 최근(첫 행) 데이터 사용
+            latest = rows[0]
+            foreign_net = int(latest.get("frgn_ntby_qty", 0) or 0)
+            inst_net = int(latest.get("orgn_ntby_qty", 0) or 0)
+            if foreign_net != 0 or inst_net != 0:
+                result[ticker] = {"foreign_net": foreign_net, "inst_net": inst_net}
+        except Exception as e:
+            failed += 1
+            logger.debug(f"KIS investor {ticker} 실패: {type(e).__name__}: {e}")
+
+        if i % 200 == 0:
+            logger.info(
+                f"  KIS 투자자 수집 중... {i}/{len(tickers)} "
+                f"(ok={len(result)} fail={failed})"
+            )
+
+    logger.info(f"  KIS 투자자 수집: {len(result)} 종목 (fail={failed}) — {kis.stats.summary()}")
+    return result
+
+
 def fetch_foreign_inst(tickers: list[str] | None = None) -> dict:
-    """외국인/기관 순매수 수집 — pykrx 우선, 실패 시 네이버 폴백.
+    """외국인/기관 순매수 수집 — pykrx → KIS → 네이버 3단 폴백.
 
     Returns:
         {ticker: {"foreign_net": int, "inst_net": int}}
     """
     logger.info("외국인/기관 순매수 수집 시작...")
 
-    # 1차: pykrx (KRX 공식, 원 단위 거래대금)
+    # 1차: pykrx (KRX 공식, 원 단위 거래대금, 전종목 일괄)
     result = _fetch_foreign_inst_pykrx()
     if result:
         logger.info(f"외국인/기관 수집 완료 (pykrx): {len(result)}종목")
         return result
 
-    # 2차: 네이버 종목별 페이지 (주 단위, 외국인만)
-    logger.info("pykrx 데이터 없음 → 네이버 폴백 시작")
+    # 2차: KIS OpenAPI (공식 API, 주 단위, 종목별)
+    if tickers:
+        logger.info("pykrx 데이터 없음 → KIS 폴백 시도")
+        result = _fetch_foreign_inst_kis(tickers)
+        if result:
+            logger.info(f"외국인/기관 수집 완료 (KIS): {len(result)}종목")
+            return result
+
+    # 3차: 네이버 종목별 페이지 (최후 안전망, 회색지대)
     if not tickers:
-        logger.warning("네이버 폴백: ticker 목록 없음 → 빈 결과")
+        logger.warning("외국인/기관 폴백: ticker 목록 없음 → 빈 결과")
         return {}
 
+    logger.info("KIS 데이터 없음 → 네이버 폴백 시작")
     result = _fetch_foreign_inst_naver(tickers)
     logger.info(f"외국인/기관 수집 완료 (네이버): {len(result)}종목")
     return result
