@@ -160,3 +160,6 @@ gcloud run jobs execute axis-backfill-korea-supply --region=asia-northeast3
 
 **마지막 업데이트**: 2026-05-24
 **문서 위치**: `docs/PROGRESS_2026-05.md`
+
+> **후속 (5/26~27)**: KIS(한국투자증권 OpenAPI) Phase 0~3 도입 + UI 풀스택 통합. 별도 문서:
+> [`PROGRESS_2026-05-26-27_KIS.md`](./PROGRESS_2026-05-26-27_KIS.md)
