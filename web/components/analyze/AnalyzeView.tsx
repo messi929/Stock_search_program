@@ -19,6 +19,9 @@ import { toast } from "sonner";
 import { AddToWatchlistButton } from "@/components/analyze/AddToWatchlistButton";
 import { AnalystCard } from "@/components/analyze/AnalystCard";
 import { EventAnalystCard } from "@/components/analyze/EventAnalystCard";
+import { KisCandleChart } from "@/components/analyze/KisCandleChart";
+import { KisInvestorFlow } from "@/components/analyze/KisInvestorFlow";
+import { KisOrderbook } from "@/components/analyze/KisOrderbook";
 import { KoreanSpecialistCard } from "@/components/analyze/KoreanSpecialistCard";
 import { MacroPmCard } from "@/components/analyze/MacroPmCard";
 import { PersonaChooser } from "@/components/analyze/PersonaChooser";
@@ -137,6 +140,7 @@ export function AnalyzeView({ ticker }: { ticker: string }) {
   );
 
   const [overallElapsed, setOverallElapsed] = useState<number | null>(null);
+  const [likelyCached, setLikelyCached] = useState<boolean>(false);
   const [runError, setRunError] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
@@ -205,6 +209,7 @@ export function AnalyzeView({ ticker }: { ticker: string }) {
         const payload = data as {
           result?: unknown;
           total_elapsed?: number;
+          likely_cached?: boolean;
           message?: string;
         };
 
@@ -280,6 +285,9 @@ export function AnalyzeView({ ticker }: { ticker: string }) {
           case "complete":
             if (typeof payload.total_elapsed === "number") {
               setOverallElapsed(payload.total_elapsed);
+            }
+            if (typeof payload.likely_cached === "boolean") {
+              setLikelyCached(payload.likely_cached);
             }
             break;
           case "error":
@@ -477,6 +485,17 @@ export function AnalyzeView({ ticker }: { ticker: string }) {
         )}
       </header>
 
+      {/* KIS 라이브 시장 데이터 — KR 종목만, AI 분석 진행 중에도 즉시 노출 */}
+      {isKR && (
+        <section className="space-y-4">
+          <KisCandleChart ticker={ticker} />
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <KisOrderbook ticker={ticker} />
+            <KisInvestorFlow ticker={ticker} />
+          </div>
+        </section>
+      )}
+
       {/* 선택 단계 — 분석 방식/관점 선택 (자동 실행 없음) */}
       {!runPersona ? (
         <Card>
@@ -500,10 +519,10 @@ export function AnalyzeView({ ticker }: { ticker: string }) {
           ) : overallElapsed !== null ? (
             <p className="text-xs text-muted-foreground">
               전체 분석 완료 ({overallElapsed}초)
-              {overallElapsed < 2 && (
+              {likelyCached && (
                 <span
                   className="ml-2 px-1.5 py-0.5 rounded bg-sky-500/15 text-sky-700 text-[10px] font-medium"
-                  title="이전 분석 결과가 캐시돼 즉시 응답됨 (분석 비용 없음)"
+                  title="이전 분석 결과가 캐시돼 즉시 응답됨 (Claude API 비호출, 비용 없음)"
                 >
                   ⚡ 캐시된 결과
                 </span>

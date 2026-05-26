@@ -21,7 +21,7 @@ export const metadata: Metadata = {
     siteName: "Axis",
     title: SITE_TITLE,
     description: SITE_DESC,
-    // TODO: og:image는 PNG로 web/public/og.png 두면 추가 (SVG는 일부 플랫폼 미지원).
+    // og:image는 app/opengraph-image.tsx에서 자동 생성 (Next 동적 OG).
   },
   twitter: {
     card: "summary_large_image",

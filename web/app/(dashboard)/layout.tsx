@@ -14,7 +14,7 @@ const NAV = [
   { href: "/analyze", label: "종목 분석", icon: "🔍" },
   { href: "/watchlist/add", label: "관심 종목", icon: "⭐" },
   { href: "/screener", label: "스크리너", icon: "📊" },
-  { href: "/settings/notifications", label: "알림 설정", icon: "🔔" },
+  { href: "/settings/profile", label: "설정", icon: "⚙️" },
 ];
 
 export default function DashboardLayout({
@@ -107,7 +107,9 @@ export default function DashboardLayout({
           const active =
             item.href === "/dashboard"
               ? pathname === "/dashboard"
-              : pathname?.startsWith(item.href);
+              : item.href.startsWith("/settings")
+                ? pathname?.startsWith("/settings")
+                : pathname?.startsWith(item.href);
           return (
             <Link
               key={item.href}

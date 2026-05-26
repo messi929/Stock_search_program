@@ -430,10 +430,16 @@ async def _stream_analysis(
         yield _sse("error", {"code": "AI_ERROR", "message": str(e)})
         return
 
+    # 캐시 응답 추정 — Strategist 흐름 평균 ~12s, 데이터 페르소나 ~20s.
+    # 5초 미만이면 거의 확실히 ResponseCache hit (Claude API 미호출).
+    # per-call cached 메타를 정확히 모으려면 agent 인터페이스 변경 필요 → 간이 휴리스틱.
+    total_elapsed = round(time.time() - t0, 2)
+    likely_cached = total_elapsed < 5.0
     yield _sse(
         "complete",
         {
-            "total_elapsed": round(time.time() - t0, 2),
+            "total_elapsed": total_elapsed,
+            "likely_cached": likely_cached,
             "retry_count": final_state.get("retry_count", 0),
             "validation_status": (
                 final_state["validator_output"].overall_status

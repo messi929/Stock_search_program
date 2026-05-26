@@ -122,11 +122,19 @@ export default function SettingsProfilePage() {
 
   return (
     <div className="space-y-6 max-w-3xl">
-      <header>
-        <h1 className="text-2xl font-bold">⚙️ 투자 프로필 편집</h1>
-        <p className="text-sm text-muted-foreground mt-1">
-          분석 결과 톤·가중치에 반영됩니다. 언제든 바꿀 수 있어요.
-        </p>
+      <header className="flex items-start justify-between flex-wrap gap-2">
+        <div>
+          <h1 className="text-2xl font-bold">⚙️ 설정 · 투자 프로필</h1>
+          <p className="text-sm text-muted-foreground mt-1">
+            분석 결과 톤·가중치에 반영됩니다. 언제든 바꿀 수 있어요.
+          </p>
+        </div>
+        <a
+          href="/settings/notifications"
+          className="text-xs underline text-muted-foreground hover:text-foreground transition"
+        >
+          🔔 알림 설정 →
+        </a>
       </header>
 
       {/* 투자 경력 */}

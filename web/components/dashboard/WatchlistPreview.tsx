@@ -6,6 +6,7 @@ import { toast } from "sonner";
 
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { useKisLivePrices } from "@/hooks/useKisLivePrices";
 import { usePersonas } from "@/hooks/usePersonas";
 import { useUpdateWatchlist, useWatchlist } from "@/hooks/useWatchlist";
 import { apiCall } from "@/lib/api";
@@ -55,6 +56,9 @@ export function WatchlistPreview() {
     nameByTicker[t] = found?.name ?? null;
   });
 
+  // KIS WebSocket 실시간 가격 (KR 종목만 자동 활성)
+  const livePrices = useKisLivePrices(visibleTickers);
+
   return (
     <Card>
       <CardContent className="p-4 space-y-3">
@@ -85,6 +89,8 @@ export function WatchlistPreview() {
           <ul className="space-y-1">
             {visibleTickers.map((t) => {
               const name = nameByTicker[t];
+              const live = livePrices[t];
+              const hasLive = live?.price != null;
               return (
                 <li
                   key={t}
@@ -102,7 +108,31 @@ export function WatchlistPreview() {
                       <span className="font-mono">{t}</span>
                     )}
                   </span>
-                  <div className="flex items-center gap-1 shrink-0">
+                  <div className="flex items-center gap-2 shrink-0">
+                    {hasLive && (
+                      <span
+                        className="font-mono text-xs tabular-nums"
+                        title={`실시간 시세 ${live.execTime ? `· ${live.execTime}` : ""}`}
+                      >
+                        <span className="text-foreground">
+                          {live.price!.toLocaleString("ko-KR")}
+                        </span>
+                        {live.prdyCtrt != null && (
+                          <span
+                            className={`ml-1 ${
+                              live.prdyCtrt > 0
+                                ? "text-red-500"
+                                : live.prdyCtrt < 0
+                                  ? "text-blue-500"
+                                  : "text-muted-foreground"
+                            }`}
+                          >
+                            {live.prdyCtrt > 0 ? "+" : ""}
+                            {live.prdyCtrt.toFixed(2)}%
+                          </span>
+                        )}
+                      </span>
+                    )}
                     <Link
                       href={`/analyze/${t}`}
                       className="text-xs text-amber-500 hover:underline px-1.5"
