@@ -39,12 +39,16 @@ export function StrategistCard({
   data,
   status,
   currentPrice = null,
+  ticker = "",
 }: {
   data: StrategistResult | null;
   status: AgentStatus;
   /** Analyst 결과의 현재가 — 진입/회복 관찰선 거리(%) 계산용. */
   currentPrice?: number | null;
+  /** 통화 단위 판별용 (6자리=KR 원, 그 외=US 달러). */
+  ticker?: string;
 }) {
+  const cur = /^\d{6}$/.test((ticker ?? "").trim()) ? "원" : "달러";
   return (
     <AgentCardShell
       icon="🎯"
@@ -87,7 +91,7 @@ export function StrategistCard({
                 </h4>
                 {currentPrice != null && (
                   <span className="text-[10px] text-muted-foreground font-mono">
-                    현재가 {currentPrice.toLocaleString()}원
+                    현재가 {currentPrice.toLocaleString()}{cur}
                   </span>
                 )}
               </div>
@@ -107,7 +111,7 @@ export function StrategistCard({
                         {i + 1}차 관찰 구간
                       </div>
                       <div className="font-medium font-mono">
-                        {price.toLocaleString()}원
+                        {price.toLocaleString()}{cur}
                       </div>
                       {pct && (
                         <div className={`text-[10px] font-mono ${tone}`}>
@@ -152,7 +156,7 @@ export function StrategistCard({
                         {emoji} {label}
                       </div>
                       <div className="font-medium font-mono">
-                        {price.toLocaleString()}원
+                        {price.toLocaleString()}{cur}
                       </div>
                       {pct && (
                         <div className={`text-[10px] font-mono ${tone}`}>

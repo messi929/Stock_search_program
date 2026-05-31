@@ -549,6 +549,7 @@ export function AnalyzeView({ ticker }: { ticker: string }) {
                 data={strategistFlow.strategist}
                 status={strategistStatus.strategist}
                 currentPrice={strategistFlow.analyst?.technical.current_price ?? null}
+                ticker={ticker}
               />
               <ValidatorCard
                 data={strategistFlow.validator}

@@ -19,6 +19,11 @@ const SIGNAL_COLOR: Record<string, string> = {
   약세: "text-destructive",
 };
 
+/** 6자리 숫자=KR(원), 그 외=US(달러). */
+function curUnit(ticker: string): string {
+  return /^\d{6}$/.test((ticker ?? "").trim()) ? "원" : "달러";
+}
+
 export function AnalystCard({
   data,
   status,
@@ -43,7 +48,7 @@ export function AnalystCard({
         <div className="space-y-4">
           {/* Headline metrics grid */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
-            <Metric label="현재가" value={`${data.technical.current_price.toLocaleString()}원`} />
+            <Metric label="현재가" value={`${data.technical.current_price.toLocaleString()}${curUnit(data.ticker)}`} />
             <Metric
               label="시그널"
               value={data.technical.signal}
