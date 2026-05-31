@@ -176,31 +176,50 @@ score_tier는 다음 4개 값만 출력:
 
 
 # ──────────────────────────────────────────────
-# 모듈 레벨 캐시 (KR 스냅샷 + buy_score, 10분 TTL)
+# 모듈 레벨 캐시 (시장별 스냅샷 + buy_score, 10분 TTL)
 # ──────────────────────────────────────────────
 
 _KR_CACHE_TTL_SEC = 600
-_kr_cache: dict = {"df": None, "expires_at": 0.0}
+# market("kr"|"us") → {"df": DataFrame|None, "expires_at": float}
+_stock_cache: dict[str, dict] = {}
 
 
-def _get_kr_with_score() -> pd.DataFrame:
-    """KR 스냅샷 + buy_score/buy_grade 컬럼 추가, 10분 캐시."""
+def _market_of(ticker: str) -> str:
+    """6자리 숫자면 KR, 그 외(알파벳)면 US."""
+    s = str(ticker).strip()
+    return "kr" if (len(s) == 6 and s.isdigit()) else "us"
+
+
+def _get_stocks_with_score(ticker: str) -> pd.DataFrame:
+    """ticker가 속한 시장(KR/US) 스냅샷 + buy_score/buy_grade, 10분 캐시.
+
+    US도 동일 `stocks` 컬렉션(source="us")에서 로드. buy_score 계산이 US
+    스키마에서 실패하면 저장된 값을 그대로 사용 (graceful).
+    """
+    market = _market_of(ticker)
     now = time.time()
-    cached = _kr_cache["df"]
-    if cached is not None and _kr_cache["expires_at"] > now:
-        return cached
+    cached = _stock_cache.get(market)
+    if cached and cached.get("df") is not None and cached["expires_at"] > now:
+        return cached["df"]
 
     from screener.core.metrics import calculate_buy_score
     from screener.db.repository import load_stocks
 
-    df = load_stocks("kr")
+    df = load_stocks(market)
     if df.empty:
         return df
-    df = calculate_buy_score(df)
+    try:
+        df = calculate_buy_score(df)
+    except Exception as e:  # US 스냅샷이 KR 전용 컬럼을 결여한 경우 등
+        logger.warning(f"buy_score 계산 스킵 (market={market}): {e}")
 
-    _kr_cache["df"] = df
-    _kr_cache["expires_at"] = now + _KR_CACHE_TTL_SEC
+    _stock_cache[market] = {"df": df, "expires_at": now + _KR_CACHE_TTL_SEC}
     return df
+
+
+def _get_kr_with_score() -> pd.DataFrame:
+    """하위호환 별칭 — KR 스냅샷만 필요할 때."""
+    return _get_stocks_with_score("005930")
 
 
 # ──────────────────────────────────────────────
@@ -238,7 +257,7 @@ class AnalystAgent(BaseAgent):
     # ──────────────────────────────────────────
 
     def _fetch_stock_data(self, ticker: str) -> dict:
-        df = _get_kr_with_score()
+        df = _get_stocks_with_score(ticker)
         if df.empty:
             raise ValueError(f"종목 데이터 비어 있음 (ticker={ticker})")
 
@@ -321,7 +340,7 @@ class AnalystAgent(BaseAgent):
         if not sector:
             return []
 
-        df = _get_kr_with_score()
+        df = _get_stocks_with_score(stock_data.get("ticker", ""))
         if df.empty or "sector" not in df.columns:
             return []
 
@@ -353,8 +372,9 @@ class AnalystAgent(BaseAgent):
             lines.append(f"테마: {s['themes']}")
         lines.append(f"기준 시각(데이터 갱신): {s.get('updated_at', 'N/A')}")
 
+        cur = "원" if _market_of(s.get("ticker", "")) == "kr" else "달러"
         lines.append("\n# 가격/추세")
-        lines.append(f"- 현재가: {s['current_price']:,}원 (전일 대비 {s['change_pct']:+.2f}%)")
+        lines.append(f"- 현재가: {s['current_price']:,}{cur} (전일 대비 {s['change_pct']:+.2f}%)")
         lines.append(f"- MA5: {s['ma5']:,} (현재가 대비 {s['vs_ma5_pct']:+.2f}%)")
         lines.append(f"- MA20: {s['ma20']:,} (현재가 대비 {s['vs_ma20_pct']:+.2f}%)")
         lines.append(f"- MA60: {s['ma60']:,} (현재가 대비 {s['vs_ma60_pct']:+.2f}%)")

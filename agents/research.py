@@ -198,8 +198,9 @@ class ResearchAgent(BaseAgent):
         context: dict = {}
 
         # 1) 외국인 연속 순매수 상위 (기존 v7.5 buy_score/foreign_consecutive 활용)
+        #    US 종목이면 us 스냅샷 로드 (수급 컬럼은 없을 수 있어 graceful)
         try:
-            kr = self._load_kr_stocks()
+            kr = self._load_market_stocks(input_data.ticker)
             if not kr.empty and "foreign_consecutive" in kr.columns:
                 top_foreign = (
                     kr[kr["foreign_consecutive"].fillna(0) > 0]
@@ -245,13 +246,18 @@ class ResearchAgent(BaseAgent):
         return context
 
     @staticmethod
-    def _load_kr_stocks() -> pd.DataFrame:
-        """KR 종목 로드 (실패 시 빈 DataFrame)."""
+    def _load_market_stocks(ticker: Optional[str] = None) -> pd.DataFrame:
+        """ticker가 속한 시장 종목 로드 (실패 시 빈 DataFrame).
+
+        6자리 숫자=KR, 그 외=US. ticker 미지정 시 KR.
+        """
+        s = str(ticker or "").strip()
+        market = "kr" if (len(s) == 6 and s.isdigit()) else ("us" if s else "kr")
         try:
             from screener.db.repository import load_stocks
-            return load_stocks("kr")
+            return load_stocks(market)
         except Exception as e:
-            logger.warning(f"KR 종목 로드 실패: {e}")
+            logger.warning(f"{market} 종목 로드 실패: {e}")
             return pd.DataFrame()
 
     # ──────────────────────────────────────────

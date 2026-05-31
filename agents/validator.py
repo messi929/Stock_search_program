@@ -163,7 +163,10 @@ def _fetch_price_sync(ticker: str) -> tuple[Optional[float], Optional[str]]:
 
     Returns: (price, last_update_iso) — 실패 시 (None, None).
     """
-    # 1차: FinanceDataReader
+    _s = str(ticker).strip()
+    is_kr = len(_s) == 6 and _s.isdigit()
+
+    # 1차: FinanceDataReader (KR/US 공통 — US는 Yahoo 기반)
     try:
         import FinanceDataReader as fdr
         df = fdr.DataReader(ticker)
@@ -174,7 +177,20 @@ def _fetch_price_sync(ticker: str) -> tuple[Optional[float], Optional[str]]:
     except Exception as e:
         logger.warning(f"FDR 조회 실패 ({ticker}): {e}")
 
-    # 2차: pykrx
+    # US 폴백: yfinance (pykrx는 KR 전용이라 US엔 무의미)
+    if not is_kr:
+        try:
+            import yfinance as yf
+            hist = yf.Ticker(ticker).history(period="5d")
+            if hist is not None and not hist.empty:
+                price = float(hist["Close"].iloc[-1])
+                last_update = hist.index[-1]
+                return price, str(last_update)
+        except Exception as e:
+            logger.warning(f"yfinance 폴백 실패 ({ticker}): {e}")
+        return None, None
+
+    # 2차(KR): pykrx
     try:
         from pykrx import stock as krx
         # 최근 5영업일
@@ -303,11 +319,11 @@ class ValidatorAgent(BaseAgent):
     async def _verify_firestore_field(
         self, ticker: str, label: str, column: str, claimed: float
     ) -> Optional[ValidationCheck]:
-        """Firestore stocks 컬렉션에서 column 값 재조회."""
-        from agents.analyst import _get_kr_with_score
+        """Firestore stocks 컬렉션에서 column 값 재조회 (KR/US 자동)."""
+        from agents.analyst import _get_stocks_with_score
 
         try:
-            df = await asyncio.to_thread(_get_kr_with_score)
+            df = await asyncio.to_thread(_get_stocks_with_score, ticker)
             if df.empty:
                 return None
             row = df[df["ticker"] == ticker]

@@ -22,6 +22,7 @@ import { EventAnalystCard } from "@/components/analyze/EventAnalystCard";
 import { KisCandleChart } from "@/components/analyze/KisCandleChart";
 import { KisInvestorFlow } from "@/components/analyze/KisInvestorFlow";
 import { KisOrderbook } from "@/components/analyze/KisOrderbook";
+import { UsCandleChart } from "@/components/analyze/UsCandleChart";
 import { KoreanSpecialistCard } from "@/components/analyze/KoreanSpecialistCard";
 import { MacroPmCard } from "@/components/analyze/MacroPmCard";
 import { PersonaChooser } from "@/components/analyze/PersonaChooser";
@@ -493,6 +494,13 @@ export function AnalyzeView({ ticker }: { ticker: string }) {
             <KisOrderbook ticker={ticker} />
             <KisInvestorFlow ticker={ticker} />
           </div>
+        </section>
+      )}
+
+      {/* US 종목 — 일봉 차트 (yfinance). 호가/투자자흐름은 US 데이터 없음 */}
+      {!isKR && (
+        <section className="space-y-4">
+          <UsCandleChart ticker={ticker} />
         </section>
       )}
 
