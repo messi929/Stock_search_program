@@ -9,8 +9,8 @@ export const metadata = {
   description: "Axis 유료 구독 환불정책 — 14일 전액 환불 보장",
 };
 
-const LAST_UPDATED = "2026-04-12";
-const CONTACT_EMAIL = "messi929@naver.com";
+const LAST_UPDATED = "2026-05-31";
+const CONTACT_EMAIL = "wogus711929@gmail.com";
 
 export default function RefundPage() {
   return (

@@ -11,7 +11,8 @@ export const metadata = {
   description: "Axis 서비스 이용약관 — 투자 분석 도구의 성격 및 면책 조항",
 };
 
-const LAST_UPDATED = "2026-04-28";
+const LAST_UPDATED = "2026-05-31";
+const CONTACT_EMAIL = "wogus711929@gmail.com";
 
 export default function TermsPage() {
   return (
@@ -74,10 +75,25 @@ export default function TermsPage() {
 
         <Section n="제4조" title="요금제 및 결제">
           <ol className="list-decimal pl-5 space-y-2">
-            <li>본 서비스는 무료(Free), Pro, Premium 요금제로 운영됩니다.</li>
             <li>
-              유료 요금제 결제 후 7일 이내에 사용 내역이 없으면 환불을 요청할 수
-              있습니다. 그 외 환불 정책은 별도 환불 약관을 따릅니다.
+              본 서비스는 무료(Free), Pro(월 9,900원), Premium(월 29,900원)
+              요금제로 운영됩니다.
+            </li>
+            <li>
+              유료 요금제는 <strong>월 단위 자동 갱신 구독</strong>이며, 결제·청구·
+              환불은 결제대행사{" "}
+              <strong>Lemon Squeezy(Lemon Squeezy Inc., Merchant of Record)</strong>
+              를 통해 처리됩니다. 구독 관리 및 해지는 Lemon Squeezy 영수증 이메일의
+              &ldquo;Manage subscription&rdquo; 링크 또는 서비스 내 구독 관리
+              메뉴에서 가능합니다.
+            </li>
+            <li>
+              유료 결제는 <strong>결제일로부터 14일 이내 전액 환불</strong>을
+              보장합니다. 환불 가능 기간·요청 방법·갱신분 처리 등 자세한 사항은{" "}
+              <Link href="/refund" className="underline hover:text-foreground">
+                환불정책
+              </Link>
+              을 따릅니다.
             </li>
             <li>
               회사는 사전 공지 후 요금 정책을 변경할 수 있으며, 변경 사항은 공지
@@ -174,6 +190,26 @@ export default function TermsPage() {
               관할 법원은 회사의 본점 소재지를 관할하는 법원으로 합니다.
             </li>
           </ol>
+        </Section>
+
+        <Section n="제11조" title="문의처">
+          <ul className="list-disc pl-5 space-y-1">
+            <li>
+              <strong>서비스명</strong>: Axis (axislytics.com)
+            </li>
+            <li>
+              운영·개인정보·환불 문의:{" "}
+              <a
+                href={`mailto:${CONTACT_EMAIL}`}
+                className="underline hover:text-foreground"
+              >
+                {CONTACT_EMAIL}
+              </a>
+            </li>
+            <li>
+              결제 대행사: Lemon Squeezy Inc. (Merchant of Record)
+            </li>
+          </ul>
         </Section>
 
         <div className="mt-12 p-4 rounded-md bg-muted/50 text-xs text-muted-foreground">
