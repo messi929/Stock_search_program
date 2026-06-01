@@ -4,7 +4,7 @@
 페르소나 프롬프트: personas/{blackrock,ark,graham}.md
 
 이 에이전트가 사용자에게 직접 보여지는 최종 응답을 만듭니다.
-- 모델: Opus 4.7 (가장 비싸지만 종합/추론 핵심)
+- 모델: Sonnet 4.6 (2026-06-02 Opus 4.7→전환, A/B 검증 후 — docs/axis/UNIT_ECONOMICS.md)
 - 입력: Research + Analyst + Validator 3종 결과 + 사용자 프로파일 + 페르소나 선택
 - 출력: 진입선/손절/익절/알림 조건 + 페르소나 관점 분석 + 사용자 원칙 부합도
 """
@@ -22,7 +22,7 @@ from agents.analyst import AnalystResult
 from agents.base import DISCLAIMER, BaseAgent
 from agents.research import ResearchResult
 from agents.validator import ValidatorResult
-from utils.claude_client import MODEL_OPUS
+from utils.claude_client import MODEL_SONNET
 
 
 # ──────────────────────────────────────────────
@@ -220,9 +220,11 @@ def _load_personas() -> dict[str, str]:
 
 class StrategistAgent(BaseAgent):
     def __init__(self):
+        # 모델: Sonnet 4.6 (2026-06-02 Opus 4.7→전환). A/B 검증상 종합/페르소나
+        # 품질 동등 이상 + 건당 비용 76%↓(~300원→~72원). 상세: docs/axis/UNIT_ECONOMICS.md
         super().__init__(
             agent_name="strategist",
-            model=MODEL_OPUS,
+            model=MODEL_SONNET,
             system_prompt=STRATEGIST_BASE_PROMPT,  # 실제 호출 시 페르소나 결합
         )
         self._personas = _load_personas()
@@ -240,13 +242,13 @@ class StrategistAgent(BaseAgent):
         # 2) user message 구성
         user_message = self._build_user_message(input_data)
 
-        # 3) Claude Opus 호출
-        # max_tokens 2560 → 1500 — 응답 시간 단축 (NEXT_STEPS.md:146).
-        # 실측 ~2200 토큰 출력 시 truncated될 수 있으므로 schema 단순화 시 추가 축소 가능.
+        # 3) Claude 호출 (Sonnet 4.6)
+        # max_tokens 2560 — Sonnet은 서술이 풍부해 1500이면 마지막 필드(alert_conditions)가
+        # 잘림(A/B 검증 확인). 단가 1/5라 2560도 건당 ~85원으로 Opus 대비 저렴.
         result, raw = await self.call_claude_json(
             user_message=user_message,
             schema=StrategistResult,
-            max_tokens=1500,
+            max_tokens=2560,
             uid=uid,
             system=full_system,
         )

@@ -29,10 +29,77 @@ router = APIRouter(prefix="/api/ai", tags=["axis-ai"])
 # ──────────────────────────────────────────────
 
 PLAN_LIMITS: dict[str, dict[str, int]] = {
+    # 월 한도. -1 = 무제한.
+    # Pro는 "공정사용 정책 내 무제한" — 어뷰징/적자 방지용 상한 (2026-06 결정).
+    # 근거: 딥다이브 실측 단가 ~389원, Pro 월구독 실수령 ~8,500원 → 손익분기 월 22회.
+    #       상세: docs/axis/UNIT_ECONOMICS.md
     "free": {"analyses": 20, "validations": 10, "discoveries": 5},
-    "pro": {"analyses": -1, "validations": -1, "discoveries": -1},
-    "premium": {"analyses": -1, "validations": -1, "discoveries": -1},
+    "pro": {"analyses": 100, "validations": 50, "discoveries": 30},
+    "premium": {"analyses": 300, "validations": 150, "discoveries": 100},
 }
+
+# analyses(딥다이브)로 카운트되는 에이전트 — 파이프라인 종착점 호출 1회 = 분석 1회.
+# strategist 흐름(blackrock/ark/graham)은 strategist, 데이터 페르소나는 각 단일 노드.
+_ANALYSIS_AGENTS = ("strategist", "event_analyst", "macro_pm", "korean_specialist")
+
+
+def _count_month_usage(uid: str) -> dict[str, int]:
+    """현재 월(UTC) Axis AI 사용량 합산.
+
+    cost_tracker가 users/{uid}/ai_usage/{YYYY-MM-DD}에 기록하되, Firestore가
+    'agents.<name>.<field>' **평면 키**로 저장한다(set(merge=True) 특성) →
+    nested(data["agents"][name])로 읽으면 항상 0이 되므로 평면 키로 파싱한다.
+    """
+    used = {"analyses": 0, "validations": 0, "discoveries": 0}
+    if not uid:
+        return used
+    month_prefix = datetime.now(timezone.utc).strftime("%Y-%m")
+    try:
+        from screener.db.firebase_client import get_db
+
+        col = get_db().collection("users").document(uid).collection("ai_usage")
+        for doc in col.stream():
+            if not doc.id.startswith(month_prefix):
+                continue
+            data = doc.to_dict() or {}
+            for agent in _ANALYSIS_AGENTS:
+                used["analyses"] += int(data.get(f"agents.{agent}.calls", 0) or 0)
+            used["validations"] += int(data.get("agents.validator.calls", 0) or 0)
+            used["discoveries"] += int(data.get("agents.discoverer.calls", 0) or 0)
+    except Exception as e:
+        logger.warning(f"사용량 조회 실패 (uid={uid}): {e}")
+    return used
+
+
+def _enforce_quota(uid: str, tier: str, kind: str) -> None:
+    """월 한도 초과 시 429. uid 없으면(비로그인) 통과 — 인증 미들웨어가 선처리.
+
+    kind: 'analyses' | 'discoveries' (validations는 분석 선행 필수라 간접 제한).
+    호출 전 시점의 누적으로 체크하므로 동시요청 시 소폭 초과 가능(허용 범위).
+    """
+    if not uid:
+        return
+    limits = PLAN_LIMITS.get((tier or "free").lower(), PLAN_LIMITS["free"])
+    limit = limits.get(kind, -1)
+    if limit < 0:
+        return
+    used = _count_month_usage(uid).get(kind, 0)
+    if used >= limit:
+        raise HTTPException(
+            429,
+            {
+                "code": "QUOTA_EXCEEDED",
+                "message": (
+                    f"이번 달 {kind} 한도({limit}회)를 모두 사용했습니다. "
+                    "다음 달 1일에 초기화됩니다."
+                    + ("" if tier == "free" else " 공정사용 정책 한도입니다.")
+                ),
+                "kind": kind,
+                "limit": limit,
+                "used": used,
+                "upgrade_url": "/pricing" if tier == "free" else None,
+            },
+        )
 
 
 # ──────────────────────────────────────────────
@@ -172,6 +239,9 @@ async def analyze(req: AnalyzeRequest, request: Request):
                 "upgrade_url": "/pricing",
             },
         )
+
+    # 월 분석 한도 (적자 방지 — docs/axis/UNIT_ECONOMICS.md)
+    _enforce_quota(uid, tier, "analyses")
 
     # 종목 코드 형식 (KR 6자리 또는 알파벳 US)
     if not req.ticker or len(req.ticker) > 10:
@@ -624,30 +694,9 @@ async def get_usage(request: Request):
     if not uid:
         raise HTTPException(401, {"code": "UNAUTHORIZED", "message": "로그인 필요"})
 
-    month_prefix = datetime.now().strftime("%Y-%m")
-    used = {"analyses": 0, "validations": 0, "discoveries": 0}
-
-    try:
-        from screener.db.firebase_client import get_db
-
-        usage_col = (
-            get_db()
-            .collection("users")
-            .document(uid)
-            .collection("ai_usage")
-        )
-        # YYYY-MM-DD 문서 ID라 간단한 prefix 비교
-        for doc in usage_col.stream():
-            if not doc.id.startswith(month_prefix):
-                continue
-            data = doc.to_dict() or {}
-            agents = data.get("agents", {})
-            # Strategist 호출이 분석 1회를 의미 (Strategist는 파이프라인 끝)
-            used["analyses"] += int(agents.get("strategist", {}).get("calls", 0) or 0)
-            used["validations"] += int(agents.get("validator", {}).get("calls", 0) or 0)
-            used["discoveries"] += int(agents.get("discoverer", {}).get("calls", 0) or 0)
-    except Exception as e:
-        logger.warning(f"사용량 조회 실패 (uid={uid}): {e}")
+    month_prefix = datetime.now(timezone.utc).strftime("%Y-%m")
+    # 평면 키 파싱 + analyses = 데이터 페르소나 포함 합산 (_count_month_usage)
+    used = _count_month_usage(uid)
 
     limits = PLAN_LIMITS.get(tier, PLAN_LIMITS["free"])
 
@@ -702,6 +751,10 @@ async def discover(req: DiscoverRequestBody, request: Request):
     """
     user = getattr(request.state, "user", None) or {}
     uid = user.get("uid", "")
+    tier = user.get("tier", "free")
+
+    # 월 발견 한도 (적자 방지 — docs/axis/UNIT_ECONOMICS.md)
+    _enforce_quota(uid, tier, "discoveries")
 
     # 컨텍스트 dict → DiscovererInput
     from agents.discoverer import (

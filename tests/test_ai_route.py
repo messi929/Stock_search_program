@@ -157,6 +157,59 @@ def test_usage_route_unauthenticated() -> None:
     print(f"[usage] 비로그인 GET → {res.status_code}")
 
 
+def test_quota_enforcement() -> None:
+    """_enforce_quota — 한도 초과 시 429, 무제한/미만은 통과."""
+    import api.routes.ai as ai
+    from fastapi import HTTPException
+
+    limits = ai.PLAN_LIMITS
+    assert limits["pro"]["analyses"] == 100, "Pro 공정사용 한도 100회 (2026-06 결정)"
+    assert limits["free"]["analyses"] == 20
+    assert limits["premium"]["analyses"] == 300
+
+    # _count_month_usage를 monkeypatch (Firestore 의존 제거)
+    orig = ai._count_month_usage
+
+    def _fake(used_n):
+        return lambda uid: {"analyses": used_n, "validations": 0, "discoveries": 0}
+
+    try:
+        # 1) 비로그인(uid="") → 항상 통과
+        ai._enforce_quota("", "free", "analyses")
+
+        # 2) 한도 미만 → 통과
+        ai._count_month_usage = _fake(19)
+        ai._enforce_quota("u1", "free", "analyses")  # 19 < 20
+
+        # 3) 한도 도달 → 429
+        ai._count_month_usage = _fake(20)
+        raised = False
+        try:
+            ai._enforce_quota("u1", "free", "analyses")  # 20 >= 20
+        except HTTPException as e:
+            raised = True
+            assert e.status_code == 429
+            assert e.detail["code"] == "QUOTA_EXCEEDED"
+            assert e.detail["limit"] == 20
+        assert raised, "한도 도달 시 429 발생해야 함"
+
+        # 4) Pro 99회 통과 / 100회 차단
+        ai._count_month_usage = _fake(99)
+        ai._enforce_quota("u2", "pro", "analyses")
+        ai._count_month_usage = _fake(100)
+        raised = False
+        try:
+            ai._enforce_quota("u2", "pro", "analyses")
+        except HTTPException as e:
+            raised = True
+            assert e.detail["limit"] == 100
+        assert raised, "Pro 100회 도달 시 429"
+    finally:
+        ai._count_month_usage = orig
+
+    print("[quota] Free 20 / Pro 100 / Premium 300 enforce OK")
+
+
 def main() -> None:
     print("=" * 60)
     print("AI/Screener 라우트 통합 테스트")
@@ -173,6 +226,8 @@ def main() -> None:
     test_entry_points_routes()
     print()
     test_usage_route_unauthenticated()
+    print()
+    test_quota_enforcement()
 
     print("\n" + "=" * 60)
     print("[OK] 모든 테스트 통과")
