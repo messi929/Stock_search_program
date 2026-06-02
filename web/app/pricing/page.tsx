@@ -21,6 +21,7 @@ const TIERS = [
     name: "Free",
     price: "0원",
     period: "",
+    yearly: null,
     desc: "처음 시작하는 투자자",
     cta: "🚀 무료로 시작",
     ctaHref: "/login",
@@ -36,36 +37,39 @@ const TIERS = [
   {
     id: "pro",
     name: "Pro",
-    price: "9,900원",
+    price: "29,000원",
     period: "/월",
+    yearly: "연 319,000원 · 1개월 무료",
     desc: "꾸준히 분석하는 투자자",
-    cta: "💎 Pro로 시작",
+    cta: "💎 Pro 시작",
     ctaHref: "/login",
     highlight: true,
     features: [
       "관심 종목 30개",
-      "무제한 AI 분석·검증",
+      "AI 분석 월 100회 (공정사용)",
+      "실시간 검증 월 50회",
       "페르소나 6종 전체 (전략가 3 + 데이터 특화 3)",
       "스마트 리스트 17개 전체",
-      "커스텀 스크리너",
-      "AI 자연어 종목 발견",
+      "커스텀 스크리너 + AI 자연어 종목 발견",
     ],
   },
   {
     id: "premium",
     name: "Premium",
-    price: "29,900원",
+    price: "59,000원",
     period: "/월",
-    desc: "주간 리포트 + 우선 지원",
-    cta: "v1.1 출시 예정",
+    yearly: "연 649,000원 · 1개월 무료",
+    desc: "전문 분석가급 사용자",
+    cta: "출시 예정",
     ctaHref: null,
     highlight: false,
     features: [
       "Pro 모든 기능",
+      "AI 분석 월 300회",
       "주간 PDF 리포트",
       "우선 분석 큐",
       "1:1 피드백 채널",
-      "(v1.1 출시 예정)",
+      "(출시 예정)",
     ],
   },
 ];
@@ -84,8 +88,8 @@ export default function PricingPage() {
         <header className="mt-6 mb-12 text-center">
           <h1 className="text-3xl md:text-5xl font-bold">요금제</h1>
           <p className="mt-4 text-muted-foreground max-w-xl mx-auto">
-            Free 플랜으로 즉시 시작 · 신용카드 불필요. 필요할 때 Pro로
-            업그레이드.
+            Free 플랜으로 즉시 시작 · 신용카드 불필요. Pro는 <strong>첫 1개월
+            무료</strong>로 체험해보세요.
           </p>
         </header>
 
@@ -105,12 +109,17 @@ export default function PricingPage() {
                   <h2 className="text-xl font-semibold">{t.name}</h2>
                   <p className="text-xs text-muted-foreground mt-1">{t.desc}</p>
                 </div>
-                <div className="flex items-end gap-1">
-                  <span className="text-3xl font-bold">{t.price}</span>
-                  {t.period && (
-                    <span className="text-sm text-muted-foreground pb-1">
-                      {t.period}
-                    </span>
+                <div>
+                  <div className="flex items-end gap-1">
+                    <span className="text-3xl font-bold">{t.price}</span>
+                    {t.period && (
+                      <span className="text-sm text-muted-foreground pb-1">
+                        {t.period}
+                      </span>
+                    )}
+                  </div>
+                  {t.yearly && (
+                    <p className="text-xs text-muted-foreground mt-1">{t.yearly}</p>
                   )}
                 </div>
                 <ul className="space-y-2 text-sm">
@@ -152,13 +161,18 @@ export default function PricingPage() {
             Lemon Squeezy를 통해 신용카드·체크카드 결제를 지원할 예정입니다.
             (현재 베타에는 결제 모듈이 활성화되지 않았습니다.)
           </FaqItem>
-          <FaqItem q="환불 정책은 어떻게 되나요?">
-            결제 후 7일 이내, 누적 사용량이 적은 경우 전액 환불해 드립니다.
-            상세 조건은 정식 런칭 시 공지합니다.
+          <FaqItem q="1개월 무료 체험은 어떻게 되나요?">
+            Pro는 신규 가입 시 첫 1개월을 무료로 체험하실 수 있습니다. 체험
+            기간이 끝나기 전 언제든 해지하면 요금이 청구되지 않습니다.
           </FaqItem>
-          <FaqItem q="베타 사용자에게 혜택이 있나요?">
-            피드백을 1건 이상 주신 베타 사용자께는 정식 런칭 후 Pro 1개월
-            이용권을 드릴 예정입니다.
+          <FaqItem q="연 구독이 더 저렴한가요?">
+            네. 연 구독은 1개월치가 무료입니다 — Pro 연 319,000원(월 환산
+            약 26,600원), Premium 연 649,000원. 12개월 구독을 11개월 가격에
+            이용하시는 셈입니다.
+          </FaqItem>
+          <FaqItem q="환불 정책은 어떻게 되나요?">
+            결제 후 14일 이내 전액 환불해 드립니다. 상세 조건은 환불 정책
+            페이지를 참고해주세요.
           </FaqItem>
         </section>
 
