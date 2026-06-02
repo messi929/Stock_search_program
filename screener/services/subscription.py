@@ -19,7 +19,7 @@ from loguru import logger
 
 LS_VARIANT_MONTHLY = os.environ.get("LEMONSQUEEZY_VARIANT_MONTHLY", "")
 LS_VARIANT_YEARLY = os.environ.get("LEMONSQUEEZY_VARIANT_YEARLY", "")
-TRIAL_DAYS = int(os.environ.get("TRIAL_DAYS", "7"))
+TRIAL_DAYS = int(os.environ.get("TRIAL_DAYS", "30"))  # 1개월 무료 체험 (가격정책 일치)
 
 
 def _users_ref():
