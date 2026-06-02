@@ -53,25 +53,6 @@ const TIERS = [
       "커스텀 스크리너 + AI 자연어 종목 발견",
     ],
   },
-  {
-    id: "premium",
-    name: "Premium",
-    price: "59,000원",
-    period: "/월",
-    yearly: "연 649,000원 · 1개월 무료",
-    desc: "전문 분석가급 사용자",
-    cta: "출시 예정",
-    ctaHref: null,
-    highlight: false,
-    features: [
-      "Pro 모든 기능",
-      "AI 분석 월 300회",
-      "주간 PDF 리포트",
-      "우선 분석 큐",
-      "1:1 피드백 채널",
-      "(출시 예정)",
-    ],
-  },
 ];
 
 export default function PricingPage() {
@@ -93,7 +74,7 @@ export default function PricingPage() {
           </p>
         </header>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-3xl mx-auto">
           {TIERS.map((t) => (
             <Card
               key={t.id}
@@ -167,11 +148,10 @@ export default function PricingPage() {
           </FaqItem>
           <FaqItem q="연 구독이 더 저렴한가요?">
             네. 연 구독은 1개월치가 무료입니다 — Pro 연 319,000원(월 환산
-            약 26,600원), Premium 연 649,000원. 12개월 구독을 11개월 가격에
-            이용하시는 셈입니다.
+            약 26,600원). 12개월 구독을 11개월 가격에 이용하시는 셈입니다.
           </FaqItem>
           <FaqItem q="환불 정책은 어떻게 되나요?">
-            결제 후 14일 이내 전액 환불해 드립니다. 상세 조건은 환불 정책
+            결제 후 7일 이내 전액 환불해 드립니다. 상세 조건은 환불 정책
             페이지를 참고해주세요.
           </FaqItem>
         </section>

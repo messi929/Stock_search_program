@@ -6,7 +6,7 @@ import Link from "next/link";
 
 export const metadata = {
   title: "환불정책 — Axis",
-  description: "Axis 유료 구독 환불정책 — 14일 전액 환불 보장",
+  description: "Axis 유료 구독 환불정책 — 7일 전액 환불 보장",
 };
 
 const LAST_UPDATED = "2026-05-31";
@@ -35,9 +35,9 @@ export default function RefundPage() {
         <div className="mb-10 p-4 rounded-md border border-amber-500/40 bg-amber-500/10 text-sm">
           <p className="font-medium mb-1">한 줄 요약 (Summary)</p>
           <p className="text-muted-foreground">
-            Pro 구독은 <strong className="text-foreground">결제일로부터 14일 이내</strong>{" "}
+            Pro 구독은 <strong className="text-foreground">결제일로부터 7일 이내</strong>{" "}
             요청 시 <strong className="text-foreground">전액 환불</strong>됩니다.
-            이유 불문.
+            이유 불문. 첫 1개월은 무료 체험으로 미리 사용해보실 수 있습니다.
           </p>
         </div>
 
@@ -48,10 +48,10 @@ export default function RefundPage() {
           </p>
         </Section>
 
-        <Section n="2" title="14일 전액 환불 보장 (14-Day Money-Back Guarantee)">
+        <Section n="2" title="7일 전액 환불 보장 (7-Day Money-Back Guarantee)">
           <ol className="list-decimal pl-5 space-y-2">
             <li>
-              최초 결제일로부터 <strong>14일 이내</strong>에 환불을 요청하시면,
+              최초 결제일로부터 <strong>7일 이내</strong>에 환불을 요청하시면,
               이유를 묻지 않고 <strong>전액 환불</strong>됩니다.
             </li>
             <li>
@@ -67,11 +67,11 @@ export default function RefundPage() {
           <ol className="list-decimal pl-5 space-y-2">
             <li>
               구독은 설정된 주기(월 또는 연)에 따라 <strong>자동 갱신</strong>됩니다.
-              갱신 결제 후 <strong>14일 이내</strong>에 환불 요청 시 해당 갱신분이
+              갱신 결제 후 <strong>7일 이내</strong>에 환불 요청 시 해당 갱신분이
               전액 환불되며, 구독이 즉시 종료됩니다.
             </li>
             <li>
-              14일이 지난 갱신분은 원칙적으로 환불되지 않습니다. 단, 서비스 장애·
+              7일이 지난 갱신분은 원칙적으로 환불되지 않습니다. 단, 서비스 장애·
               중대한 하자 등이 확인되는 경우 운영자 재량으로 부분 환불이 가능합니다.
             </li>
             <li>
@@ -85,7 +85,7 @@ export default function RefundPage() {
           <p className="mb-2">다음의 경우 환불이 제한될 수 있습니다:</p>
           <ul className="list-disc pl-5 space-y-1">
             <li>
-              결제일로부터 14일이 지난 시점의 단순 변심 (단, 다음 갱신 전에 해지하면
+              결제일로부터 7일이 지난 시점의 단순 변심 (단, 다음 갱신 전에 해지하면
               이후 과금은 중단됨)
             </li>
             <li>계정이 이용약관 위반으로 정지·해지된 경우</li>
@@ -163,8 +163,10 @@ export default function RefundPage() {
             <li>서비스에 중대한 하자가 있는 경우 계약 해제 및 전액 환불</li>
           </ul>
           <p className="mt-3">
-            본 서비스의 14일 환불 보장은 법정 청약철회 기간(7일)보다{" "}
-            <strong>더 넓은 범위</strong>의 환불 보장을 제공합니다.
+            본 서비스는 법정 청약철회 기간(7일)에 맞춰{" "}
+            <strong>7일 전액 환불</strong>을 보장하며, 이에 더해 가입 첫{" "}
+            <strong>1개월 무료 체험</strong>을 제공하여 결제 전 서비스를 충분히
+            평가하실 수 있도록 합니다.
           </p>
         </Section>
 
