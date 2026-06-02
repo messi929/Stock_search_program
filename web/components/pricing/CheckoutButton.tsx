@@ -44,15 +44,15 @@ export function CheckoutButton() {
           }
           disabled={checkout.isPending}
         >
-          {checkout.isPending ? "이동 중…" : "💎 1개월 무료로 시작"}
+          {checkout.isPending ? "이동 중…" : "💎 14일 무료로 시작"}
         </Button>
       ) : (
         <Link href="/login" className="block">
-          <Button className="w-full">💎 1개월 무료로 시작</Button>
+          <Button className="w-full">💎 14일 무료로 시작</Button>
         </Link>
       )}
       <p className="text-center text-[11px] text-muted-foreground">
-        첫 1개월 무료 · 언제든 해지
+        첫 14일 무료 · 언제든 해지
       </p>
     </div>
   );

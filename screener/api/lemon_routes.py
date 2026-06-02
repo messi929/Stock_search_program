@@ -289,8 +289,12 @@ async def webhook(request: Request):
     ):
         sync_subscription_to_firebase(uid, data)
 
-    # 만료·결제 실패 이벤트
-    elif event_name in ("subscription_expired", "subscription_payment_failed"):
+    # 만료·결제 실패·환불 이벤트 → 즉시 Free 강등
+    elif event_name in (
+        "subscription_expired",
+        "subscription_payment_failed",
+        "subscription_payment_refunded",  # 환불 시 Pro 박탈 (7일 환불 보장 대응)
+    ):
         clear_subscription(uid)
         logger.warning(f"LS {event_name}: {uid} → free")
 

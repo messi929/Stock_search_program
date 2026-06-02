@@ -40,7 +40,7 @@ const TIERS = [
     name: "Pro",
     price: "29,000원",
     period: "/월",
-    yearly: "연 319,000원 · 1개월 무료",
+    yearly: "연 319,000원 · 1개월 할인",
     desc: "꾸준히 분석하는 투자자",
     cta: "💎 Pro 시작",
     ctaHref: "/login",
@@ -70,7 +70,7 @@ export default function PricingPage() {
         <header className="mt-6 mb-12 text-center">
           <h1 className="text-3xl md:text-5xl font-bold">요금제</h1>
           <p className="mt-4 text-muted-foreground max-w-xl mx-auto">
-            Free 플랜으로 즉시 시작 · 신용카드 불필요. Pro는 <strong>첫 1개월
+            Free 플랜으로 즉시 시작 · 신용카드 불필요. Pro는 <strong>첫 14일
             무료</strong>로 체험해보세요.
           </p>
         </header>
@@ -145,8 +145,8 @@ export default function PricingPage() {
             Lemon Squeezy를 통해 신용카드·체크카드 결제를 지원할 예정입니다.
             (현재 베타에는 결제 모듈이 활성화되지 않았습니다.)
           </FaqItem>
-          <FaqItem q="1개월 무료 체험은 어떻게 되나요?">
-            Pro는 신규 가입 시 첫 1개월을 무료로 체험하실 수 있습니다. 체험
+          <FaqItem q="14일 무료 체험은 어떻게 되나요?">
+            Pro는 신규 가입 시 첫 14일을 무료로 체험하실 수 있습니다. 체험
             기간이 끝나기 전 언제든 해지하면 요금이 청구되지 않습니다.
           </FaqItem>
           <FaqItem q="연 구독이 더 저렴한가요?">
