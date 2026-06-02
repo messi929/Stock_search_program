@@ -13,6 +13,7 @@
  *      start → research/analyst → validator → strategist → complete
  *  - 데이터 페르소나 (event/macro/korean): start → {persona}_complete → complete
  */
+import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
@@ -143,6 +144,8 @@ export function AnalyzeView({ ticker }: { ticker: string }) {
   const [overallElapsed, setOverallElapsed] = useState<number | null>(null);
   const [likelyCached, setLikelyCached] = useState<boolean>(false);
   const [runError, setRunError] = useState<string | null>(null);
+  // 한도/잠금 에러 시 업그레이드 CTA를 띄울 링크 (백엔드 upgrade_url; Pro 공정사용 한도는 null)
+  const [runUpgradeUrl, setRunUpgradeUrl] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
   // 종목이 바뀌면 선택 화면으로 되돌림(의도적 재선택 + 자동 실행 방지).
@@ -169,6 +172,7 @@ export function AnalyzeView({ ticker }: { ticker: string }) {
     setDataDriven({ event: null, macro: null, korean: null });
     setOverallElapsed(null);
     setRunError(null);
+    setRunUpgradeUrl(null);
 
     if (runStrategist) {
       setStrategistStatus({
@@ -307,6 +311,9 @@ export function AnalyzeView({ ticker }: { ticker: string }) {
             ? err.message
             : "분석 실패";
       setRunError(msg);
+      // 월 한도 초과(QUOTA_EXCEEDED)/Pro 페르소나 잠금(PERSONA_LOCKED) → 업그레이드 CTA.
+      // 백엔드가 Free엔 "/pricing", Pro 공정사용 한도엔 null을 보냄.
+      setRunUpgradeUrl(err instanceof APIError ? (err.upgradeUrl ?? null) : null);
       toast.error(msg);
       if (runStrategist) {
         setStrategistStatus({
@@ -520,8 +527,16 @@ export function AnalyzeView({ ticker }: { ticker: string }) {
           {/* Overall status */}
           {runError ? (
             <Card>
-              <CardContent className="p-4 text-sm text-destructive">
-                ⚠️ {runError}
+              <CardContent className="p-4 text-sm text-destructive space-y-2">
+                <p>⚠️ {runError}</p>
+                {runUpgradeUrl && (
+                  <Link
+                    href={runUpgradeUrl}
+                    className="inline-flex items-center rounded-md bg-amber-500/90 px-3 py-1.5 text-xs font-medium text-white hover:bg-amber-500"
+                  >
+                    Pro 플랜 보기 →
+                  </Link>
+                )}
               </CardContent>
             </Card>
           ) : overallElapsed !== null ? (

@@ -4,7 +4,7 @@
 > **문제 정의**: "정액 구독인데 사용자가 분석을 많이 할수록 Claude API 변동비가 구독료를 초과해 적자가 나는 구조"
 > **근거**: prod Firestore `ai_usage` 실측 (딥다이브 57건 누적) + 코드 추적
 
-> **2026-06-02 적용 완료**: ① quota enforce 구현(Free20/Pro100/Premium300, 미배포) ② **Strategist Opus 4.7 → Sonnet 4.6 전환**(A/B 검증 후, max_tokens 1500→2560). 딥다이브 원가 **389원 → ~175원**, 손익분기 **월 22회 → 월 48회**.
+> **2026-06-02 적용·배포 완료** (commit 6c7eb32, Cloud Run rev 00049): ① quota enforce(Free20/Pro100/Premium300) ② **Strategist Opus 4.7 → Sonnet 4.6 전환**(A/B 검증 후, max_tokens 1500→2560). 딥다이브 원가 **389원 → ~175원**, 손익분기 **월 22회 → 월 48회**. (프론트 429 안내 UI는 미구현)
 
 ---
 

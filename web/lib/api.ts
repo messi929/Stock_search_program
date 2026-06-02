@@ -14,6 +14,9 @@ export class APIError extends Error {
     public code: string,
     public override message: string,
     public status: number,
+    // 백엔드 detail.upgrade_url — QUOTA_EXCEEDED/PERSONA_LOCKED 시 "/pricing",
+    // Pro 공정사용 한도 초과 등 업그레이드 무의미한 경우 undefined.
+    public upgradeUrl?: string,
   ) {
     super(message);
     this.name = "APIError";
@@ -47,11 +50,13 @@ export async function apiCall<T>(
   if (!response.ok) {
     let code = "UNKNOWN";
     let message = response.statusText;
+    let upgradeUrl: string | undefined;
     try {
       const body = await response.json();
       if (typeof body.detail === "object" && body.detail !== null) {
         code = body.detail.code ?? code;
         message = body.detail.message ?? body.detail.detail ?? message;
+        upgradeUrl = body.detail.upgrade_url ?? undefined;
       } else if (typeof body.detail === "string") {
         message = body.detail;
       } else if (typeof body.message === "string") {
@@ -60,7 +65,7 @@ export async function apiCall<T>(
     } catch {
       /* ignore parse error */
     }
-    throw new APIError(code, message, response.status);
+    throw new APIError(code, message, response.status, upgradeUrl);
   }
 
   return (await response.json()) as T;
@@ -93,11 +98,13 @@ export async function apiStream(
     // 사용자에게 그대로 노출(예: "매크로는 Pro 페르소나입니다").
     let code = "STREAM_FAILED";
     let message = response.statusText || `${response.status}`;
+    let upgradeUrl: string | undefined;
     try {
       const body = await response.json();
       if (typeof body.detail === "object" && body.detail !== null) {
         code = body.detail.code ?? code;
         message = body.detail.message ?? body.detail.detail ?? message;
+        upgradeUrl = body.detail.upgrade_url ?? undefined;
       } else if (typeof body.detail === "string") {
         message = body.detail;
       } else if (typeof body.message === "string") {
@@ -106,7 +113,7 @@ export async function apiStream(
     } catch {
       /* ignore parse error */
     }
-    throw new APIError(code, message, response.status);
+    throw new APIError(code, message, response.status, upgradeUrl);
   }
 
   const reader = response.body.getReader();

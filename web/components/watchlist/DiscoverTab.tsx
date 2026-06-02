@@ -9,6 +9,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { useDiscover } from "@/hooks/useDiscover";
 import { useAddToWatchlist, useWatchlist } from "@/hooks/useWatchlist";
+import { APIError } from "@/lib/api";
 import type { StockSuggestion } from "@/types/api";
 
 const EXAMPLES = [
@@ -111,9 +112,17 @@ export function DiscoverTab({ externalQuery = null }: DiscoverTabProps = {}) {
         )}
 
         {discover.isError && (
-          <p className="text-sm text-destructive">
-            {(discover.error as Error)?.message ?? "조회 실패"}
-          </p>
+          <div className="space-y-2 text-sm text-destructive">
+            <p>{(discover.error as Error)?.message ?? "조회 실패"}</p>
+            {(discover.error as APIError)?.upgradeUrl && (
+              <Link
+                href={(discover.error as APIError).upgradeUrl!}
+                className="inline-flex items-center rounded-md bg-amber-500/90 px-3 py-1.5 text-xs font-medium text-white hover:bg-amber-500"
+              >
+                Pro 플랜 보기 →
+              </Link>
+            )}
+          </div>
         )}
 
         {result && (
