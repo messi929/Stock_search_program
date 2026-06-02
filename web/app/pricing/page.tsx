@@ -137,13 +137,15 @@ export default function PricingPage() {
 
         <section className="mt-16 max-w-3xl mx-auto space-y-6 text-sm">
           <h2 className="text-lg font-semibold">자주 묻는 질문</h2>
-          <FaqItem q="언제 결제가 시작되나요?">
-            정식 런칭(v1.0) 시점에 결제가 열립니다. 베타 기간에는 모든 기능을
-            무료로 사용하실 수 있습니다.
+          <FaqItem q="지금 바로 시작할 수 있나요?">
+            네. Pro는 첫 14일 무료 체험으로 시작하며, 체험 기간이 끝나면
+            선택하신 주기(월/연)로 자동 결제됩니다. Free 플랜은 카드 등록 없이
+            즉시 이용할 수 있습니다.
           </FaqItem>
           <FaqItem q="결제 수단은 무엇인가요?">
-            Lemon Squeezy를 통해 신용카드·체크카드 결제를 지원할 예정입니다.
-            (현재 베타에는 결제 모듈이 활성화되지 않았습니다.)
+            Lemon Squeezy(Merchant of Record)를 통해 신용카드·체크카드 결제를
+            지원합니다. 구독 관리·해지·영수증은 설정 페이지 또는 결제 영수증
+            이메일의 관리 링크에서 가능합니다.
           </FaqItem>
           <FaqItem q="14일 무료 체험은 어떻게 되나요?">
             Pro는 신규 가입 시 첫 14일을 무료로 체험하실 수 있습니다. 체험
