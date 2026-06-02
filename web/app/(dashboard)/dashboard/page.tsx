@@ -3,6 +3,7 @@
 import Link from "next/link";
 
 import { MarketStatus } from "@/components/dashboard/MarketStatus";
+import { UsageCard } from "@/components/dashboard/UsageCard";
 import { WatchlistPreview } from "@/components/dashboard/WatchlistPreview";
 import { Disclaimer } from "@/components/legal/Disclaimer";
 import { buttonVariants } from "@/components/ui/button";
@@ -44,6 +45,9 @@ export default function DashboardHome() {
 
       {/* Watchlist preview */}
       <WatchlistPreview />
+
+      {/* AI 사용량 (월 한도) */}
+      <UsageCard />
 
       {/* Profile summary */}
       <Card>

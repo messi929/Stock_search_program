@@ -4,7 +4,7 @@
 > **문제 정의**: "정액 구독인데 사용자가 분석을 많이 할수록 Claude API 변동비가 구독료를 초과해 적자가 나는 구조"
 > **근거**: prod Firestore `ai_usage` 실측 (딥다이브 57건 누적) + 코드 추적
 
-> **2026-06-02 적용·배포 완료** (commit 6c7eb32, Cloud Run rev 00049): ① quota enforce(Free20/Pro100/Premium300) ② **Strategist Opus 4.7 → Sonnet 4.6 전환**(A/B 검증 후, max_tokens 1500→2560). 딥다이브 원가 **389원 → ~175원**, 손익분기 **월 22회 → 월 48회**. (프론트 429 안내 UI는 미구현)
+> **2026-06-02 적용·배포 완료** (commit 6c7eb32, Cloud Run rev 00049): ① quota enforce(Free20/Pro100/Premium300) ② **Strategist Opus 4.7 → Sonnet 4.6 전환**(A/B 검증 후, max_tokens 1500→2560). 딥다이브 원가 **389원 → ~175원**, 손익분기 **월 22회 → 월 48회**. ③ 프론트 429 안내 UI(commit 6b5c647, Vercel 배포) — 한도 초과 시 에러 카드에 Pro CTA.
 
 ---
 
@@ -123,13 +123,13 @@ PLAN_LIMITS = {
 
 | 순위 | 작업 | 효과 | 위험 |
 |---|---|---|---|
-| 1 | ✅ **Quota enforce** (Free 20 차단 + Pro 100 cap) | 적자 구멍 차단 | 구현완료·미배포 |
-| 2 | ✅ `/api/ai/usage` 점 키 파싱 수정 | 사용량 표시 정확화 | 구현완료·미배포 |
-| 3 | ✅ **Strategist Sonnet 전환** (A/B 후) | 원가 -55% | 적용완료·미배포 |
-| 4 | Prompt caching 정상화 | input 비용↓ | 미착수 |
-| 5 | 응답 캐싱 Firestore 영속화 | 중복 호출↓ | 미착수 |
-| 6 | 연 구독 + Premium 활성화 | ARPU↑, 수수료↓ | 가격 논의 보류 |
-| — | **배포** (quota + Sonnet 전환) | 적자구멍 차단 + 원가↓ 반영 | 승인 대기 |
+| 1 | ✅ **Quota enforce** (Free 20 차단 + Pro 100 cap) | 적자 구멍 차단 | 배포완료 |
+| 2 | ✅ `/api/ai/usage` 점 키 파싱 수정 | 사용량 표시 정확화 | 배포완료 |
+| 3 | ✅ **Strategist Sonnet 전환** (A/B 후) | 원가 -55% | 배포완료 |
+| 4 | ✅ 프론트 429 안내 + 대시보드 사용량 카드 | UX 보완 | 배포완료 (6b5c647 + 사용량카드) |
+| 5 | 🔍 Prompt caching | input 비용↓ | **진단완료** — 이미 적용(전 에이전트 system 1024자+), cache_read=0은 코드 아닌 트래픽 패턴(5분 TTL). 트래픽 쌓인 후 BASE블록 분리 재평가 |
+| 6 | 응답 캐싱 Firestore 영속화 | 중복 호출↓ | 미착수 |
+| 7 | 연 구독 + Premium 활성화 | ARPU↑, 수수료↓ | 가격 논의 보류 |
 
 ---
 
