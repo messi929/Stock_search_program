@@ -10,6 +10,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
+import { SubscriptionSection } from "@/components/settings/SubscriptionSection";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -136,6 +137,9 @@ export default function SettingsProfilePage() {
           🔔 알림 설정 →
         </a>
       </header>
+
+      {/* 구독 관리 (Lemon Squeezy) */}
+      <SubscriptionSection />
 
       {/* 투자 경력 */}
       <Card>

@@ -133,9 +133,9 @@ async def create_checkout(request: Request):
                     "custom": {"firebase_uid": user["uid"]},
                 },
                 "product_options": {
-                    "redirect_url": f"{origin}/?payment=success",
+                    "redirect_url": f"{origin}/dashboard?payment=success",
                     "receipt_button_text": "서비스로 돌아가기",
-                    "receipt_link_url": origin,
+                    "receipt_link_url": f"{origin}/dashboard",
                 },
                 "checkout_options": {
                     "embed": False,

@@ -7,6 +7,7 @@
 import Link from "next/link";
 
 import { Disclaimer } from "@/components/legal/Disclaimer";
+import { CheckoutButton } from "@/components/pricing/CheckoutButton";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 
@@ -112,7 +113,9 @@ export default function PricingPage() {
                   ))}
                 </ul>
                 <div className="pt-3">
-                  {t.ctaHref ? (
+                  {t.id === "pro" ? (
+                    <CheckoutButton />
+                  ) : t.ctaHref ? (
                     <Link href={t.ctaHref} className="block">
                       <Button
                         className="w-full"

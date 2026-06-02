@@ -1,6 +1,9 @@
 "use client";
 
 import Link from "next/link";
+import { useEffect } from "react";
+import { toast } from "sonner";
+import { useQueryClient } from "@tanstack/react-query";
 
 import { MarketStatus } from "@/components/dashboard/MarketStatus";
 import { UsageCard } from "@/components/dashboard/UsageCard";
@@ -20,6 +23,18 @@ const PERSONA_LABEL: Record<string, string> = {
 export default function DashboardHome() {
   const { user } = useAuth();
   const { profile } = useUserProfile();
+  const qc = useQueryClient();
+
+  // 결제 성공 콜백 (?payment=success) — LS 결제 후 리다이렉트
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (new URLSearchParams(window.location.search).get("payment") !== "success") return;
+    toast.success("결제가 완료되었습니다! Pro 기능이 활성화됩니다.", { duration: 6000 });
+    // 구독/사용량 캐시 갱신 (웹훅 반영까지 약간 지연될 수 있어 재조회)
+    qc.invalidateQueries({ queryKey: ["subscription"] });
+    qc.invalidateQueries({ queryKey: ["ai-usage"] });
+    window.history.replaceState({}, "", "/dashboard");
+  }, [qc]);
 
   return (
     <div className="space-y-6 max-w-5xl">

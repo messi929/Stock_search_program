@@ -485,6 +485,21 @@ export type UsageResponse = {
   upgrade_url: string;
 };
 
+// ─── /api/subscription (Lemon Squeezy) ─────
+export type Subscription = {
+  plan: string; // "monthly" | "yearly" | "admin"
+  status: string; // "active" | "on_trial" | "cancelled" | "expired" 등
+  current_period_end: string | null; // ISO8601
+  cancel_at_period_end: boolean;
+};
+
+export type SubscriptionResponse = {
+  tier: string; // "free" | "pro"
+  subscription: Subscription | null;
+};
+
+export type CheckoutResponse = { url: string };
+
 // ─── /portfolio/risk (v7.5) ────────────────
 export type PortfolioHolding = {
   ticker: string;
