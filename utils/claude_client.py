@@ -127,13 +127,18 @@ class ClaudeClient:
         Returns:
             {"content": str, "usage": ClaudeUsage, "cached": bool, "stop_reason": str}
         """
-        # 1) 응답 캐시 조회
+        # 1) 응답 캐시 조회 (L1 메모리 → L2 Firestore). Firestore I/O는 to_thread로 비블로킹.
         cache_key = default_cache.make_key(model, system, messages)
         if self.use_response_cache and not skip_cache:
-            cached = default_cache.get(cache_key)
+            cached = await asyncio.to_thread(default_cache.get, cache_key)
             if cached is not None:
                 logger.debug(f"[Claude:{agent}] 캐시 히트 — API 호출 생략")
-                return {**cached, "cached": True}
+                return {
+                    "content": cached["content"],
+                    "usage": ClaudeUsage(**cached["usage"]),
+                    "cached": True,
+                    "stop_reason": cached.get("stop_reason"),
+                }
 
         # 2) 시스템 프롬프트 — 1K+ 토큰일 때만 cache_control 적용 (Anthropic 최소 단위)
         system_param = self._build_system_param(system)
@@ -189,9 +194,20 @@ class ClaudeClient:
         except Exception as e:
             logger.warning(f"[Claude:{agent}] 비용 기록 건너뜀: {e}")
 
-        # 6) 응답 캐시 저장 (cached=False 형태로 저장하여 재방문 시 cached=True로 반환)
+        # 6) 응답 캐시 저장 — JSON-safe dict로 변환(L2 Firestore 직렬화 위함).
+        #    Firestore I/O는 to_thread로 비블로킹.
         if self.use_response_cache and not skip_cache:
-            default_cache.set(cache_key, result)
+            cache_value = {
+                "content": content,
+                "usage": {
+                    "input_tokens": usage.input_tokens,
+                    "output_tokens": usage.output_tokens,
+                    "cache_read_tokens": usage.cache_read_tokens,
+                    "cache_creation_tokens": usage.cache_creation_tokens,
+                },
+                "stop_reason": result["stop_reason"],
+            }
+            await asyncio.to_thread(default_cache.set, cache_key, cache_value)
 
         return result
 

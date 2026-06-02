@@ -108,7 +108,7 @@ PLAN_LIMITS = {
    - max_tokens 1500이면 Sonnet 서술이 길어 마지막 필드(alert_conditions)가 잘림 → 2560 상향으로 graham 등 최장 케이스도 alert×4 채움 확인.
    - 결과: 딥다이브 **389원 → ~175원**(55%↓), 손익분기 **월 22회 → 월 48회**.
 2. **Prompt caching 정상화** (미적용): 페르소나 system 프롬프트를 안정적으로 캐시(cache_read 90% 단가) → input 비용 추가 절감. A/B 로그상 `cache_w`만 크고 `cache_r=0` 확인.
-3. **응답 캐싱 영속화** (미적용): 동일 종목 24h 캐시를 Firestore 기반으로(메모리→영속). user_profile 분리 키.
+3. **응답 캐싱 영속화 ✅ 적용**: ResponseCache를 L1(메모리)+L2(Firestore `ai_response_cache`, TTL 6h) 2단으로. 캐시 키가 messages(현재가·MA·"기준 시각") 해시라 **데이터 갱신 시 키 변경 → 자동 신선도 보장**(동일 스냅샷에서만 hit). 콜드스타트/재배포 후에도 동일-데이터 재분석 시 API 0. Firestore I/O는 to_thread 비블로킹 + graceful(장애 시 캐시 없이 진행).
 
 > 점검 포인트: A/B 중 `opus in=6 out=20` 미세 호출이 조합당 1회 관찰 — 그래프 내 중복/빈 호출 가능성(비용 미미).
 
@@ -128,7 +128,7 @@ PLAN_LIMITS = {
 | 3 | ✅ **Strategist Sonnet 전환** (A/B 후) | 원가 -55% | 배포완료 |
 | 4 | ✅ 프론트 429 안내 + 대시보드 사용량 카드 | UX 보완 | 배포완료 (6b5c647 + 사용량카드) |
 | 5 | 🔍 Prompt caching | input 비용↓ | **진단완료** — 이미 적용(전 에이전트 system 1024자+), cache_read=0은 코드 아닌 트래픽 패턴(5분 TTL). 트래픽 쌓인 후 BASE블록 분리 재평가 |
-| 6 | 응답 캐싱 Firestore 영속화 | 중복 호출↓ | 미착수 |
+| 6 | ✅ 응답 캐싱 L1+L2(Firestore) 영속화 | 중복 호출↓ | 배포 예정 (커밋) |
 | 7 | 연 구독 + Premium 활성화 | ARPU↑, 수수료↓ | 가격 논의 보류 |
 
 ---
