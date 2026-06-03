@@ -88,16 +88,28 @@ ECOS_CODES: dict[str, dict[str, str]] = {
     },
     # 경기 (business_cycle)
     "gdp_yoy": {
-        # ⚠️ 2026-05 검증: 200Y002/10101 → ERROR-101 (한국은행 분류 개편으로 stat_code 무효).
-        # 신규 stat_code 미확정 — 별도 PR에서 StatisticItemList API로 갱신 필요.
-        "stat_code": "200Y002",
-        "item_code1": "10101",
+        # 2026-06-04 재검증: 902Y015(주요국 경제성장률)/KOR → 한국 실질 GDP 성장률(분기, %).
+        # StatisticSearch 확인: 2026Q1=1.694%, 2025Q4=-0.161% (전년동기대비 수준).
+        "stat_code": "902Y015",
+        "item_code1": "KOR",
         "item_code2": "?",
         "freq": "Q",
         "category": "business_cycle",
-        "description": "실질 GDP 성장률 전년동기대비 (분기, %) — ⚠️ 코드 갱신 필요",
-        "verified": False,
-        "verified_note": "stat_code 한국은행 개편으로 무효 (2026-05-02 검증). 갱신 TODO.",
+        "description": "한국 실질 GDP 성장률 전년동기대비 (분기, %) — 주요국 경제성장률 통계",
+        "verified": True,
+        "verified_at": "2026-06-04",
+    },
+    "kr_unemployment_rate": {
+        # 2026-06-04 검증: 901Y027(경제활동인구)/I61BC(실업률, %) → 202604=2.9%.
+        # 키 'kr_' 접두 — FRED unemployment_rate(UNRATE, US)와 indicator_key 충돌 방지.
+        "stat_code": "901Y027",
+        "item_code1": "I61BC",
+        "item_code2": "?",
+        "freq": "M",
+        "category": "business_cycle",
+        "description": "한국 실업률 (월별, %) — 경제활동인구조사",
+        "verified": True,
+        "verified_at": "2026-06-04",
     },
     "industrial_production": {
         # ⚠️ 2026-05 검증: I31AA → 미존재. AB00 (광공업) 사용.
@@ -231,7 +243,7 @@ def to_ecos_date_format(date_str: str, freq: str) -> str:
         # 6자리 (YYYYMM)
         return s[:6] if len(s) >= 6 else s.ljust(6, "0")
     if freq == "Q":
-        # YYYY+분기숫자(1~4). "2024Q3" / "20243" / "2024" 모두 처리
+        # ECOS 분기 형식 = "YYYYQn" (예: 2025Q1). ISO 날짜는 월에서 분기 산출.
         def _validate_q(q: str) -> str:
             if q not in {"1", "2", "3", "4"}:
                 raise ValueError(f"분기는 1~4만 유효: {q!r}")
@@ -239,14 +251,12 @@ def to_ecos_date_format(date_str: str, freq: str) -> str:
 
         if "Q" in date_str.upper():
             year, q = date_str.upper().split("Q")
-            year = year.replace("-", "").strip()[:4]
-            return f"{year}{_validate_q(q.strip()[:1])}"
-        # 5자리면 그대로 (이미 YYYY+Q) — Q 검증
-        if len(s) == 5 and s[4].isdigit():
-            _validate_q(s[4])
-            return s
-        # 그 외엔 첫 4자리 + 기본 1분기
-        return s[:4] + "1"
+            return f"{year.replace('-', '').strip()[:4]}Q{_validate_q(q.strip()[:1])}"
+        # YYYYMMDD/YYYYMM → 월(2자리)에서 분기 산출
+        if len(s) >= 6 and s[:6].isdigit():
+            q = (int(s[4:6]) - 1) // 3 + 1
+            return f"{s[:4]}Q{q}"
+        return f"{s[:4]}Q1"
     if freq == "A":
         return s[:4]
     raise ValueError(f"지원하지 않는 freq: {freq!r} (D/M/Q/A 중 하나)")

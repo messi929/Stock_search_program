@@ -66,11 +66,10 @@ CYCLE_INPUT_FIELDS: dict[str, dict[str, str]] = {
         "rate_current": "base_rate",
         "rate_3m_ago": "base_rate",
         "rate_12m_ago": "base_rate",
-        "gdp_yoy": "gdp_yoy",  # ⚠️ ECOS verified=False — 한국은행 코드 갱신 TODO
+        "gdp_yoy": "gdp_yoy",  # 2026-06-04 verified: ECOS 902Y015/KOR (전년동기대비)
         "industrial_production_yoy": "industrial_production",
-        # ⚠️ KR unemployment_rate는 ECOS_CODES에 미수집 — 별도 매핑 추가 필요 (TODO)
-        "unemployment_current": "kr_unemployment_rate_NOT_COLLECTED",
-        "unemployment_12m_ago": "kr_unemployment_rate_NOT_COLLECTED",
+        "unemployment_current": "kr_unemployment_rate",  # 2026-06-04 verified: ECOS 901Y027/I61BC
+        "unemployment_12m_ago": "kr_unemployment_rate",
         "cpi_yoy": "cpi_total",
         "dxy_current": "usd_krw",  # 한국은 USD/KRW 환율로 통화 사이클 대용
         "dxy_3m_ago": "usd_krw",
