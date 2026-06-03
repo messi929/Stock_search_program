@@ -40,10 +40,20 @@ DISPOSABLE_DOMAINS = {
     "trash-mail.at", "tyldd.com", "kurzepost.de", "objectmail.com",
     "receiveee.com", "rmqkr.net", "tempmailer.de", "tempsky.com",
     "emailfake.com", "emailfake.info", "emailfake.net",
+    # 2026-06 추가 — 이메일 회원가입 도입에 맞춰 일회용 서비스 보강
+    "1secmail.com", "1secmail.net", "1secmail.org", "mail.tm",
+    "mailpoof.com", "etempmail.com", "etempmail.net", "tmpmail.org",
+    "tmpmail.net", "20minutemail.com", "33mail.com", "luxusmail.org",
+    "instantemail.de", "tempmailbox.com", "mailtemp.net", "tempm.com",
+    "guerrillamailblock.com", "pokemail.net", "spam.la", "tempemail.co",
+    "mailto.plus", "fexbox.org", "tempmail.plus", "inboxkitten.com",
+    "altmails.com", "linshiyou.com", "tempmail.dev", "mailticking.com",
 }
 DISPOSABLE_KEYWORDS = (
     "tempmail", "tempemail", "10minute", "disposable", "throwaway",
     "trashmail", "wegwerf", "selfdestruct", "mailnull", "anon-mail",
+    "secmail", "fakemail", "tempbox", "minutemail", "trash-mail",
+    "fake-mail", "tmpmail", "throwawaymail",
 )
 
 MAX_ACTIVE_SESSIONS = int(os.environ.get("MAX_ACTIVE_SESSIONS", "2"))  # 동시 접속 허용
@@ -119,16 +129,37 @@ def check_trial_abuse(uid: str, email: str, ip: str) -> dict:
     except Exception as e:
         logger.debug(f"정규화 이메일 조회 실패: {e}")
 
-    # 3. 24시간 내 같은 IP로 다른 계정이 trial 받았는지
+    # 3. 같은 IP 어뷰징 — 24시간 내 다른 계정 trial 1개 이상, 또는
+    #    30일 내 서로 다른 계정 2개 이상이 같은 IP에서 trial 받음.
+    #    (30일 한 번의 쿼리로 24h·30일 두 기준을 동시에 판정)
     if ip:
         ip_h = _hash_ip(ip)
-        day_ago = datetime.now(timezone.utc) - timedelta(hours=24)
+        now = datetime.now(timezone.utc)
+        day_ago = now - timedelta(hours=24)
+        month_ago = now - timedelta(days=30)
         try:
-            recent = _trial_ips_ref().where("ip_hash", "==", ip_h).where("created_at", ">=", day_ago).limit(5).stream()
+            recent = (
+                _trial_ips_ref()
+                .where("ip_hash", "==", ip_h)
+                .where("created_at", ">=", month_ago)
+                .limit(20)
+                .stream()
+            )
+            day_others = 0          # 24h 내 다른 계정 trial 수
+            month_uids: set = set()  # 30일 내 다른 계정 uid 집합
             for d in recent:
                 data = d.to_dict() or {}
-                if data.get("uid") and data.get("uid") != uid:
-                    return {"grant_trial": False, "reason": "ip_limit"}
+                u = data.get("uid")
+                if not u or u == uid:
+                    continue
+                month_uids.add(u)
+                ca = data.get("created_at")
+                if hasattr(ca, "timestamp"):  # Firestore Timestamp → datetime
+                    ca = datetime.fromtimestamp(ca.timestamp(), tz=timezone.utc)
+                if ca and ca >= day_ago:
+                    day_others += 1
+            if day_others >= 1 or len(month_uids) >= 2:
+                return {"grant_trial": False, "reason": "ip_limit"}
         except Exception as e:
             logger.debug(f"trial_ips 조회 실패: {e}")
 

@@ -83,7 +83,7 @@ def ensure_user_doc(uid: str, email: str, email_verified: bool = True, ip: str =
 
 
 def start_trial(uid: str, email: str, ip: str) -> dict:
-    """사용자가 명시적으로 7일 무료 체험 시작.
+    """사용자가 명시적으로 무료 체험(TRIAL_DAYS=14일) 시작.
 
     악용 체크 (일회용 메일 / 정규화 이메일 중복 / 24h IP 중복) 후 부여.
 
