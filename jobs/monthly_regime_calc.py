@@ -281,9 +281,10 @@ def build_cycle_inputs(
 
     def _fetch_or_track(field_name: str, key: str, fallback: float = 0.0) -> float:
         """fetch 시도 + None이면 missing 추적."""
-        # GDP 같은 분기 데이터는 윈도우 넓게
+        # 분기·월간 데이터는 date가 기간 시작일(분기 1/1, 월 1일)이고 발표가
+        # 1~2개월 지연되므로 윈도우를 넉넉히 잡아야 최신값을 잡는다.
         meta_freq = _infer_freq_for_key(key)
-        days_back = 95 if meta_freq == "Q" else 30
+        days_back = 200 if meta_freq == "Q" else 95 if meta_freq == "M" else 30
         v = _fetch_latest_value(db, key, days_back=days_back)
         if v is None:
             missing.append(field_name)
@@ -294,10 +295,9 @@ def build_cycle_inputs(
         field_name: str, key: str, days_offset: int, fallback: float = 0.0
     ) -> float:
         meta_freq = _infer_freq_for_key(key)
-        # 분기 데이터는 윈도우 ±45일
-        v = _fetch_value_at_offset(
-            db, key, days_offset, window_days=45 if meta_freq == "Q" else 14
-        )
+        # 분기 ±60일, 월간 ±25일, 그 외 ±14일
+        win = 60 if meta_freq == "Q" else 25 if meta_freq == "M" else 14
+        v = _fetch_value_at_offset(db, key, days_offset, window_days=win)
         if v is None:
             missing.append(f"{field_name} (offset={days_offset}d)")
             return fallback
