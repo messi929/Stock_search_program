@@ -34,6 +34,7 @@ import { ResultsTable, type StockRow } from "./ResultsTable";
 import { Treemap } from "./Treemap";
 
 type ViewMode = "table" | "treemap";
+type Market = "KR" | "US";
 
 interface Props {
   categoryId: string;
@@ -41,6 +42,7 @@ interface Props {
 
 export function ScreenerResultView({ categoryId }: Props) {
   const [viewMode, setViewMode] = useState<ViewMode>("table");
+  const [market, setMarket] = useState<Market>("KR");
   const {
     data: smartLists,
     isLoading: smartListsLoading,
@@ -58,7 +60,9 @@ export function ScreenerResultView({ categoryId }: Props) {
 
   // Pro 게이트면 스캔 자체를 호출하지 않음 (소비 절약)
   const scanEnabled = !!category && !proGated;
-  const scanQuery = useScan(scanEnabled ? categoryId : undefined, 50);
+  // 시장 탭(KR/US) → /api/scan?market= 전달. 백엔드가 source=us 데이터를 분리 보유.
+  const scanQuery = useScan(scanEnabled ? categoryId : undefined, 50, market);
+  const marketTabs = <MarketTabs market={market} onChange={setMarket} />;
 
   // ─── 로딩 (SmartLists) ───────────────────
   if (smartListsLoading) {
@@ -117,6 +121,7 @@ export function ScreenerResultView({ categoryId }: Props) {
     return (
       <div className="space-y-4">
         <Header category={category} />
+        {marketTabs}
         <p className="text-sm text-muted-foreground">종목 스캔 중...</p>
       </div>
     );
@@ -127,6 +132,7 @@ export function ScreenerResultView({ categoryId }: Props) {
     return (
       <div className="space-y-4">
         <Header category={category} />
+        {marketTabs}
         <ErrorCard message="종목 데이터 조회에 실패했습니다. 잠시 후 다시 시도해주세요." />
         <Disclaimer />
       </div>
@@ -145,9 +151,16 @@ export function ScreenerResultView({ categoryId }: Props) {
     return (
       <div className="space-y-4">
         <Header category={category} />
+        {marketTabs}
         <Card>
           <CardContent className="p-6 space-y-3">
-            <p className="text-sm">조건에 맞는 종목이 현재 없습니다.</p>
+            <p className="text-sm">
+              {market === "US" ? "미국" : "국내"} 시장에 조건에 맞는 종목이 현재 없습니다.
+            </p>
+            <p className="text-xs text-muted-foreground">
+              일부 카테고리는 한 시장에만 데이터가 있습니다. 다른 시장 탭(
+              {market === "US" ? "🇰🇷 국내" : "🇺🇸 미국"})을 확인해보세요.
+            </p>
             {emptyMessage && (
               <p className="text-xs text-muted-foreground whitespace-pre-line">
                 {emptyMessage}
@@ -174,13 +187,46 @@ export function ScreenerResultView({ categoryId }: Props) {
   return (
     <div className="space-y-4">
       <Header category={category} total={total} />
-      <ViewToggle mode={viewMode} onChange={setViewMode} />
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        {marketTabs}
+        <ViewToggle mode={viewMode} onChange={setViewMode} />
+      </div>
       {viewMode === "table" ? (
         <ResultsTable columns={category.columns} stocks={stocks} caption={caption} />
       ) : (
         <Treemap stocks={stocks} sizeKey={sizeKey} caption={caption} />
       )}
       <Disclaimer />
+    </div>
+  );
+}
+
+function MarketTabs({
+  market,
+  onChange,
+}: {
+  market: Market;
+  onChange: (m: Market) => void;
+}) {
+  const tab = (m: Market, label: string) => (
+    <button
+      type="button"
+      role="tab"
+      aria-selected={market === m}
+      onClick={() => onChange(m)}
+      className={`px-3 py-1.5 text-sm rounded-md transition focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 ${
+        market === m
+          ? "bg-muted text-foreground font-medium"
+          : "text-muted-foreground hover:text-foreground"
+      }`}
+    >
+      {label}
+    </button>
+  );
+  return (
+    <div className="inline-flex rounded-md border p-0.5 gap-0.5" role="tablist" aria-label="시장 구분">
+      {tab("KR", "🇰🇷 국내")}
+      {tab("US", "🇺🇸 미국")}
     </div>
   );
 }

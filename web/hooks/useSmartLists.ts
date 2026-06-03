@@ -25,11 +25,14 @@ interface ScanResponse {
   last_update?: string;
 }
 
-export function useScan(category: string | undefined, limit = 50) {
+/** market: "" = 전체, "KR" = 국내(KOSPI/KOSDAQ), "US" = 미국(NASDAQ/S&P500). */
+export function useScan(category: string | undefined, limit = 50, market = "") {
   return useQuery({
-    queryKey: ["scan", category, limit],
+    queryKey: ["scan", category, limit, market],
     queryFn: () =>
-      apiCall<ScanResponse>(`/api/scan?category=${category}&limit=${limit}`),
+      apiCall<ScanResponse>(
+        `/api/scan?category=${category}&limit=${limit}${market ? `&market=${market}` : ""}`,
+      ),
     enabled: !!category,
     staleTime: 60_000,
   });
