@@ -485,6 +485,19 @@ export type UsageResponse = {
   upgrade_url: string;
 };
 
+// ─── /api/ai/history (사용량 항목별 분석 이력) ─────
+export type HistoryKind = "analysis" | "validation" | "discovery";
+
+export type HistoryItem = {
+  kind: HistoryKind;
+  ticker: string;
+  persona: string;
+  query: string;
+  at: string; // ISO8601
+};
+
+export type HistoryResponse = { items: HistoryItem[] };
+
 // ─── /api/subscription (Lemon Squeezy) ─────
 export type Subscription = {
   plan: string; // "monthly" | "yearly" | "admin"

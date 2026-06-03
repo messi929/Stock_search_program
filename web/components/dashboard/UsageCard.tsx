@@ -1,10 +1,12 @@
 "use client";
 
 import Link from "next/link";
+import { useState } from "react";
 
 import { Card, CardContent } from "@/components/ui/card";
-import { useUsage } from "@/hooks/useUsage";
-import type { UsageMetric } from "@/types/api";
+import { useHistory, useUsage } from "@/hooks/useUsage";
+import type { HistoryItem, HistoryKind, UsageMetric } from "@/types/api";
+import { PERSONA_BY_ID, type PersonaId } from "@/types/persona";
 
 const PLAN_LABEL: Record<string, string> = {
   free: "무료",
@@ -12,22 +14,51 @@ const PLAN_LABEL: Record<string, string> = {
   premium: "Premium",
 };
 
-const METRICS: { key: "analyses" | "validations" | "discoveries"; label: string; icon: string }[] = [
-  { key: "analyses", label: "종목 분석", icon: "🔍" },
-  { key: "validations", label: "실시간 검증", icon: "✅" },
-  { key: "discoveries", label: "종목 발견", icon: "🧭" },
+type MetricKey = "analyses" | "validations" | "discoveries";
+
+const METRICS: { key: MetricKey; label: string; icon: string; kind: HistoryKind }[] = [
+  { key: "analyses", label: "종목 분석", icon: "🔍", kind: "analysis" },
+  { key: "validations", label: "실시간 검증", icon: "✅", kind: "validation" },
+  { key: "discoveries", label: "종목 발견", icon: "🧭", kind: "discovery" },
 ];
 
-function UsageRow({ label, icon, metric }: { label: string; icon: string; metric: UsageMetric }) {
+function fmtAt(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  return d.toLocaleString("ko-KR", {
+    month: "numeric",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function MetricRow({
+  label,
+  icon,
+  metric,
+  open,
+}: {
+  label: string;
+  icon: string;
+  metric: UsageMetric;
+  open: boolean;
+}) {
   const unlimited = metric.limit < 0;
-  const pct = unlimited || metric.limit === 0 ? 0 : Math.min(100, (metric.used / metric.limit) * 100);
-  // 한도 근접 시 색상 경고
+  const pct =
+    unlimited || metric.limit === 0 ? 0 : Math.min(100, (metric.used / metric.limit) * 100);
   const barColor = pct >= 90 ? "bg-red-500" : pct >= 70 ? "bg-amber-500" : "bg-sky-500";
 
   return (
     <div className="space-y-1">
       <div className="flex items-center justify-between text-sm">
-        <span>
+        <span className="flex items-center gap-1">
+          <span
+            className={`text-muted-foreground text-xs transition-transform ${open ? "rotate-90" : ""}`}
+            aria-hidden="true"
+          >
+            ▸
+          </span>
           {icon} {label}
         </span>
         <span className="text-xs text-muted-foreground tabular-nums">
@@ -43,8 +74,38 @@ function UsageRow({ label, icon, metric }: { label: string; icon: string; metric
   );
 }
 
+function HistoryRow({ it }: { it: HistoryItem }) {
+  const at = fmtAt(it.at);
+  const persona = it.persona ? PERSONA_BY_ID[it.persona as PersonaId]?.name : "";
+
+  // 발견(discovery)은 종목이 아닌 쿼리 기준 — 링크 없이 텍스트.
+  if (it.kind === "discovery") {
+    return (
+      <div className="flex items-center justify-between gap-2 text-xs py-1">
+        <span className="truncate text-muted-foreground">🧭 “{it.query || "발견"}”</span>
+        <span className="text-muted-foreground shrink-0 tabular-nums">{at}</span>
+      </div>
+    );
+  }
+
+  return (
+    <Link
+      href={`/analyze/${it.ticker}`}
+      className="flex items-center justify-between gap-2 text-xs py-1 hover:text-foreground"
+    >
+      <span className="truncate">
+        <span className="font-mono font-medium">{it.ticker}</span>
+        {persona ? <span className="text-muted-foreground"> · {persona}</span> : null}
+      </span>
+      <span className="text-muted-foreground shrink-0 tabular-nums">{at}</span>
+    </Link>
+  );
+}
+
 export function UsageCard() {
   const { data, isLoading, isError } = useUsage();
+  const { data: history } = useHistory();
+  const [expanded, setExpanded] = useState<MetricKey | null>(null);
 
   // 조용히 숨김 — 대시보드 다른 영역에 영향 없게
   if (isError || (!isLoading && !data)) return null;
@@ -52,7 +113,6 @@ export function UsageCard() {
   const plan = data?.plan ?? "free";
   const planLabel = PLAN_LABEL[plan] ?? plan;
 
-  // reset_at → "M월 D일" (KST 표기)
   let resetLabel = "";
   if (data?.reset_at) {
     const d = new Date(data.reset_at);
@@ -80,20 +140,45 @@ export function UsageCard() {
             ))}
           </div>
         ) : (
-          <div className="space-y-2.5">
-            {METRICS.map((m) => (
-              <UsageRow key={m.key} label={m.label} icon={m.icon} metric={data.usage[m.key]} />
-            ))}
+          <div className="space-y-2">
+            {METRICS.map((m) => {
+              const isOpen = expanded === m.key;
+              const items = (history?.items ?? []).filter((it) => it.kind === m.kind);
+              return (
+                <div key={m.key} className="rounded-lg border">
+                  <button
+                    type="button"
+                    onClick={() => setExpanded(isOpen ? null : m.key)}
+                    aria-expanded={isOpen}
+                    className="w-full text-left p-2.5 hover:bg-muted/50 transition rounded-lg"
+                  >
+                    <MetricRow label={m.label} icon={m.icon} metric={data.usage[m.key]} open={isOpen} />
+                  </button>
+                  {isOpen && (
+                    <div className="border-t px-3 py-2">
+                      {items.length === 0 ? (
+                        <p className="text-xs text-muted-foreground py-1">
+                          아직 기록이 없습니다.
+                        </p>
+                      ) : (
+                        <div className="divide-y divide-border/50">
+                          {items.map((it, i) => (
+                            <HistoryRow key={`${it.ticker}-${it.at}-${i}`} it={it} />
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
         )}
 
         <div className="flex items-center justify-between pt-1">
           {resetLabel && <span className="text-xs text-muted-foreground">{resetLabel}</span>}
           {plan === "free" && (
-            <Link
-              href="/pricing"
-              className="text-xs font-medium text-primary hover:underline"
-            >
+            <Link href="/pricing" className="text-xs font-medium text-primary hover:underline">
               Pro로 업그레이드 →
             </Link>
           )}

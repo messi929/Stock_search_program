@@ -43,6 +43,34 @@ PLAN_LIMITS: dict[str, dict[str, int]] = {
 _ANALYSIS_AGENTS = ("strategist", "event_analyst", "macro_pm", "korean_specialist")
 
 
+def _record_history(
+    uid: str, kind: str, ticker: str = "", persona: str = "", query: str = ""
+) -> None:
+    """분석/검증/발견 이력 1건 기록 — users/{uid}/analysis_history/{auto}.
+
+    AI 사용량 항목별 '분석한 종목 + 일자' 표시용(GET /api/ai/history). cost_tracker는
+    날짜별 집계만 하므로 종목·시각 이력은 여기서 별도 기록. 실패는 무시(분석 차단 금지).
+    """
+    if not uid:
+        return
+    try:
+        from firebase_admin import firestore
+
+        from screener.db.firebase_client import get_db
+
+        get_db().collection("users").document(uid).collection("analysis_history").add(
+            {
+                "kind": kind,  # analysis | validation | discovery
+                "ticker": (ticker or "").upper(),
+                "persona": persona or "",
+                "query": query or "",
+                "created_at": firestore.SERVER_TIMESTAMP,
+            }
+        )
+    except Exception as e:
+        logger.warning(f"[history] 기록 실패 (uid={uid}, kind={kind}): {e}")
+
+
 def _count_month_usage(uid: str) -> dict[str, int]:
     """현재 월(UTC) Axis AI 사용량 합산.
 
@@ -246,6 +274,9 @@ async def analyze(req: AnalyzeRequest, request: Request):
     # 종목 코드 형식 (KR 6자리 또는 알파벳 US)
     if not req.ticker or len(req.ticker) > 10:
         raise HTTPException(400, {"code": "INVALID_TICKER", "message": "유효한 종목 코드 필요"})
+
+    # 분석 이력 기록 (사용량 항목별 종목·일자 표시용)
+    _record_history(uid, "analysis", ticker=req.ticker, persona=req.persona)
 
     # UserProfile 변환
     from agents.strategist import UserProfile
@@ -557,6 +588,9 @@ async def validate(ticker: str, req: ValidateRequest, request: Request):
         uid=uid,
     )
 
+    # 검증 이력 기록 (사용량 항목별 종목·일자 표시용)
+    _record_history(uid, "validation", ticker=ticker)
+
     return _wrap_legal(
         {
             "ticker": ticker,
@@ -725,6 +759,49 @@ async def get_usage(request: Request):
     }
 
 
+@router.get("/history")
+async def get_history(request: Request, limit: int = 40):
+    """최근 분석/검증/발견 이력 — users/{uid}/analysis_history (created_at desc).
+
+    UsageCard 항목 클릭 시 '해당 유형으로 분석한 종목 + 일자' 표시용.
+    """
+    user = getattr(request.state, "user", None) or {}
+    uid = user.get("uid", "")
+    if not uid:
+        return {"items": []}
+    try:
+        from firebase_admin import firestore
+
+        from screener.db.firebase_client import get_db
+
+        docs = (
+            get_db()
+            .collection("users")
+            .document(uid)
+            .collection("analysis_history")
+            .order_by("created_at", direction=firestore.Query.DESCENDING)
+            .limit(max(1, min(limit, 100)))
+            .stream()
+        )
+        items = []
+        for d in docs:
+            x = d.to_dict() or {}
+            ca = x.get("created_at")
+            items.append(
+                {
+                    "kind": x.get("kind", ""),
+                    "ticker": x.get("ticker", ""),
+                    "persona": x.get("persona", ""),
+                    "query": x.get("query", ""),
+                    "at": ca.isoformat() if hasattr(ca, "isoformat") else "",
+                }
+            )
+        return {"items": items}
+    except Exception as e:
+        logger.warning(f"[history] 조회 실패 (uid={uid}): {e}")
+        return {"items": []}
+
+
 # ──────────────────────────────────────────────
 # /api/ai/discover — 자연어 종목 발견 (rename of /recommend)
 # ──────────────────────────────────────────────
@@ -783,6 +860,9 @@ async def discover(req: DiscoverRequestBody, request: Request):
     except Exception as e:
         logger.exception(f"[ai/discover] 실패: {e}")
         raise HTTPException(500, {"code": "AI_ERROR", "message": str(e)})
+
+    # 발견 이력 기록 (쿼리 기준 — 사용량 항목별 일자 표시용)
+    _record_history(uid, "discovery", query=req.query)
 
     return _wrap_legal(
         {
