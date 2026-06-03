@@ -84,7 +84,8 @@ export function SearchTab() {
   const showDropdown = queryToSend.length > 0;
 
   return (
-    <Card>
+    // overflow-visible: 기본 Card는 overflow-hidden이라 absolute 드롭다운이 잘림.
+    <Card className="overflow-visible">
       <CardContent className="p-5 space-y-3">
         <h3 className="font-semibold">🔎 종목명 또는 코드로 검색</h3>
         <p className="text-sm text-muted-foreground">
