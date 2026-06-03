@@ -55,18 +55,34 @@ function HistoryItemRow({ it }: { it: HistoryItem }) {
   }
 
   const kindIcon = it.kind === "validation" ? "✅" : "🔍";
+  const isKR = /^\d{6}$/.test(it.ticker);
   return (
     <Link
       href={`/analyze/${it.ticker}`}
-      className="flex items-center justify-between gap-3 py-3 px-1 hover:bg-muted/50 rounded-md transition"
+      className="block py-3 px-1 hover:bg-muted/50 rounded-md transition"
     >
-      <span className="flex items-center gap-2 min-w-0">
-        <span className="shrink-0">{kindIcon}</span>
-        {it.name ? <span className="font-medium truncate">{it.name}</span> : null}
-        <span className="font-mono text-sm text-muted-foreground shrink-0">{it.ticker}</span>
-        {persona ? <span className="text-xs text-muted-foreground truncate hidden sm:inline">· {persona}</span> : null}
-      </span>
-      <span className="text-xs text-muted-foreground shrink-0 tabular-nums">{at}</span>
+      <div className="flex items-center justify-between gap-3">
+        <span className="flex items-center gap-2 min-w-0">
+          <span className="shrink-0">{kindIcon}</span>
+          {it.name ? <span className="font-medium truncate">{it.name}</span> : null}
+          <span className="font-mono text-sm text-muted-foreground shrink-0">{it.ticker}</span>
+          {persona ? (
+            <span className="text-xs text-muted-foreground truncate hidden sm:inline">· {persona}</span>
+          ) : null}
+        </span>
+        <span className="text-xs text-muted-foreground shrink-0 tabular-nums">{at}</span>
+      </div>
+      {it.summary ? (
+        <p className="text-xs text-muted-foreground mt-1.5 leading-relaxed line-clamp-3">
+          {it.summary}
+        </p>
+      ) : null}
+      {it.price != null ? (
+        <span className="text-[11px] text-muted-foreground/80 mt-1 inline-block">
+          분석 당시 {it.price.toLocaleString("ko-KR")}
+          {isKR ? "원" : "달러"}
+        </span>
+      ) : null}
     </Link>
   );
 }

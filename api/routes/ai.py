@@ -45,20 +45,23 @@ _ANALYSIS_AGENTS = ("strategist", "event_analyst", "macro_pm", "korean_specialis
 
 def _record_history(
     uid: str, kind: str, ticker: str = "", persona: str = "", query: str = ""
-) -> None:
+) -> str:
     """분석/검증/발견 이력 1건 기록 — users/{uid}/analysis_history/{auto}.
 
     AI 사용량 항목별 '분석한 종목 + 일자' 표시용(GET /api/ai/history). cost_tracker는
     날짜별 집계만 하므로 종목·시각 이력은 여기서 별도 기록. 실패는 무시(분석 차단 금지).
+    Returns: 생성된 doc id (분석 완료 후 _update_history_result로 결과 요약 추가용). 실패 시 "".
     """
     if not uid:
-        return
+        return ""
     try:
         from firebase_admin import firestore
 
         from screener.db.firebase_client import get_db
 
-        get_db().collection("users").document(uid).collection("analysis_history").add(
+        _, ref = get_db().collection("users").document(uid).collection(
+            "analysis_history"
+        ).add(
             {
                 "kind": kind,  # analysis | validation | discovery
                 "ticker": (ticker or "").upper(),
@@ -67,8 +70,52 @@ def _record_history(
                 "created_at": firestore.SERVER_TIMESTAMP,
             }
         )
+        return ref.id
     except Exception as e:
         logger.warning(f"[history] 기록 실패 (uid={uid}, kind={kind}): {e}")
+        return ""
+
+
+def _extract_history_summary(final: dict) -> dict:
+    """분석 결과(graph final state)에서 이력용 핵심 요약 추출 — 그 시점 판단 보존.
+
+    strategist 흐름 → strategist.summary(종합 결론), 데이터 페르소나 → summary_neutral.
+    당시 현재가는 analyst.technical.current_price.
+    """
+    out: dict = {"summary": "", "price": None}
+    a = final.get("analyst_output")
+    if a is not None:
+        try:
+            out["price"] = a.technical.current_price
+        except Exception:
+            pass
+    s = final.get("strategist_output")
+    if s is not None:
+        out["summary"] = (getattr(s, "summary", "") or "")[:800]
+        return out
+    for k in ("macro_output", "event_output", "korean_output"):
+        o = final.get(k)
+        if o is not None:
+            out["summary"] = (getattr(o, "summary_neutral", "") or "")[:800]
+            return out
+    return out
+
+
+def _update_history_result(uid: str, hist_id: str, summary: dict) -> None:
+    """분석 완료 후 이력 doc에 결과 요약·당시가 병합. 실패 무시."""
+    if not uid or not hist_id:
+        return
+    try:
+        from screener.db.firebase_client import get_db
+
+        get_db().collection("users").document(uid).collection(
+            "analysis_history"
+        ).document(hist_id).set(
+            {"summary": summary.get("summary", ""), "price": summary.get("price")},
+            merge=True,
+        )
+    except Exception as e:
+        logger.debug(f"[history] 결과 요약 업데이트 실패 (id={hist_id}): {e}")
 
 
 def _count_month_usage(uid: str) -> dict[str, int]:
@@ -275,8 +322,8 @@ async def analyze(req: AnalyzeRequest, request: Request):
     if not req.ticker or len(req.ticker) > 10:
         raise HTTPException(400, {"code": "INVALID_TICKER", "message": "유효한 종목 코드 필요"})
 
-    # 분석 이력 기록 (사용량 항목별 종목·일자 표시용)
-    _record_history(uid, "analysis", ticker=req.ticker, persona=req.persona)
+    # 분석 이력 기록 (사용량 항목별 종목·일자 표시용). 완료 후 결과 요약을 같은 doc에 추가.
+    hist_id = _record_history(uid, "analysis", ticker=req.ticker, persona=req.persona)
 
     # UserProfile 변환
     from agents.strategist import UserProfile
@@ -297,6 +344,7 @@ async def analyze(req: AnalyzeRequest, request: Request):
                 event_type=req.event_type,
                 event_target=req.event_target,
                 primary_ticker=req.primary_ticker,
+                history_id=hist_id,
             ),
             media_type="text/event-stream",
             headers={
@@ -320,6 +368,9 @@ async def analyze(req: AnalyzeRequest, request: Request):
         primary_ticker=req.primary_ticker,
     )
     elapsed = round(time.time() - t0, 2)
+
+    # 분석 완료 — 그 시점 결과 요약을 이력에 저장
+    _update_history_result(uid, hist_id, _extract_history_summary(final))
 
     return _build_full_response(final, elapsed)
 
@@ -413,6 +464,7 @@ async def _stream_analysis(
     event_type: Optional[str] = None,
     event_target: Optional[str] = None,
     primary_ticker: Optional[str] = None,
+    history_id: str = "",
 ) -> AsyncGenerator[str, None]:
     """LangGraph astream을 SSE로 변환.
 
@@ -536,6 +588,10 @@ async def _stream_analysis(
     # per-call cached 메타를 정확히 모으려면 agent 인터페이스 변경 필요 → 간이 휴리스틱.
     total_elapsed = round(time.time() - t0, 2)
     likely_cached = total_elapsed < 5.0
+
+    # 분석 완료 — 그 시점 결과 요약을 이력에 저장
+    _update_history_result(user_uid, history_id, _extract_history_summary(final_state))
+
     yield _sse(
         "complete",
         {
@@ -813,6 +869,8 @@ async def get_history(request: Request, limit: int = 40):
                     "name": name_map.get(tk, ""),
                     "persona": x.get("persona", ""),
                     "query": x.get("query", ""),
+                    "summary": x.get("summary", ""),  # 그 시점 결과 요약
+                    "price": x.get("price"),  # 당시 현재가
                     "at": ca.isoformat() if hasattr(ca, "isoformat") else "",
                 }
             )

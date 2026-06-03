@@ -494,6 +494,8 @@ export type HistoryItem = {
   name: string; // 종목명 (백엔드 snapshot 조인)
   persona: string;
   query: string;
+  summary: string; // 그 시점 분석 결과 요약 (strategist.summary 또는 summary_neutral)
+  price: number | null; // 당시 현재가
   at: string; // ISO8601
 };
 
