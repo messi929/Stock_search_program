@@ -387,6 +387,14 @@ def run_daily_collect(
 
 
 def main(argv: list[str] | None = None) -> int:
+    # 로컬 실행 시 .env의 FRED/ECOS 키 로드 (prod Cloud Run은 secret 주입이라 사실상 no-op)
+    try:
+        from dotenv import load_dotenv
+
+        load_dotenv()
+    except Exception:
+        pass
+
     parser = argparse.ArgumentParser(
         description="매크로 지표 일일 수집 (FRED + ECOS)",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
