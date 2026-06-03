@@ -19,14 +19,14 @@ export function useUsage() {
 }
 
 /**
- * 분석/검증/발견 이력 조회 (최근 40, created_at desc).
- * UsageCard 항목 클릭 시 '해당 유형 종목 + 일자' 표시용.
+ * 분석/검증/발견 이력 조회 (created_at desc). 전용 이력 페이지(/history)는
+ * 더 많이(최대 100), 가벼운 위젯은 적게 요청.
  */
-export function useHistory() {
+export function useHistory(limit = 40) {
   const { signedIn } = useAuth();
   return useQuery({
-    queryKey: ["ai-history"],
-    queryFn: () => apiCall<HistoryResponse>("/api/ai/history"),
+    queryKey: ["ai-history", limit],
+    queryFn: () => apiCall<HistoryResponse>(`/api/ai/history?limit=${limit}`),
     enabled: signedIn,
     staleTime: 60_000,
   });

@@ -28,9 +28,14 @@ export function RecentAnalyses() {
     <section className="space-y-3">
       <div className="flex items-center justify-between">
         <h2 className="font-semibold">🕘 최근 분석</h2>
-        <Link href="/analyze" className="text-xs text-muted-foreground hover:text-foreground">
-          새 분석 →
-        </Link>
+        <div className="flex items-center gap-3">
+          <Link href="/history" className="text-xs text-muted-foreground hover:text-foreground">
+            전체 이력
+          </Link>
+          <Link href="/analyze" className="text-xs text-muted-foreground hover:text-foreground">
+            새 분석 →
+          </Link>
+        </div>
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
         {recents.map((r) => {

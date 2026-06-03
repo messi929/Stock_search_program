@@ -1,12 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
 
 import { Card, CardContent } from "@/components/ui/card";
-import { useHistory, useUsage } from "@/hooks/useUsage";
-import type { HistoryItem, HistoryKind, UsageMetric } from "@/types/api";
-import { PERSONA_BY_ID, type PersonaId } from "@/types/persona";
+import { useUsage } from "@/hooks/useUsage";
+import type { UsageMetric } from "@/types/api";
 
 const PLAN_LABEL: Record<string, string> = {
   free: "무료",
@@ -14,36 +12,14 @@ const PLAN_LABEL: Record<string, string> = {
   premium: "Premium",
 };
 
-type MetricKey = "analyses" | "validations" | "discoveries";
-
-const METRICS: { key: MetricKey; label: string; icon: string; kind: HistoryKind }[] = [
+// kind: /history?kind= 로 전달 (analysis|validation|discovery)
+const METRICS: { key: "analyses" | "validations" | "discoveries"; label: string; icon: string; kind: string }[] = [
   { key: "analyses", label: "종목 분석", icon: "🔍", kind: "analysis" },
   { key: "validations", label: "실시간 검증", icon: "✅", kind: "validation" },
   { key: "discoveries", label: "종목 발견", icon: "🧭", kind: "discovery" },
 ];
 
-function fmtAt(iso: string): string {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "";
-  return d.toLocaleString("ko-KR", {
-    month: "numeric",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
-
-function MetricRow({
-  label,
-  icon,
-  metric,
-  open,
-}: {
-  label: string;
-  icon: string;
-  metric: UsageMetric;
-  open: boolean;
-}) {
+function MetricRow({ label, icon, metric }: { label: string; icon: string; metric: UsageMetric }) {
   const unlimited = metric.limit < 0;
   const pct =
     unlimited || metric.limit === 0 ? 0 : Math.min(100, (metric.used / metric.limit) * 100);
@@ -52,17 +28,12 @@ function MetricRow({
   return (
     <div className="space-y-1">
       <div className="flex items-center justify-between text-sm">
-        <span className="flex items-center gap-1">
-          <span
-            className={`text-muted-foreground text-xs transition-transform ${open ? "rotate-90" : ""}`}
-            aria-hidden="true"
-          >
-            ▸
-          </span>
+        <span>
           {icon} {label}
         </span>
-        <span className="text-xs text-muted-foreground tabular-nums">
+        <span className="flex items-center gap-1.5 text-xs text-muted-foreground tabular-nums">
           {unlimited ? `${metric.used} (무제한)` : `${metric.used} / ${metric.limit}`}
+          <span aria-hidden="true">›</span>
         </span>
       </div>
       {!unlimited && (
@@ -74,38 +45,8 @@ function MetricRow({
   );
 }
 
-function HistoryRow({ it }: { it: HistoryItem }) {
-  const at = fmtAt(it.at);
-  const persona = it.persona ? PERSONA_BY_ID[it.persona as PersonaId]?.name : "";
-
-  // 발견(discovery)은 종목이 아닌 쿼리 기준 — 링크 없이 텍스트.
-  if (it.kind === "discovery") {
-    return (
-      <div className="flex items-center justify-between gap-2 text-xs py-1">
-        <span className="truncate text-muted-foreground">🧭 “{it.query || "발견"}”</span>
-        <span className="text-muted-foreground shrink-0 tabular-nums">{at}</span>
-      </div>
-    );
-  }
-
-  return (
-    <Link
-      href={`/analyze/${it.ticker}`}
-      className="flex items-center justify-between gap-2 text-xs py-1 hover:text-foreground"
-    >
-      <span className="truncate">
-        <span className="font-mono font-medium">{it.ticker}</span>
-        {persona ? <span className="text-muted-foreground"> · {persona}</span> : null}
-      </span>
-      <span className="text-muted-foreground shrink-0 tabular-nums">{at}</span>
-    </Link>
-  );
-}
-
 export function UsageCard() {
   const { data, isLoading, isError } = useUsage();
-  const { data: history } = useHistory();
-  const [expanded, setExpanded] = useState<MetricKey | null>(null);
 
   // 조용히 숨김 — 대시보드 다른 영역에 영향 없게
   if (isError || (!isLoading && !data)) return null;
@@ -141,45 +82,16 @@ export function UsageCard() {
           </div>
         ) : (
           <div className="space-y-2">
-            {METRICS.map((m) => {
-              const isOpen = expanded === m.key;
-              const items = (history?.items ?? []).filter((it) => it.kind === m.kind);
-              return (
-                <div key={m.key} className="rounded-lg border">
-                  <button
-                    type="button"
-                    onClick={() => setExpanded(isOpen ? null : m.key)}
-                    aria-expanded={isOpen}
-                    className="w-full text-left p-2.5 hover:bg-muted/50 transition rounded-lg"
-                  >
-                    <MetricRow label={m.label} icon={m.icon} metric={data.usage[m.key]} open={isOpen} />
-                  </button>
-                  {isOpen && (
-                    <div className="border-t px-3 py-2">
-                      {items.length === 0 ? (
-                        <p className="text-xs text-muted-foreground py-1.5 leading-relaxed">
-                          {data.usage[m.key].used > 0 ? (
-                            <>
-                              이 기능 도입(6/3) 이전 분석은 내역에 표시되지 않아요.
-                              <br />
-                              이후 분석부터 종목·일자가 기록됩니다.
-                            </>
-                          ) : (
-                            "아직 분석 내역이 없습니다."
-                          )}
-                        </p>
-                      ) : (
-                        <div className="divide-y divide-border/50">
-                          {items.map((it, i) => (
-                            <HistoryRow key={`${it.ticker}-${it.at}-${i}`} it={it} />
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
+            {METRICS.map((m) => (
+              <Link
+                key={m.key}
+                href={`/history?kind=${m.kind}`}
+                className="block rounded-lg border p-2.5 hover:bg-muted/50 transition"
+                title={`${m.label} 이력 보기`}
+              >
+                <MetricRow label={m.label} icon={m.icon} metric={data.usage[m.key]} />
+              </Link>
+            ))}
           </div>
         )}
 
