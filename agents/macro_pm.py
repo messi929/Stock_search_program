@@ -35,6 +35,7 @@ class MacroPmInput(BaseModel):
     """
 
     ticker: Optional[str] = None  # 종목 분석 시
+    name: Optional[str] = None  # 정확한 종목명 (환각 방지 — graph에서 주입)
     market: Optional[str] = None  # "KR" | "US" | "GLOBAL"
     sector: Optional[str] = None
     question_type: str = "stock"  # "stock" | "etf" | "macro_only"
@@ -296,7 +297,13 @@ class MacroPmAgent(BaseAgent):
         lines: list[str] = []
         lines.append("# 분석 요청")
         if inp.ticker:
-            lines.append(f"종목: {inp.ticker} (시장: {inp.market or '미상'})")
+            label = f"{inp.name} ({inp.ticker})" if inp.name else inp.ticker
+            lines.append(f"종목: {label} (시장: {inp.market or '미상'})")
+            if inp.name:
+                lines.append(
+                    f"⚠️ 이 종목의 정확한 이름은 '{inp.name}'입니다. "
+                    f"다른 회사로 추정하지 말고 반드시 이 종목명을 사용하세요."
+                )
         if inp.sector:
             lines.append(f"섹터: {inp.sector}")
         lines.append(f"질문 타입: {inp.question_type}")

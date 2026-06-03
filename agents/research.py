@@ -31,6 +31,7 @@ from utils.claude_client import MODEL_HAIKU
 class ResearchInput(BaseModel):
     query: str = Field(..., description="사용자 자연어 쿼리")
     ticker: Optional[str] = Field(None, description="특정 종목 컨텍스트")
+    name: Optional[str] = Field(None, description="정확한 종목명 (환각 방지)")
     sector: Optional[str] = Field(None, description="섹터 컨텍스트")
     timeframe_days: int = Field(7, description="분석 기간(일)")
 
@@ -270,7 +271,12 @@ class ResearchAgent(BaseAgent):
         lines.append(f"# 사용자 쿼리\n{input_data.query}")
 
         if input_data.ticker:
-            lines.append(f"\n# 컨텍스트 종목\n{input_data.ticker}")
+            _lbl = (
+                f"{input_data.name} ({input_data.ticker})"
+                if input_data.name
+                else input_data.ticker
+            )
+            lines.append(f"\n# 컨텍스트 종목\n{_lbl}")
         if input_data.sector:
             lines.append(f"\n# 컨텍스트 섹터\n{input_data.sector}")
 

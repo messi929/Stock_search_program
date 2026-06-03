@@ -37,6 +37,7 @@ class EventAnalystInput(BaseModel):
     """
 
     ticker: str
+    name: Optional[str] = None  # 정확한 종목명 (환각 방지 — graph에서 주입)
     market: str = "KR"  # "KR" | "US"
     event_type: Optional[str] = None  # "earnings" | "ipo_secondary" | "buyback" | "fomc" | ...
     event_target: Optional[str] = None  # 예: "RKLB Q1 2026 실적", "SpaceX IPO 2026 Q4"
@@ -479,7 +480,12 @@ class EventAnalystAgent(BaseAgent):
         self, inp: EventAnalystInput, bundle: dict[str, Any]
     ) -> str:
         lines: list[str] = []
-        lines.append(f"# 분석 대상\n티커: {inp.ticker} (시장: {bundle['market']})")
+        _label = f"{inp.name} ({inp.ticker})" if inp.name else inp.ticker
+        lines.append(f"# 분석 대상\n종목: {_label} (시장: {bundle['market']})")
+        if inp.name:
+            lines.append(
+                f"⚠️ 이 종목의 정확한 이름은 '{inp.name}'입니다. 다른 회사로 추정하지 마세요."
+            )
         if inp.event_type:
             lines.append(f"이벤트 타입: {inp.event_type}")
         if inp.event_target:

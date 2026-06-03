@@ -36,6 +36,7 @@ from utils.claude_client import MODEL_SONNET
 
 class KoreanSpecialistInput(BaseModel):
     ticker: str
+    name: Optional[str] = None  # 정확한 종목명 (환각 방지 — graph에서 주입)
     main_theme: Optional[str] = None  # 사용자가 명시한 테마 (옵션)
 
 
@@ -349,7 +350,12 @@ class KoreanSpecialistAgent(BaseAgent):
         self, inp: KoreanSpecialistInput, bundle: dict[str, Any]
     ) -> str:
         ticker = bundle["ticker"]
-        lines: list[str] = [f"# 분석 대상\n티커: {ticker}"]
+        _label = f"{inp.name} ({ticker})" if inp.name else ticker
+        lines: list[str] = [f"# 분석 대상\n종목: {_label}"]
+        if inp.name:
+            lines.append(
+                f"⚠️ 이 종목의 정확한 이름은 '{inp.name}'입니다. 다른 회사로 추정하지 마세요."
+            )
         if inp.main_theme:
             lines.append(f"테마(사용자 입력): {inp.main_theme}")
 

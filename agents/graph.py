@@ -95,6 +95,28 @@ class AnalysisState(TypedDict, total=False):
 # 노드
 # ──────────────────────────────────────────────
 
+def _resolve_stock_name(ticker: str) -> str:
+    """ticker → 정확한 종목명 (screener snapshot 조회).
+
+    데이터 페르소나(macro/event/korean)·research는 ticker만 받으면 LLM이 종목명을
+    추론하다 환각한다(예: 010120을 '에스엠'으로 오인 — 실제 LS ELECTRIC). 정확한
+    종목명을 프롬프트에 주입해 환각을 차단한다. 조회 실패 시 빈 문자열(주입 생략).
+    """
+    if not ticker:
+        return ""
+    try:
+        from screener.api.routes import _get_combined_df
+
+        df = _get_combined_df()
+        if df is not None and not df.empty:
+            m = df[df["ticker"].astype(str).str.upper() == ticker.upper()]
+            if not m.empty:
+                return str(m.iloc[0].get("name", "") or "")
+    except Exception as e:
+        logger.debug(f"[graph] 종목명 조회 실패 {ticker}: {e}")
+    return ""
+
+
 async def fanout_node(state: AnalysisState) -> dict:
     """Pass-through — research/analyst 병렬 진입점.
 
@@ -109,6 +131,7 @@ async def research_node(state: AnalysisState) -> dict:
         ResearchInput(
             query=state.get("query", "") or f"{state['ticker']} 시황",
             ticker=state.get("ticker"),
+            name=_resolve_stock_name(state.get("ticker", "")),
         ),
         uid=state.get("user_uid", ""),
     )
@@ -198,6 +221,7 @@ async def event_analyst_node(state: AnalysisState) -> dict:
         result = await agent.run(
             EventAnalystInput(
                 ticker=ticker,
+                name=_resolve_stock_name(ticker),
                 market=market,
                 event_type=state.get("event_type"),
                 event_target=state.get("event_target"),
@@ -258,7 +282,12 @@ async def macro_pm_node(state: AnalysisState) -> dict:
     agent = MacroPmAgent()
     try:
         result = await agent.run(
-            MacroPmInput(ticker=ticker, market=market, question_type=qtype),
+            MacroPmInput(
+                ticker=ticker,
+                name=_resolve_stock_name(ticker or ""),
+                market=market,
+                question_type=qtype,
+            ),
             uid=state.get("user_uid", ""),
         )
     except Exception as e:
@@ -273,7 +302,7 @@ async def korean_specialist_node(state: AnalysisState) -> dict:
     agent = KoreanSpecialistAgent()
     try:
         result = await agent.run(
-            KoreanSpecialistInput(ticker=ticker),
+            KoreanSpecialistInput(ticker=ticker, name=_resolve_stock_name(ticker)),
             uid=state.get("user_uid", ""),
         )
     except Exception as e:
