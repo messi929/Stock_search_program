@@ -1,5 +1,11 @@
 # Axis 진행 사항 — Week 1~6 완료 (2026-04-29 기준)
 
+> ⚠️ **이 문서는 2026-04-30까지의 기록입니다.** 이후 진행은 날짜별 파일로 분산되어 있습니다 — 최신순:
+> - [`docs/PROGRESS_2026-06-02.md`](../PROGRESS_2026-06-02.md) — LS 승인→유닛이코노믹스→가격개정→**결제 라이브**
+> - [`docs/PROGRESS_2026-05-31.md`](../PROGRESS_2026-05-31.md) — US 종목 분석 지원 + LS 온보딩 회신
+> - [`docs/PROGRESS_2026-05-26-27_KIS.md`](../PROGRESS_2026-05-26-27_KIS.md) — KIS Phase 0~3 + UI 풀스택
+> - main 머지·prod 라이브(axislytics.com) 완료 — Axis는 더 이상 `feature/axis-ai-layer` 분리 운영이 아님(main 단일 운영).
+
 > **브랜치**: `feature/axis-ai-layer` (main의 v7.5와 분리 운영)
 > **현재 위치**: Week 6 종료 / 베타 런칭 준비 완료 (사용자 액션만 남음)
 > **누적 커밋**: 19건 + Week 6 5일치 작업 (1 커밋 예정)
