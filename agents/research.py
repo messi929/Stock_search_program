@@ -238,11 +238,14 @@ class ResearchAgent(BaseAgent):
         # 3) 매크로 이벤트
         context["macro_events"] = _load_macro_events()
 
-        # 4) 뉴스 — 향후 Naver RSS 추가 (Week 2 후반)
-        context["news_stub"] = (
-            "뉴스 데이터 소스는 Week 2 후반 추가 예정. "
-            "지금은 Claude의 일반 시장 지식과 컨텍스트로 추론하세요."
-        )
+        # 4) 뉴스 — 공식 RSS 경제 헤드라인 (시황 보강, TTL 캐시)
+        try:
+            from utils.news_rss import fetch_market_news
+
+            context["news"] = fetch_market_news(limit=8)
+        except Exception as e:
+            logger.debug(f"뉴스 로드 실패: {e}")
+            context["news"] = []
 
         return context
 
@@ -312,7 +315,16 @@ class ResearchAgent(BaseAgent):
                     f"(영향: {ev.get('impact', 'unknown')})"
                 )
 
-        lines.append(f"\n# 뉴스 안내\n{context.get('news_stub', '')}")
+        news = context.get("news") or []
+        if news:
+            lines.append("\n# 최근 경제 뉴스 (공식 RSS — 시황 참고용 헤드라인)")
+            for n in news[:8]:
+                lines.append(f"- [{n.get('source', '')}] {n.get('headline', '')}")
+        else:
+            lines.append(
+                "\n# 뉴스 안내\n현재 수집된 뉴스 헤드라인이 없습니다. "
+                "일반 시장 지식과 위 컨텍스트로 추론하세요."
+            )
 
         lines.append(
             "\n# 출력\n위 컨텍스트를 바탕으로 시스템 프롬프트의 JSON 스키마에 정확히 맞춰 응답하세요. "
