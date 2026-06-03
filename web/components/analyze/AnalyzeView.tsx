@@ -14,7 +14,6 @@
  *  - 데이터 페르소나 (event/macro/korean): start → {persona}_complete → complete
  */
 import Link from "next/link";
-import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { AddToWatchlistButton } from "@/components/analyze/AddToWatchlistButton";
@@ -39,55 +38,30 @@ import { Card, CardContent } from "@/components/ui/card";
 import { useKisPrice } from "@/hooks/useKisPrice";
 import { useStockSearch } from "@/hooks/useStockSearch";
 import { useUserProfile } from "@/hooks/useUserProfile";
-import { apiStream, APIError } from "@/lib/api";
+import {
+  useAnalysisStore,
+  type DataDriven,
+  type DataDrivenStatus,
+  type StrategistFlow,
+  type StrategistStatus,
+} from "@/store/analysisStore";
 import { usePersonaStore } from "@/store/personaStore";
-import type {
-  AnalystResult,
-  EventAnalystResult,
-  KoreanSpecialistResult,
-  MacroPmResult,
-  ResearchResult,
-  StrategistResult,
-  ValidatorResult,
-} from "@/types/api";
-import { isStrategistPersona, PERSONA_BY_ID, type PersonaId } from "@/types/persona";
+import { PERSONA_BY_ID, type PersonaId } from "@/types/persona";
 
-type AgentStatus = "pending" | "running" | "done" | "error";
-
-type StrategistFlowState = {
-  research: ResearchResult | null;
-  analyst: AnalystResult | null;
-  validator: ValidatorResult | null;
-  strategist: StrategistResult | null;
+const EMPTY_FLOW: StrategistFlow = {
+  research: null,
+  analyst: null,
+  validator: null,
+  strategist: null,
 };
-
-type StrategistFlowStatus = {
-  research: AgentStatus;
-  analyst: AgentStatus;
-  validator: AgentStatus;
-  strategist: AgentStatus;
-};
-
-type DataDrivenState = {
-  event: EventAnalystResult | null;
-  macro: MacroPmResult | null;
-  korean: KoreanSpecialistResult | null;
-};
-
-type DataDrivenStatus = {
-  event: AgentStatus;
-  macro: AgentStatus;
-  korean: AgentStatus;
-};
-
-const initialStrategistStatus: StrategistFlowStatus = {
+const PENDING_STRATEGIST: StrategistStatus = {
   research: "pending",
   analyst: "pending",
   validator: "pending",
   strategist: "pending",
 };
-
-const initialDataDrivenStatus: DataDrivenStatus = {
+const EMPTY_DATA: DataDriven = { event: null, macro: null, korean: null };
+const PENDING_DATA: DataDrivenStatus = {
   event: "pending",
   macro: "pending",
   korean: "pending",
@@ -98,9 +72,15 @@ export function AnalyzeView({ ticker }: { ticker: string }) {
   const setStorePersona = usePersonaStore((s) => s.setPersona);
   const { profile } = useUserProfile();
 
-  // runPersona: 실제로 실행할 페르소나. null이면 미선택 → 선택 화면 표시(자동 실행 X).
-  const [runPersona, setRunPersona] = useState<PersonaId | null>(null);
-  const isStrategist = runPersona ? isStrategistPersona(runPersona) : false;
+  // 분석 상태는 전역 store에 보관 — 화면을 떠나도 SSE가 백그라운드로 계속 진행되고
+  // 재진입 시 그대로 복원된다(언마운트로 중단하지 않음). key=ticker.
+  const run = useAnalysisStore((s) => s.runs[ticker.toUpperCase()]);
+  const startRun = useAnalysisStore((s) => s.start);
+  const setValidatorInStore = useAnalysisStore((s) => s.setValidator);
+
+  // runPersona: 실행 중/완료된 페르소나. null이면 미선택 → 선택 화면 표시(자동 실행 X).
+  const runPersona = run?.persona ?? null;
+  const isStrategist = run?.isStrategist ?? false;
 
   // 분석이 끝나기 전(~10s)에도 종목명·현재가를 노출 — Analyst가 채워주기 전 fallback.
   // 데이터 페르소나 흐름(이벤트/매크로/한국)은 Analyst를 안 돌리므로 이 fallback이 영구.
@@ -120,77 +100,20 @@ export function AnalyzeView({ ticker }: { ticker: string }) {
     ? Number(kisPriceData.data.prdy_ctrt)
     : null;
 
-  // Strategist 흐름 상태
-  const [strategistFlow, setStrategistFlow] = useState<StrategistFlowState>({
-    research: null,
-    analyst: null,
-    validator: null,
-    strategist: null,
-  });
-  const [strategistStatus, setStrategistStatus] = useState<StrategistFlowStatus>(
-    initialStrategistStatus,
-  );
+  // store run에서 파생 (run 없으면 빈/대기 fallback — 선택 화면 단계).
+  const strategistFlow = run?.strategistFlow ?? EMPTY_FLOW;
+  const strategistStatus = run?.strategistStatus ?? PENDING_STRATEGIST;
+  const dataDriven = run?.dataDriven ?? EMPTY_DATA;
+  const dataDrivenStatus = run?.dataDrivenStatus ?? PENDING_DATA;
+  const overallElapsed = run?.elapsed ?? null;
+  const likelyCached = run?.likelyCached ?? false;
+  const runError = run?.error ?? null;
+  // 한도/잠금 에러 시 업그레이드 CTA 링크 (백엔드 upgrade_url; Pro 공정사용 한도는 null)
+  const runUpgradeUrl = run?.upgradeUrl ?? null;
 
-  // 데이터 페르소나 상태
-  const [dataDriven, setDataDriven] = useState<DataDrivenState>({
-    event: null,
-    macro: null,
-    korean: null,
-  });
-  const [dataDrivenStatus, setDataDrivenStatus] = useState<DataDrivenStatus>(
-    initialDataDrivenStatus,
-  );
-
-  const [overallElapsed, setOverallElapsed] = useState<number | null>(null);
-  const [likelyCached, setLikelyCached] = useState<boolean>(false);
-  const [runError, setRunError] = useState<string | null>(null);
-  // 한도/잠금 에러 시 업그레이드 CTA를 띄울 링크 (백엔드 upgrade_url; Pro 공정사용 한도는 null)
-  const [runUpgradeUrl, setRunUpgradeUrl] = useState<string | null>(null);
-  const abortRef = useRef<AbortController | null>(null);
-
-  // 종목이 바뀌면 선택 화면으로 되돌림(의도적 재선택 + 자동 실행 방지).
-  useEffect(() => {
-    setRunPersona(null);
-  }, [ticker]);
-
-  useEffect(() => {
-    // 페르소나 미선택 시 실행하지 않음(과금 방지).
-    if (!runPersona) return;
-
-    const ac = new AbortController();
-    abortRef.current?.abort();
-    abortRef.current = ac;
-    const runStrategist = isStrategistPersona(runPersona);
-
-    // reset
-    setStrategistFlow({
-      research: null,
-      analyst: null,
-      validator: null,
-      strategist: null,
-    });
-    setDataDriven({ event: null, macro: null, korean: null });
-    setOverallElapsed(null);
-    setRunError(null);
-    setRunUpgradeUrl(null);
-
-    if (runStrategist) {
-      setStrategistStatus({
-        research: "running",
-        analyst: "running",
-        validator: "pending",
-        strategist: "pending",
-      });
-      setDataDrivenStatus(initialDataDrivenStatus);
-    } else {
-      setStrategistStatus(initialStrategistStatus);
-      setDataDrivenStatus({
-        event: runPersona === "event" ? "running" : "pending",
-        macro: runPersona === "macro" ? "running" : "pending",
-        korean: runPersona === "korean" ? "running" : "pending",
-      });
-    }
-
+  // 분석 시작(chooser → 의도적 1회) — store가 SSE를 백그라운드로 실행. 확인 없음.
+  const startAnalysis = (id: PersonaId) => {
+    setStorePersona(id);
     const userProfile = profile
       ? {
           investing_experience: profile.investing_experience,
@@ -200,144 +123,7 @@ export function AnalyzeView({ ticker }: { ticker: string }) {
           investment_principles: profile.investment_principles,
         }
       : null;
-
-    apiStream(
-      "/api/ai/analyze",
-      {
-        ticker,
-        query: `${ticker} 분석`,
-        persona: runPersona,
-        stream: true,
-        user_profile: userProfile,
-      },
-      (event, data) => {
-        const payload = data as {
-          result?: unknown;
-          total_elapsed?: number;
-          likely_cached?: boolean;
-          message?: string;
-        };
-
-        switch (event) {
-          case "start":
-            break;
-
-          // Strategist 흐름
-          case "research_complete":
-            setStrategistFlow((s) => ({
-              ...s,
-              research: payload.result as ResearchResult,
-            }));
-            setStrategistStatus((s) => ({
-              ...s,
-              research: "done",
-              validator: "running",
-            }));
-            break;
-          case "analyst_complete":
-            setStrategistFlow((s) => ({
-              ...s,
-              analyst: payload.result as AnalystResult,
-            }));
-            setStrategistStatus((s) => ({
-              ...s,
-              analyst: "done",
-              validator: "running",
-            }));
-            break;
-          case "validator_complete":
-            setStrategistFlow((s) => ({
-              ...s,
-              validator: payload.result as ValidatorResult,
-            }));
-            setStrategistStatus((s) => ({
-              ...s,
-              validator: "done",
-              strategist: "running",
-            }));
-            break;
-          case "strategist_complete":
-            setStrategistFlow((s) => ({
-              ...s,
-              strategist: payload.result as StrategistResult,
-            }));
-            setStrategistStatus((s) => ({ ...s, strategist: "done" }));
-            break;
-
-          // 데이터 페르소나
-          case "event_complete":
-            setDataDriven((s) => ({
-              ...s,
-              event: payload.result as EventAnalystResult,
-            }));
-            setDataDrivenStatus((s) => ({ ...s, event: "done" }));
-            break;
-          case "macro_complete":
-            setDataDriven((s) => ({
-              ...s,
-              macro: payload.result as MacroPmResult,
-            }));
-            setDataDrivenStatus((s) => ({ ...s, macro: "done" }));
-            break;
-          case "korean_complete":
-            setDataDriven((s) => ({
-              ...s,
-              korean: payload.result as KoreanSpecialistResult,
-            }));
-            setDataDrivenStatus((s) => ({ ...s, korean: "done" }));
-            break;
-
-          case "complete":
-            if (typeof payload.total_elapsed === "number") {
-              setOverallElapsed(payload.total_elapsed);
-            }
-            if (typeof payload.likely_cached === "boolean") {
-              setLikelyCached(payload.likely_cached);
-            }
-            break;
-          case "error":
-            setRunError(payload.message ?? "분석 중 오류");
-            toast.error(payload.message ?? "분석 중 오류");
-            break;
-        }
-      },
-      ac.signal,
-    ).catch((err: unknown) => {
-      if (err instanceof DOMException && err.name === "AbortError") return;
-      const msg =
-        err instanceof APIError
-          ? err.message
-          : err instanceof Error
-            ? err.message
-            : "분석 실패";
-      setRunError(msg);
-      // 월 한도 초과(QUOTA_EXCEEDED)/Pro 페르소나 잠금(PERSONA_LOCKED) → 업그레이드 CTA.
-      // 백엔드가 Free엔 "/pricing", Pro 공정사용 한도엔 null을 보냄.
-      setRunUpgradeUrl(err instanceof APIError ? (err.upgradeUrl ?? null) : null);
-      toast.error(msg);
-      if (runStrategist) {
-        setStrategistStatus({
-          research: "error",
-          analyst: "error",
-          validator: "error",
-          strategist: "error",
-        });
-      } else {
-        setDataDrivenStatus({
-          event: runPersona === "event" ? "error" : "pending",
-          macro: runPersona === "macro" ? "error" : "pending",
-          korean: runPersona === "korean" ? "error" : "pending",
-        });
-      }
-    });
-
-    return () => ac.abort();
-  }, [ticker, runPersona, profile]);
-
-  // 분석 시작(chooser → 의도적 1회) — store 기억 + 실행 트리거. 확인 없음.
-  const startAnalysis = (id: PersonaId) => {
-    setStorePersona(id);
-    setRunPersona(id);
+    startRun(ticker, id, userProfile);
   };
 
   // 분석 결과 공유 — 현재 URL 클립보드 복사 + 토스트.
@@ -460,9 +246,7 @@ export function AnalyzeView({ ticker }: { ticker: string }) {
               ticker={ticker}
               research={strategistFlow.research}
               analyst={strategistFlow.analyst}
-              onResult={(v) =>
-                setStrategistFlow((s) => ({ ...s, validator: v }))
-              }
+              onResult={(v) => setValidatorInStore(ticker, v)}
             />
             <SaveEntryPointsButton
               ticker={ticker}
