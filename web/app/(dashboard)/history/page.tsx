@@ -62,8 +62,9 @@ function HistoryItemRow({ it }: { it: HistoryItem }) {
     >
       <span className="flex items-center gap-2 min-w-0">
         <span className="shrink-0">{kindIcon}</span>
-        <span className="font-mono font-medium">{it.ticker}</span>
-        {persona ? <span className="text-sm text-muted-foreground truncate">· {persona}</span> : null}
+        {it.name ? <span className="font-medium truncate">{it.name}</span> : null}
+        <span className="font-mono text-sm text-muted-foreground shrink-0">{it.ticker}</span>
+        {persona ? <span className="text-xs text-muted-foreground truncate hidden sm:inline">· {persona}</span> : null}
       </span>
       <span className="text-xs text-muted-foreground shrink-0 tabular-nums">{at}</span>
     </Link>

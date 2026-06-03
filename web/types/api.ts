@@ -491,6 +491,7 @@ export type HistoryKind = "analysis" | "validation" | "discovery";
 export type HistoryItem = {
   kind: HistoryKind;
   ticker: string;
+  name: string; // 종목명 (백엔드 snapshot 조인)
   persona: string;
   query: string;
   at: string; // ISO8601

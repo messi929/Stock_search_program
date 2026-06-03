@@ -783,14 +783,34 @@ async def get_history(request: Request, limit: int = 40):
             .limit(max(1, min(limit, 100)))
             .stream()
         )
+        raw = list(docs)
+
+        # 종목명 매핑 — screener snapshot에서 일괄 조회(ticker → name).
+        name_map: dict[str, str] = {}
+        try:
+            from screener.api.routes import _get_combined_df
+
+            df = _get_combined_df()
+            if df is not None and not df.empty:
+                want = {((d.to_dict() or {}).get("ticker") or "").upper() for d in raw}
+                want.discard("")
+                if want:
+                    sub = df[df["ticker"].astype(str).str.upper().isin(want)]
+                    for _, r in sub.iterrows():
+                        name_map[str(r.get("ticker", "")).upper()] = str(r.get("name", "") or "")
+        except Exception as e:
+            logger.debug(f"[history] 종목명 매핑 실패: {e}")
+
         items = []
-        for d in docs:
+        for d in raw:
             x = d.to_dict() or {}
             ca = x.get("created_at")
+            tk = (x.get("ticker", "") or "").upper()
             items.append(
                 {
                     "kind": x.get("kind", ""),
-                    "ticker": x.get("ticker", ""),
+                    "ticker": tk,
+                    "name": name_map.get(tk, ""),
                     "persona": x.get("persona", ""),
                     "query": x.get("query", ""),
                     "at": ca.isoformat() if hasattr(ca, "isoformat") else "",

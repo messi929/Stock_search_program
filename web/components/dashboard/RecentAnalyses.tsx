@@ -51,10 +51,15 @@ export function RecentAnalyses() {
                 <CardContent className="p-3 flex items-center gap-3">
                   <span className="text-lg shrink-0">{persona?.icon ?? "📊"}</span>
                   <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-1.5">
-                      <span className="font-mono font-medium">{r.ticker}</span>
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      {r.name ? (
+                        <span className="font-medium truncate">{r.name}</span>
+                      ) : null}
+                      <span className="font-mono text-xs text-muted-foreground shrink-0">
+                        {r.ticker}
+                      </span>
                       {isRunning && (
-                        <span className="text-[10px] text-amber-600 inline-flex items-center gap-0.5">
+                        <span className="text-[10px] text-amber-600 inline-flex items-center gap-0.5 shrink-0">
                           <span className="inline-block animate-spin">⏳</span>진행중
                         </span>
                       )}

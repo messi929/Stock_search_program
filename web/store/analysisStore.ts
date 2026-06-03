@@ -88,6 +88,7 @@ const PENDING_STRATEGIST_STATUS: StrategistStatus = {
 /** 최근 분석 이력 항목 — localStorage 영속(가벼운 메타만). */
 export interface RecentAnalysis {
   ticker: string;
+  name?: string; // 종목명 (분석 시작 시점에 알면 저장)
   persona: PersonaId;
   at: number; // epoch ms
 }
@@ -97,7 +98,7 @@ interface AnalysisStore {
   /** 최근 분석한 종목(최신순, 최대 8). 새로고침 후에도 유지(persist). */
   recents: RecentAnalysis[];
   /** 분석 시작(또는 페르소나 전환 재실행). 컴포넌트 언마운트와 무관하게 진행. */
-  start: (ticker: string, persona: PersonaId, userProfile: unknown) => void;
+  start: (ticker: string, persona: PersonaId, userProfile: unknown, name?: string) => void;
   /** ValidateButton 단독 재검증 결과를 run에 반영. */
   setValidator: (ticker: string, validator: ValidatorResult) => void;
 }
@@ -111,7 +112,7 @@ export const useAnalysisStore = create<AnalysisStore>()(
   runs: {},
   recents: [],
 
-  start: (ticker, persona, userProfile) => {
+  start: (ticker, persona, userProfile, name = "") => {
     const key = ticker.toUpperCase();
     // 같은 종목의 진행 중 스트림이 있으면 중단(페르소나 전환 등).
     controllers.get(key)?.abort();
@@ -144,7 +145,7 @@ export const useAnalysisStore = create<AnalysisStore>()(
       runs: { ...s.runs, [key]: initialRun },
       // 최근 분석 이력 갱신(같은 종목은 최신으로 끌어올림, 최대 8).
       recents: [
-        { ticker: key, persona, at: Date.now() },
+        { ticker: key, name: name || undefined, persona, at: Date.now() },
         ...s.recents.filter((r) => r.ticker !== key),
       ].slice(0, 8),
     }));

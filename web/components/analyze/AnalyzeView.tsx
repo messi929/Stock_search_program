@@ -123,7 +123,7 @@ export function AnalyzeView({ ticker }: { ticker: string }) {
           investment_principles: profile.investment_principles,
         }
       : null;
-    startRun(ticker, id, userProfile);
+    startRun(ticker, id, userProfile, earlyName ?? "");
   };
 
   // 분석 결과 공유 — 현재 URL 클립보드 복사 + 토스트.
