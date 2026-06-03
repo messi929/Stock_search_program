@@ -157,8 +157,16 @@ export function UsageCard() {
                   {isOpen && (
                     <div className="border-t px-3 py-2">
                       {items.length === 0 ? (
-                        <p className="text-xs text-muted-foreground py-1">
-                          아직 기록이 없습니다.
+                        <p className="text-xs text-muted-foreground py-1.5 leading-relaxed">
+                          {data.usage[m.key].used > 0 ? (
+                            <>
+                              이 기능 도입(6/3) 이전 분석은 내역에 표시되지 않아요.
+                              <br />
+                              이후 분석부터 종목·일자가 기록됩니다.
+                            </>
+                          ) : (
+                            "아직 분석 내역이 없습니다."
+                          )}
                         </p>
                       ) : (
                         <div className="divide-y divide-border/50">
