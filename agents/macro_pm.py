@@ -273,14 +273,31 @@ class MacroPmAgent(BaseAgent):
         }
 
     def _load_macro_inputs(self, country: str) -> dict[str, Any]:
-        """Firestore macro_indicators에서 cycle_detector REQUIRED_INPUTS 로드.
+        """Firestore macro_indicators에서 cycle_detector 입력 로드.
 
-        하위 호환을 위해 지표가 없으면 inputs를 빈 dict로 반환 (cycle_detector가 ValueError).
+        jobs.monthly_regime_calc.build_cycle_inputs를 재사용 — macro_indicators의
+        indicator_key를 cycle_detector REQUIRED_INPUTS로 매핑하고 3m/12m 전 값까지
+        구성한다. 지표가 부족하면 누락 필드는 0.0 fallback(+ missing 로그)되어 사이클
+        신뢰도가 낮게 나온다. Firestore 미접근/오류 시 빈 dict(→ "데이터 누적 중").
         본 메서드는 단위 테스트에서 mock 권장.
         """
-        # 운영 시 Firestore 조회 — 실제 구현은 단위 테스트 외부에서 통합.
-        # 여기서는 lazy 구현: Firestore 미접근 환경에서는 즉시 빈 dict.
-        return {}
+        try:
+            from jobs.monthly_regime_calc import build_cycle_inputs
+
+            from screener.db.firebase_client import get_db
+
+            inputs, missing = build_cycle_inputs(get_db(), country)
+            if missing:
+                logger.info(
+                    f"[macro_pm] 매크로 지표 {len(missing)}개 누락(0.0 fallback): "
+                    f"{missing[:6]}"
+                )
+            return inputs or {}
+        except Exception as e:
+            logger.warning(
+                f"[macro_pm] _load_macro_inputs 실패: {type(e).__name__}: {str(e)[:120]}"
+            )
+            return {}
 
     # ──────────────────────────────────────────
     # User message 구성
