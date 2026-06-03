@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect } from "react";
 
+import { AnalysisProgressBar } from "@/components/dashboard/AnalysisProgressBar";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
 import { useUserProfile } from "@/hooks/useUserProfile";
@@ -96,7 +97,11 @@ export default function DashboardLayout({
       </header>
 
       {/* pb-20: 모바일 fixed bottom nav(약 60px) + safe-area 여유. md+에선 사이드바라 0. */}
-      <main className="flex-1 p-4 md:p-6 pb-20 md:pb-6">{children}</main>
+      <main className="flex-1 p-4 md:p-6 pb-20 md:pb-6">
+        {/* 분석 진행중 전역 표시기 (running 있을 때만 노출) */}
+        <AnalysisProgressBar />
+        {children}
+      </main>
 
       {/* Mobile bottom nav — 항상 화면 하단 고정(긴 페이지에서도 노출). 5개 항목 + 활성 표시 + iOS safe-area. */}
       <nav

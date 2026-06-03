@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
 
 import { MarketStatus } from "@/components/dashboard/MarketStatus";
+import { RecentAnalyses } from "@/components/dashboard/RecentAnalyses";
 import { UsageCard } from "@/components/dashboard/UsageCard";
 import { WatchlistPreview } from "@/components/dashboard/WatchlistPreview";
 import { Disclaimer } from "@/components/legal/Disclaimer";
@@ -60,6 +61,9 @@ export default function DashboardHome() {
 
       {/* Watchlist preview */}
       <WatchlistPreview />
+
+      {/* 최근 분석한 종목 (localStorage 영속) */}
+      <RecentAnalyses />
 
       {/* AI 사용량 (월 한도) */}
       <UsageCard />

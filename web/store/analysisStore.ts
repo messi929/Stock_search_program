@@ -13,6 +13,7 @@
  * 덮어쓰며 이전 스트림은 abort.
  */
 import { create } from "zustand";
+import { persist } from "zustand/middleware";
 import { toast } from "sonner";
 
 import { apiStream, APIError } from "@/lib/api";
@@ -84,8 +85,17 @@ const PENDING_STRATEGIST_STATUS: StrategistStatus = {
   strategist: "pending",
 };
 
+/** 최근 분석 이력 항목 — localStorage 영속(가벼운 메타만). */
+export interface RecentAnalysis {
+  ticker: string;
+  persona: PersonaId;
+  at: number; // epoch ms
+}
+
 interface AnalysisStore {
   runs: Record<string, AnalysisRun>;
+  /** 최근 분석한 종목(최신순, 최대 8). 새로고침 후에도 유지(persist). */
+  recents: RecentAnalysis[];
   /** 분석 시작(또는 페르소나 전환 재실행). 컴포넌트 언마운트와 무관하게 진행. */
   start: (ticker: string, persona: PersonaId, userProfile: unknown) => void;
   /** ValidateButton 단독 재검증 결과를 run에 반영. */
@@ -95,8 +105,11 @@ interface AnalysisStore {
 // AbortController는 직렬화·렌더와 무관하므로 store state 밖 모듈 레벨에 보관.
 const controllers = new Map<string, AbortController>();
 
-export const useAnalysisStore = create<AnalysisStore>((set, get) => ({
+export const useAnalysisStore = create<AnalysisStore>()(
+  persist(
+    (set, get) => ({
   runs: {},
+  recents: [],
 
   start: (ticker, persona, userProfile) => {
     const key = ticker.toUpperCase();
@@ -127,7 +140,14 @@ export const useAnalysisStore = create<AnalysisStore>((set, get) => ({
       error: null,
       upgradeUrl: null,
     };
-    set((s) => ({ runs: { ...s.runs, [key]: initialRun } }));
+    set((s) => ({
+      runs: { ...s.runs, [key]: initialRun },
+      // 최근 분석 이력 갱신(같은 종목은 최신으로 끌어올림, 최대 8).
+      recents: [
+        { ticker: key, persona, at: Date.now() },
+        ...s.recents.filter((r) => r.ticker !== key),
+      ].slice(0, 8),
+    }));
 
     // run을 부분 갱신 (이미 다른 종목으로 덮어써졌으면 무시).
     const patch = (fn: (r: AnalysisRun) => AnalysisRun) => {
@@ -259,4 +279,12 @@ export const useAnalysisStore = create<AnalysisStore>((set, get) => ({
       },
     }));
   },
-}));
+    }),
+    {
+      name: "axis:analysis",
+      version: 1,
+      // runs/AbortController는 직렬화 불가·새로고침 시 좀비 → recents만 영속.
+      partialize: (s) => ({ recents: s.recents }),
+    },
+  ),
+);
