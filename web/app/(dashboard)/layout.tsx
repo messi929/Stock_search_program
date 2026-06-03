@@ -51,7 +51,7 @@ export default function DashboardLayout({
     <div className="min-h-screen flex flex-col md:flex-row">
       {/* Sidebar (md+) */}
       <aside className="hidden md:flex flex-col w-56 border-r p-4 gap-1">
-        <Link href="/" className="text-xl font-bold mb-6 px-2">
+        <Link href="/dashboard" className="text-xl font-bold mb-6 px-2">
           Axis
         </Link>
         {NAV.map((item) => (
@@ -82,7 +82,7 @@ export default function DashboardLayout({
 
       {/* Mobile top bar */}
       <header className="md:hidden flex items-center justify-between px-4 py-3 border-b">
-        <Link href="/" className="text-lg font-bold">
+        <Link href="/dashboard" className="text-lg font-bold">
           Axis
         </Link>
         <Button

@@ -8,9 +8,19 @@
  */
 import Link from "next/link";
 
+import { HeroPreview } from "@/components/landing/HeroPreview";
+import { LandingRedirect } from "@/components/landing/LandingRedirect";
 import { Disclaimer } from "@/components/legal/Disclaimer";
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+
+// Hero 아래 신뢰 배지 — 한 줄에 차별점·정당성 압축
+const TRUST_BADGES = [
+  { icon: "🏦", label: "KIS 공식 OpenAPI 데이터" },
+  { icon: "🛡️", label: "추천 아님 · 정보 제공 도구" },
+  { icon: "🎭", label: "6가지 분석 관점" },
+  { icon: "🔍", label: "수치 실시간 재검증" },
+];
 
 const FEATURES = [
   {
@@ -65,9 +75,12 @@ const STEPS = [
 export default function Home() {
   return (
     <main className="flex-1">
+      {/* 로그인 상태면 대시보드로 직행 (랜딩은 비로그인 대상) */}
+      <LandingRedirect />
+
       {/* Sticky 상단 헤더 — 첫 방문자가 로고/로그인 즉시 발견 */}
       <header className="sticky top-0 z-40 w-full border-b bg-background/90 backdrop-blur">
-        <div className="max-w-5xl mx-auto px-6 h-14 flex items-center justify-between">
+        <div className="max-w-6xl mx-auto px-6 h-14 flex items-center justify-between">
           <Link href="/" className="text-lg font-bold tracking-tight">
             Axis
           </Link>
@@ -78,47 +91,64 @@ export default function Home() {
             >
               요금제
             </Link>
-            <Link
-              href="/login"
-              className={buttonVariants({ size: "sm" })}
-            >
+            <Link href="/login" className={buttonVariants({ size: "sm" })}>
               로그인
             </Link>
           </nav>
         </div>
       </header>
 
-      {/* Hero */}
-      <section className="px-6 py-20 max-w-5xl mx-auto text-center">
-        <h1 className="text-4xl md:text-6xl font-bold tracking-tight">
-          유튜버 말고,
-          <br />
-          <span className="text-amber-500">AI 애널리스트</span>와 함께
-        </h1>
-        <p className="mt-6 text-lg text-muted-foreground max-w-2xl mx-auto">
-          리스크를 먼저 따집니다. 성장을 발굴합니다. 가치를 찾습니다. 같은
-          종목을 6가지 원칙으로 분석합니다.
-        </p>
-        <p className="mt-2 text-base text-muted-foreground">
-          1~5년차 투자자를 위한 AI 분석 파트너 — 정보 제공 도구입니다.
-        </p>
-        <div className="mt-10 flex flex-col sm:flex-row justify-center gap-3">
-          <Link
-            href="/login"
-            className={buttonVariants({ size: "lg" })}
-          >
-            🚀 무료로 시작하기
-          </Link>
-          <Link
-            href="/pricing"
-            className={buttonVariants({ size: "lg", variant: "outline" })}
-          >
-            요금제 보기
-          </Link>
+      {/* Hero — 좌측 카피/CTA + 우측 제품 미리보기 (2단) */}
+      <section className="px-6 pt-16 pb-10 max-w-6xl mx-auto">
+        <div className="grid lg:grid-cols-2 gap-10 lg:gap-12 items-center">
+          {/* 좌: 카피 + CTA */}
+          <div className="text-center lg:text-left">
+            <span className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1 rounded-full border bg-muted/50 text-muted-foreground">
+              ⚡ 1~5년차 투자자를 위한 AI 분석 파트너
+            </span>
+            <h1 className="mt-5 text-4xl md:text-5xl xl:text-6xl font-bold tracking-tight leading-[1.1]">
+              유튜버 말고,
+              <br />
+              <span className="text-amber-500">AI 애널리스트</span>와 함께
+            </h1>
+            <p className="mt-5 text-lg text-muted-foreground max-w-xl mx-auto lg:mx-0 leading-relaxed">
+              리스크를 먼저 따지고, 성장을 발굴하고, 가치를 찾습니다. 같은 종목을
+              6가지 원칙으로 분석하고, 모든 수치는 실시간으로 재검증합니다.
+            </p>
+            <div className="mt-8 flex flex-col sm:flex-row justify-center lg:justify-start gap-3">
+              <Link href="/login" className={buttonVariants({ size: "lg" })}>
+                🚀 무료로 시작하기
+              </Link>
+              <Link
+                href="/pricing"
+                className={buttonVariants({ size: "lg", variant: "outline" })}
+              >
+                요금제 보기
+              </Link>
+            </div>
+            <p className="mt-4 text-xs text-muted-foreground">
+              Google·카카오 30초 가입 · 신용카드 불필요 · Free 플랜 즉시 사용
+            </p>
+          </div>
+
+          {/* 우: 제품 미리보기 목업 */}
+          <div className="lg:pl-4">
+            <HeroPreview />
+          </div>
         </div>
-        <p className="mt-4 text-xs text-muted-foreground">
-          Google 계정으로 30초 가입 · 신용카드 불필요 · Free 플랜 즉시 사용
-        </p>
+
+        {/* 신뢰 배지 바 */}
+        <div className="mt-14 flex flex-wrap justify-center gap-x-6 gap-y-2">
+          {TRUST_BADGES.map((b) => (
+            <span
+              key={b.label}
+              className="inline-flex items-center gap-1.5 text-sm text-muted-foreground"
+            >
+              <span>{b.icon}</span>
+              {b.label}
+            </span>
+          ))}
+        </div>
       </section>
 
       {/* 3단계로 시작 — 처음 방문자가 '뭘 해야할지' 한눈에 */}
