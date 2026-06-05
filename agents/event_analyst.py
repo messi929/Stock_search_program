@@ -45,23 +45,26 @@ class EventAnalystInput(BaseModel):
 
 
 class CertaintyBreakdown(BaseModel):
-    source: float
+    # 모든 필드 default 제공 — Claude가 일부 누락해도 검증 실패 대신 사후 보정(run에서
+    # final_score·mode 재계산). 거대 중첩 스키마라 누락이 잦음(prod 확인 2026-06-06).
+    source: float = 0.0
     source_rationale: str = ""
-    timing: float
+    timing: float = 0.0
     timing_rationale: str = ""
-    probability: float
+    probability: float = 0.0
     probability_rationale: str = ""
-    impact: float
+    impact: float = 0.0
     impact_rationale: str = ""
-    final_score: float
-    mode: str  # "Full Analysis" | "Cautious" | "Probabilistic Only" | "Refused"
+    final_score: float = 0.0
+    mode: str = "Refused"  # "Full Analysis" | "Cautious" | "Probabilistic Only" | "Refused"
 
 
 class EventSummary(BaseModel):
-    event_type: str
-    event_target: str
+    # event_type/event_target은 입력에서 강제 보정되므로 default 제공(검증 실패 회피).
+    event_type: str = ""
+    event_target: str = ""
     d_day: str = ""
-    certainty_breakdown: CertaintyBreakdown
+    certainty_breakdown: CertaintyBreakdown = Field(default_factory=CertaintyBreakdown)
     badge: str = ""
 
 
@@ -135,7 +138,9 @@ class EventAnalystResult(BaseModel):
     # ticker/market은 입력에서 강제 보정되므로 default 제공 (Claude 누락 시 검증 실패 회피).
     ticker: str = ""
     market: str = ""
-    event_summary: EventSummary
+    # default_factory — Claude가 event_summary를 통째로/부분 누락해도 hard-fail 대신
+    # 사후 보정(event_type/target은 입력에서 채우고, 점수는 재계산). 다른 블록과 동일 패턴.
+    event_summary: EventSummary = Field(default_factory=EventSummary)
     impact_mapping: ImpactMapping = Field(default_factory=ImpactMapping)
     volume_supply_analysis: SignalBlock = Field(default_factory=SignalBlock)
     options_signals: SignalBlock = Field(default_factory=SignalBlock)
@@ -171,6 +176,13 @@ def check_event_completeness(result: EventAnalystResult) -> list[str]:
 
     if not result.summary_neutral.strip():
         missing.append("summary_neutral")
+
+    # event_summary 핵심 누락 — 기본값(빈 event_type + 전부 0점)으로 통과한 경우 재요청.
+    # (event_type은 run의 사후 보정 전이라 raw 모델값 기준으로 판정 가능)
+    es = result.event_summary
+    cb = es.certainty_breakdown
+    if not es.event_type.strip() and (cb.source + cb.timing + cb.probability + cb.impact) == 0:
+        missing.append("event_summary")
 
     sa = result.scenario_analysis
     if not any(
@@ -286,6 +298,15 @@ class EventAnalystAgent(BaseAgent):
         result.market = input_data.market or ("KR" if is_kr_ticker(input_data.ticker) else "US")
         result.persona = "event"
         result.timestamp = datetime.now(timezone.utc).isoformat()
+
+        # 5.5) event_summary 구조 필드 보정 — Claude 누락 시 입력에서 채움(검증 견고화)
+        es = result.event_summary
+        if not es.event_type:
+            es.event_type = input_data.event_type or "unknown"
+        if not es.event_target:
+            es.event_target = (
+                input_data.event_target or input_data.name or input_data.ticker
+            )
 
         # 6) 확실성 점수 → 모드/배지 강제 일관 (Claude가 부정확한 분기를 줄 수 있음)
         cb = result.event_summary.certainty_breakdown
