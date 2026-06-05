@@ -44,6 +44,10 @@ assets/
 # 임시 출력
 ERROR
 
+# eval 결과 (재생성 가능한 산출물 — 전체 출력 덤프 포함)
+evals/results/
+tests/regression/results/
+
 # Frontend
 web/node_modules/
 web/.next/

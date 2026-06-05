@@ -111,6 +111,7 @@ class ClaudeClient:
         temperature: float = 1.0,
         uid: str = "",
         skip_cache: bool = False,
+        thinking_budget: int = 0,
     ) -> dict:
         """Claude 호출.
 
@@ -119,16 +120,24 @@ class ClaudeClient:
             model: MODEL_HAIKU / MODEL_SONNET / MODEL_OPUS
             system: 시스템 프롬프트 (cache_control 자동 적용)
             messages: [{"role": "user|assistant", "content": "..."}]
-            max_tokens: 응답 최대 토큰
-            temperature: 샘플링 온도
+            max_tokens: 응답(출력) 최대 토큰. thinking 사용 시 budget은 별도 가산.
+            temperature: 샘플링 온도 (thinking 활성 시 API가 1.0을 강제 → 자동 보정)
             uid: Firestore 비용 기록용 user uid (비어 있으면 익명)
             skip_cache: True면 응답 캐시 무시
+            thinking_budget: >0이면 Extended Thinking 활성화 (추론 토큰 예산).
+                복잡한 종합·검증에서 추론 품질↑. max_tokens와 별개로 가산되며,
+                temperature는 1.0으로 강제된다.
 
         Returns:
-            {"content": str, "usage": ClaudeUsage, "cached": bool, "stop_reason": str}
+            {"content": str, "usage": ClaudeUsage, "cached": bool, "stop_reason": str,
+             "thinking": str}
         """
+        use_thinking = thinking_budget and thinking_budget > 0
+
         # 1) 응답 캐시 조회 (L1 메모리 → L2 Firestore). Firestore I/O는 to_thread로 비블로킹.
-        cache_key = default_cache.make_key(model, system, messages)
+        #    thinking 예산을 키에 포함 — 켠/끈 응답이 서로의 캐시에 히트하지 않게.
+        key_extra = {"thinking": int(thinking_budget)} if use_thinking else None
+        cache_key = default_cache.make_key(model, system, messages, key_extra)
         if self.use_response_cache and not skip_cache:
             cached = await asyncio.to_thread(default_cache.get, cache_key)
             if cached is not None:
@@ -138,10 +147,29 @@ class ClaudeClient:
                     "usage": ClaudeUsage(**cached["usage"]),
                     "cached": True,
                     "stop_reason": cached.get("stop_reason"),
+                    "thinking": cached.get("thinking", ""),
                 }
 
         # 2) 시스템 프롬프트 — 1K+ 토큰일 때만 cache_control 적용 (Anthropic 최소 단위)
         system_param = self._build_system_param(system)
+
+        # 2.5) thinking 파라미터 + 토큰/온도 보정
+        create_kwargs: dict = {}
+        effective_max_tokens = max_tokens
+        effective_temperature = temperature
+        if use_thinking:
+            # extra_body로 주입 — SDK 버전 무관(0.43.0은 thinking 네이티브 kwarg 미지원,
+            # extra_body는 요청 body에 그대로 병합돼 동작. 응답 text 파싱도 정상 확인).
+            create_kwargs["extra_body"] = {
+                "thinking": {
+                    "type": "enabled",
+                    "budget_tokens": int(thinking_budget),
+                }
+            }
+            # max_tokens는 thinking + 출력 합계여야 하므로 budget을 가산
+            effective_max_tokens = max_tokens + int(thinking_budget)
+            # Extended Thinking은 temperature=1.0만 허용
+            effective_temperature = 1.0
 
         # 3) API 호출 (재시도 포함)
         client = self._get_client()
@@ -152,8 +180,9 @@ class ClaudeClient:
                     model=model,
                     system=system_param,
                     messages=messages,
-                    max_tokens=max_tokens,
-                    temperature=temperature,
+                    max_tokens=effective_max_tokens,
+                    temperature=effective_temperature,
+                    **create_kwargs,
                 )
                 break
             except Exception as e:
@@ -175,16 +204,27 @@ class ClaudeClient:
         else:
             raise ClaudeAPIError(f"최대 재시도({self.max_retries}) 후 실패: {last_err}") from last_err
 
-        # 4) 응답 파싱
+        # 4) 응답 파싱 — text 블록만 content로, thinking 블록은 별도 보관(디버깅/로깅용)
         content = "".join(
             block.text for block in response.content if getattr(block, "type", None) == "text"
         )
+        thinking_text = "".join(
+            getattr(block, "thinking", "") or ""
+            for block in response.content
+            if getattr(block, "type", None) == "thinking"
+        )
+        if use_thinking and thinking_text:
+            logger.debug(
+                f"[Claude:{agent}] thinking {len(thinking_text)}자 사용 "
+                f"(budget={thinking_budget})"
+            )
         usage = self._extract_usage(response)
         result = {
             "content": content,
             "usage": usage,
             "cached": False,
             "stop_reason": getattr(response, "stop_reason", None),
+            "thinking": thinking_text,
         }
 
         # 5) 비용 기록 (실패해도 결과에는 영향 X)
@@ -206,6 +246,8 @@ class ClaudeClient:
                     "cache_creation_tokens": usage.cache_creation_tokens,
                 },
                 "stop_reason": result["stop_reason"],
+                # thinking은 디버깅용 — 캐시 비대화 방지 위해 앞부분만 보관
+                "thinking": thinking_text[:2000] if thinking_text else "",
             }
             await asyncio.to_thread(default_cache.set, cache_key, cache_value)
 

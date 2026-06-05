@@ -13,6 +13,7 @@ metrics.py의 buy_grade는 이미 중립 구간 라벨("상위"/"준상위"/"중
 
 from __future__ import annotations
 
+import os
 import time
 from datetime import datetime, timezone
 from typing import Optional
@@ -183,6 +184,9 @@ _KR_CACHE_TTL_SEC = 600
 # market("kr"|"us") → {"df": DataFrame|None, "expires_at": float}
 _stock_cache: dict[str, dict] = {}
 
+# ④ 섹터 상대 밸류에이션 토글 (AXIS_SECTOR_STATS=0 → 종전 동작: 앵커 미주입).
+SECTOR_STATS_ENABLED = os.environ.get("AXIS_SECTOR_STATS", "1") != "0"
+
 
 def _market_of(ticker: str) -> str:
     """6자리 숫자면 KR, 그 외(알파벳)면 US."""
@@ -237,8 +241,9 @@ class AnalystAgent(BaseAgent):
     async def run(self, input_data: AnalystInput, uid: str = "") -> AnalystResult:
         stock_data = self._fetch_stock_data(input_data.ticker)
         peer_data = self._fetch_peers(stock_data) if input_data.include_peers else []
+        sector_stats = self._sector_stats(stock_data) if SECTOR_STATS_ENABLED else {}
 
-        user_message = self._build_user_message(stock_data, peer_data)
+        user_message = self._build_user_message(stock_data, peer_data, sector_stats)
         result, _raw = await self.call_claude_json(
             user_message=user_message,
             schema=AnalystResult,
@@ -334,6 +339,54 @@ class AnalystAgent(BaseAgent):
             "updated_at": _s("updated_at"),
         }
 
+    def _sector_stats(self, stock_data: dict) -> dict:
+        """같은 섹터 종목들의 밸류에이션 중앙값 + 대상 종목의 상대 위치.
+
+        ④ 컨텍스트 큐레이션 — "업종 평균"을 LLM이 추측(환각 위험)하지 않도록,
+        시장 스냅샷에서 섹터 중앙값을 결정론적으로 산출해 앵커로 주입한다.
+        valuation_judgment의 근거가 데이터에 고정된다.
+        """
+        sector = stock_data.get("sector", "")
+        if not sector:
+            return {}
+        df = _get_stocks_with_score(stock_data.get("ticker", ""))
+        if df.empty or "sector" not in df.columns:
+            return {}
+        try:
+            peers = df[df["sector"] == sector]
+            if len(peers) < 3:  # 표본 부족 시 중앙값 신뢰 어려움
+                return {}
+
+            def _median(col: str) -> Optional[float]:
+                if col not in peers.columns:
+                    return None
+                vals = pd.to_numeric(peers[col], errors="coerce")
+                vals = vals[vals > 0]  # PER<0(적자) 등 제외
+                return round(float(vals.median()), 2) if not vals.empty else None
+
+            def _pct_rank(col: str, value: float) -> Optional[int]:
+                """대상 값의 섹터 내 백분위 (낮을수록 저평가 — PER/PBR 기준)."""
+                if col not in peers.columns or not value or value <= 0:
+                    return None
+                vals = pd.to_numeric(peers[col], errors="coerce")
+                vals = vals[vals > 0]
+                if vals.empty:
+                    return None
+                return int(round((vals < value).mean() * 100))
+
+            return {
+                "sector": sector,
+                "count": int(len(peers)),
+                "median_per": _median("per"),
+                "median_pbr": _median("pbr"),
+                "median_roe": _median("roe"),
+                "per_pctile": _pct_rank("per", stock_data.get("per", 0)),
+                "pbr_pctile": _pct_rank("pbr", stock_data.get("pbr", 0)),
+            }
+        except Exception as e:
+            logger.warning(f"섹터 통계 산출 실패: {e}")
+            return {}
+
     def _fetch_peers(self, stock_data: dict) -> list[dict]:
         """동일 섹터 시총 상위 5종목 (자기 자신 제외)."""
         sector = stock_data.get("sector", "")
@@ -359,7 +412,7 @@ class AnalystAgent(BaseAgent):
     # User 메시지 구성
     # ──────────────────────────────────────────
 
-    def _build_user_message(self, s: dict, peers: list[dict]) -> str:
+    def _build_user_message(self, s: dict, peers: list[dict], sector_stats: dict | None = None) -> str:
         lines: list[str] = []
         lines.append(f"# 분석 대상\n{s['name']} ({s['ticker']})")
         if s.get("sector"):
@@ -395,6 +448,25 @@ class AnalystAgent(BaseAgent):
         lines.append(f"- 영업이익률: {s['operating_margin']:.2f}%")
         lines.append(f"- 순이익률: {s['profit_margin']:.2f}%")
         lines.append(f"- 부채비율(D/E): {s['debt_equity']:.2f}")
+
+        # ④ 섹터 상대 밸류에이션 — "업종 평균"의 데이터 앵커 (추측/환각 방지)
+        ss = sector_stats or {}
+        if ss.get("median_per") or ss.get("median_pbr"):
+            lines.append(f"\n# 섹터 상대 밸류에이션 ({ss.get('sector','')} {ss.get('count',0)}종목 기준)")
+            if ss.get("median_per"):
+                pr = ss.get("per_pctile")
+                pos = f" — 대상 PER {s['per']:.2f}는 섹터 하위 {pr}% 수준" if pr is not None else ""
+                lines.append(f"- 섹터 PER 중앙값: {ss['median_per']:.2f}{pos}")
+            if ss.get("median_pbr"):
+                pr = ss.get("pbr_pctile")
+                pos = f" — 대상 PBR {s['pbr']:.2f}는 섹터 하위 {pr}% 수준" if pr is not None else ""
+                lines.append(f"- 섹터 PBR 중앙값: {ss['median_pbr']:.2f}{pos}")
+            if ss.get("median_roe"):
+                lines.append(f"- 섹터 ROE 중앙값: {ss['median_roe']:.2f}%")
+            lines.append(
+                "  → valuation_judgment·peer_avg_per는 위 섹터 중앙값을 근거로 작성하고, "
+                "임의 수치를 만들지 마세요. (백분위가 낮을수록 저평가)"
+            )
 
         lines.append("\n# 종합 점수 (metrics.py 산출)")
         lines.append(f"- buy_score: {s['buy_score']:.1f} / 100")

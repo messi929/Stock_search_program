@@ -137,8 +137,12 @@ class BaseAgent(ABC):
         uid: str = "",
         prefill: str | None = None,
         system: str | None = None,
+        thinking_budget: int = 0,
     ) -> dict:
-        """Claude 호출 헬퍼. system override로 페르소나별 동적 프롬프트 가능."""
+        """Claude 호출 헬퍼. system override로 페르소나별 동적 프롬프트 가능.
+
+        thinking_budget>0이면 Extended Thinking 활성화 (복잡 추론 품질↑).
+        """
         messages: list[dict] = [{"role": "user", "content": user_message}]
         if prefill is not None:
             messages.append({"role": "assistant", "content": prefill})
@@ -151,6 +155,7 @@ class BaseAgent(ABC):
             max_tokens=max_tokens,
             temperature=temperature,
             uid=uid,
+            thinking_budget=thinking_budget,
         )
 
         # prefill이 있으면 응답 앞에 prefill 복원
@@ -167,6 +172,7 @@ class BaseAgent(ABC):
         max_retries: int = 1,
         system: str | None = None,
         completeness_check: Callable[[BaseModel], list[str]] | None = None,
+        thinking_budget: int = 0,
     ) -> tuple[BaseModel, dict]:
         """Claude 호출 + JSON 파싱 + Pydantic 검증.
 
@@ -200,6 +206,7 @@ class BaseAgent(ABC):
                 uid=uid,
                 prefill=None,
                 system=system,
+                thinking_budget=thinking_budget,
             )
             json_str = extract_json(result["content"])
 
