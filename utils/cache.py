@@ -61,13 +61,18 @@ class ResponseCache:
         self._collection = collection
 
     @staticmethod
-    def make_key(model: str, system: str, messages: list[dict]) -> str:
-        """캐시 키 생성. 동일 입력은 동일 SHA256 hex."""
-        payload = json.dumps(
-            {"model": model, "system": system, "messages": messages},
-            ensure_ascii=False,
-            sort_keys=True,
-        )
+    def make_key(
+        model: str, system: str, messages: list[dict], extra: dict | None = None
+    ) -> str:
+        """캐시 키 생성. 동일 입력은 동일 SHA256 hex.
+
+        extra: 호출 형태를 바꾸는 부가 파라미터(예: thinking_budget)를 키에 포함.
+        thinking을 켠 응답이 끈 응답의 캐시에 히트해 A/B가 오염되는 것을 방지.
+        """
+        body: dict = {"model": model, "system": system, "messages": messages}
+        if extra:
+            body["extra"] = extra
+        payload = json.dumps(body, ensure_ascii=False, sort_keys=True)
         return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
     def get(self, key: str) -> Any | None:

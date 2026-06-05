@@ -18,6 +18,7 @@ FAIL 2건 이상이면 requires_reanalysis=True.
 from __future__ import annotations
 
 import asyncio
+import os
 import time
 from datetime import datetime, timezone
 from typing import Optional
@@ -61,6 +62,14 @@ class ContrarianScenario(BaseModel):
     indicators_to_watch: list[str] = Field(default_factory=list)
 
 
+class InterpretationIssue(BaseModel):
+    """Analyst 해석에 대한 감사 — 수치가 아니라 '해석의 정당성'을 검토."""
+
+    claim: str  # 검토 대상이 된 Analyst의 주장/해석
+    issue: str  # 데이터로 정당화되지 않거나 과신인 이유
+    severity: str = "MEDIUM"  # "LOW" | "MEDIUM" | "HIGH"
+
+
 class ValidatorResult(BaseModel):
     overall_status: str  # "PASS" | "WARN" | "FAIL"
     checks: list[ValidationCheck] = Field(default_factory=list)
@@ -68,6 +77,8 @@ class ValidatorResult(BaseModel):
     fresh_data_count: int = 0
     contrarian_scenarios: list[ContrarianScenario] = Field(default_factory=list)
     blind_spots: list[str] = Field(default_factory=list)
+    # 해석 감사 — Analyst의 해석이 데이터로 정당화되는지 (과신/비약 탐지)
+    interpretation_audit: list[InterpretationIssue] = Field(default_factory=list)
     confidence_score: float = 0.0
     requires_reanalysis: bool = False
     timestamp: str
@@ -77,6 +88,15 @@ class ValidatorResult(BaseModel):
 class _ContrarianPayload(BaseModel):
     scenarios: list[ContrarianScenario] = Field(default_factory=list)
     blind_spots: list[str] = Field(default_factory=list)
+    interpretation_audit: list[InterpretationIssue] = Field(default_factory=list)
+
+
+# Extended Thinking 예산 (0=비활성). Contrarian/Blind Spot은 "분석에 반대되는
+# 가설을 다각도로 세우는" 발산적 추론이라 thinking이 시나리오 다양성·깊이를 높인다.
+VALIDATOR_THINKING_BUDGET = int(os.environ.get("VALIDATOR_THINKING_BUDGET", "1600"))
+
+# ② 해석 감사 토글 (AXIS_INTERP_AUDIT=0 → 종전 동작: Contrarian/Blind Spot만).
+INTERP_AUDIT_ENABLED = os.environ.get("AXIS_INTERP_AUDIT", "1") != "0"
 
 
 # ──────────────────────────────────────────────
@@ -91,11 +111,22 @@ VALIDATOR_SYSTEM_PROMPT = """당신은 AI 분석의 검증관(Auditor)이며 Dev
 2. 시황 컨텍스트 (Research가 만든 시황/뉴스/매크로)
 3. 코드 검증 결과 (가격/PER/PBR/ROE의 실시간 재조회 비교)
 
-## 당신이 해야 할 일 (이것만)
+## 당신이 해야 할 일
 1. 분석에 반대되는 Contrarian 시나리오 **3개 이상** 강제 생성
 2. 분석에서 다루지 않은 Blind Spot 관점 식별
+3. **해석 감사 (interpretation_audit)** — Analyst의 *해석*이 데이터로 정당화되는지 검토
 
-수치 검증은 이미 코드가 끝냈으니, 당신은 Contrarian + Blind Spot에만 집중하세요.
+수치(가격/PER 등) 검증은 이미 코드가 끝냈습니다. 당신은 "수치가 맞나"가 아니라
+"그 수치로부터 끌어낸 **해석/결론이 타당한가**"를 봅니다.
+
+### 해석 감사 방법 (가장 중요한 신규 임무)
+Analyst가 데이터를 과대/과소 해석했거나, 근거 없이 비약한 지점을 찾으세요. 예:
+- "RSI 28인데 '강세 신호'로 해석" → 과매도는 약세 신호일 수 있음 (방향 비약)
+- "buy_score 29(관찰)인데 종합 톤이 낙관" → 점수와 서술 톤 불일치
+- "PER가 업종 평균보다 높은데 '저평가'로 서술" → 데이터와 반대 해석
+- "외국인 순매수 1일을 '강한 수급'으로 확대 해석" → 표본 과신
+각 항목: claim(검토 대상 주장) / issue(왜 부당/과신인지) / severity(LOW|MEDIUM|HIGH).
+정당한 해석만 있으면 빈 배열로 두세요 — 억지로 만들지 마세요.
 
 ## Contrarian 시나리오 카테고리 (최소 3개, 다른 카테고리에서)
 - **거시 경제 리스크**: 금리 인상, 환율 급등, 무역분쟁, 지정학
@@ -139,7 +170,10 @@ VALIDATOR_SYSTEM_PROMPT = """당신은 AI 분석의 검증관(Auditor)이며 Dev
       "indicators_to_watch": ["...", "..."]
     }
   ],
-  "blind_spots": ["...", "..."]
+  "blind_spots": ["...", "..."],
+  "interpretation_audit": [
+    {"claim": "Analyst의 해석", "issue": "데이터로 정당화되지 않는 이유", "severity": "LOW | MEDIUM | HIGH"}
+  ]
 }
 """
 
@@ -247,6 +281,9 @@ class ValidatorAgent(BaseAgent):
             fresh_data_count=fresh,
             contrarian_scenarios=contrarian.scenarios,
             blind_spots=contrarian.blind_spots,
+            interpretation_audit=(
+                contrarian.interpretation_audit if INTERP_AUDIT_ENABLED else []
+            ),
             confidence_score=confidence,
             requires_reanalysis=requires_reanalysis,
             timestamp=datetime.now(timezone.utc).isoformat(),
@@ -371,6 +408,7 @@ class ValidatorAgent(BaseAgent):
                 schema=_ContrarianPayload,
                 max_tokens=1536,
                 uid=uid,
+                thinking_budget=VALIDATOR_THINKING_BUDGET,
             )
             return payload
         except Exception as e:
@@ -413,12 +451,23 @@ class ValidatorAgent(BaseAgent):
                 f"diff={diff_str} / status={c.status}"
             )
 
-        lines.append(
-            "\n# 당신의 작업\n"
-            "위 분석의 **반대 시나리오 3개 이상**과 **Blind Spot**을 작성하세요. "
-            "수치는 검증하지 말고(이미 코드가 했음), Contrarian과 Blind Spot에만 집중하세요. "
-            "JSON 외 다른 텍스트는 절대 포함하지 마세요."
-        )
+        if INTERP_AUDIT_ENABLED:
+            lines.append(
+                "\n# 당신의 작업\n"
+                "1) **반대 시나리오 3개 이상**과 **Blind Spot**을 작성하세요.\n"
+                "2) **해석 감사(interpretation_audit)**: 위 Analyst summary/시그널/해석이 "
+                "제시된 수치로 정당화되는지 검토하고, 과신·방향 비약·톤 불일치가 있으면 지적하세요 "
+                "(정당하면 빈 배열).\n"
+                "수치 자체는 검증하지 말고(이미 코드가 했음) 해석의 타당성에 집중하세요. "
+                "JSON 외 다른 텍스트는 절대 포함하지 마세요."
+            )
+        else:
+            lines.append(
+                "\n# 당신의 작업\n"
+                "위 분석의 **반대 시나리오 3개 이상**과 **Blind Spot**을 작성하세요. "
+                "수치는 검증하지 말고(이미 코드가 했음), Contrarian과 Blind Spot에만 집중하세요. "
+                "JSON 외 다른 텍스트는 절대 포함하지 마세요."
+            )
         return "\n".join(lines)
 
     # ──────────────────────────────────────────
