@@ -210,7 +210,9 @@ class KoreanSpecialistAgent(BaseAgent):
         result, _raw = await self.call_claude_json(
             user_message=user_message,
             schema=KoreanSpecialistResult,
-            max_tokens=3000,
+            # 3000은 큰 중첩 스키마에서 truncation→JSON 검증 실패(prod 확인 2026-06-06).
+            # 출력 여유 확보로 summary_neutral·weighted_total 잘림 방지.
+            max_tokens=4096,
             uid=uid,
             completeness_check=check_korean_completeness,
         )
