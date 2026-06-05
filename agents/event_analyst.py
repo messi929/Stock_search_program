@@ -272,10 +272,12 @@ class EventAnalystAgent(BaseAgent):
         result, raw = await self.call_claude_json(
             user_message=user_message,
             schema=EventAnalystResult,
-            # 3500은 8블록 중첩 스키마에서 truncation→event_summary 검증 실패(prod 확인
-            # 2026-06-06). 출력 여유를 크게 확보(이벤트 스키마가 가장 큼).
-            max_tokens=6144,
+            # 8블록 중첩 스키마 + prod의 풍부한 이벤트 데이터(옵션/공매도/EDGAR/추론캐시)로
+            # 출력이 커서 truncation→event_summary 검증 실패(prod 확인 2026-06-06).
+            # 로컬은 데이터가 비어 재현 안 됨. 출력 한도 최대치 + 재시도로 견고화.
+            max_tokens=8192,
             uid=uid,
+            max_retries=2,
             completeness_check=check_event_completeness,
         )
 

@@ -222,11 +222,19 @@ class ClaudeClient:
                 f"(budget={thinking_budget})"
             )
         usage = self._extract_usage(response)
+        stop_reason = getattr(response, "stop_reason", None)
+        if stop_reason == "max_tokens":
+            # 출력이 max_tokens에 걸려 잘림 — JSON 파싱/스키마 검증 실패의 주원인.
+            # 관측성: 어떤 에이전트가 한도를 넘는지 prod 로그로 추적.
+            logger.warning(
+                f"[Claude:{agent}] ⚠️ 출력이 max_tokens({effective_max_tokens})에 걸려 잘림 "
+                f"(out={usage.output_tokens}) — max_tokens 상향 또는 입력 축소 필요"
+            )
         result = {
             "content": content,
             "usage": usage,
             "cached": False,
-            "stop_reason": getattr(response, "stop_reason", None),
+            "stop_reason": stop_reason,
             "thinking": thinking_text,
         }
 
