@@ -135,8 +135,11 @@ class ClaudeClient:
         use_thinking = thinking_budget and thinking_budget > 0
 
         # 1) 응답 캐시 조회 (L1 메모리 → L2 Firestore). Firestore I/O는 to_thread로 비블로킹.
-        #    thinking 예산을 키에 포함 — 켠/끈 응답이 서로의 캐시에 히트하지 않게.
-        key_extra = {"thinking": int(thinking_budget)} if use_thinking else None
+        #    캐시 키에 max_tokens·thinking을 포함 — 이 둘이 바뀌면 응답 형태가 달라지는데
+        #    키에 없으면 옛 응답(예: 잘린 JSON)이 히트해 수정이 가려진다(prod 확인 2026-06-06).
+        key_extra: dict = {"max_tokens": int(max_tokens)}
+        if use_thinking:
+            key_extra["thinking"] = int(thinking_budget)
         cache_key = default_cache.make_key(model, system, messages, key_extra)
         if self.use_response_cache and not skip_cache:
             cached = await asyncio.to_thread(default_cache.get, cache_key)
