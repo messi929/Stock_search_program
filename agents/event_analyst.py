@@ -281,17 +281,22 @@ class EventAnalystAgent(BaseAgent):
         user_message = self._build_user_message(input_data, bundle)
 
         # 4) Claude 호출 (JSON 파싱 + Pydantic 검증 + 완전성 재시도)
-        result, raw = await self.call_claude_json(
-            user_message=user_message,
-            schema=EventAnalystResult,
-            # 8블록 중첩 스키마 + prod의 풍부한 이벤트 데이터(옵션/공매도/EDGAR/추론캐시)로
-            # 출력이 커서 truncation→event_summary 검증 실패(prod 확인 2026-06-06).
-            # 로컬은 데이터가 비어 재현 안 됨. 출력 한도 최대치 + 재시도로 견고화.
-            max_tokens=8192,
-            uid=uid,
-            max_retries=2,
-            completeness_check=check_event_completeness,
-        )
+        #    event 스키마는 8블록 중첩이라 모델이 일부 필드를 잘못된 타입으로 주는
+        #    경우가 종목/실행마다 flaky하게 발생(prod 확인 2026-06-06). default로 누락은
+        #    커버되나 타입 오류는 남으므로, 최종 실패 시 graceful Refused로 강등 —
+        #    사용자에게 raw 에러 대신 깔끔한 "분석 제한" 메시지를 보장.
+        try:
+            result, raw = await self.call_claude_json(
+                user_message=user_message,
+                schema=EventAnalystResult,
+                max_tokens=8192,
+                uid=uid,
+                max_retries=2,
+                completeness_check=check_event_completeness,
+            )
+        except ValueError as e:
+            logger.warning(f"[event_analyst] 파싱 최종 실패 — graceful 반환: {e}")
+            return self._graceful_fallback(input_data, bundle)
 
         # 5) 메타 보정 — Claude가 ticker/timestamp를 부정확하게 줄 수 있음
         result.ticker = input_data.ticker
@@ -627,6 +632,21 @@ class EventAnalystAgent(BaseAgent):
         if sample_n < 10:
             return "⚠️ 표본 부족"
         return "✅ 통계 신뢰 가능"
+
+    def _graceful_fallback(
+        self, inp: EventAnalystInput, bundle: dict[str, Any]
+    ) -> EventAnalystResult:
+        """파싱/검증 최종 실패 시 — 유효 구조 + 사용자 친화 메시지(raw 에러 노출 금지)."""
+        res = self._refused_response(inp, bundle)
+        res.event_summary.badge = "⚠️ 분석 제한"
+        res.key_risks = ["이벤트 데이터 해석이 일시적으로 불안정"]
+        res.what_to_watch = ["잠시 후 재시도 권장"]
+        res.summary_neutral = (
+            f"{inp.name or inp.ticker}의 이벤트 분석에서 일부 데이터를 안정적으로 "
+            "정리하지 못했습니다. 잠시 후 다시 시도해 주세요. (반복되면 다른 페르소나를 "
+            "이용하실 수 있습니다.)"
+        )
+        return res
 
     def _refused_response(
         self, inp: EventAnalystInput, bundle: dict[str, Any]
