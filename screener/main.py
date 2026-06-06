@@ -591,6 +591,32 @@ app.include_router(axis_kis_router)
 app.include_router(axis_kis_ws_router)
 app.include_router(axis_screener_router)
 
+
+# 미처리 5xx 전역 핸들러 — 관리자 에러 모니터링 적재(2026-06-07).
+# HTTPException(4xx/의도된 5xx)은 Starlette 기본 핸들러가 선처리하므로 여기 도달 안 함.
+# 진짜 미처리 예외만 적재 후 500 JSON 반환. CORS는 최외곽이라 헤더 유지.
+@app.exception_handler(Exception)
+async def _unhandled_exception_handler(request, exc):
+    import asyncio as _asyncio
+
+    from fastapi.responses import JSONResponse as _JSONResponse
+    from loguru import logger as _logger
+
+    _logger.exception(f"미처리 예외 {request.method} {request.url.path}: {exc}")
+    try:
+        from screener.services.error_log import log_error
+
+        user = getattr(request.state, "user", None) or {}
+        await _asyncio.to_thread(
+            log_error, "unhandled_5xx", f"{type(exc).__name__}: {exc}",
+            uid=user.get("uid", "") if isinstance(user, dict) else "",
+            context={"path": request.url.path, "method": request.method},
+        )
+    except Exception:
+        pass
+    return _JSONResponse(status_code=500, content={"detail": "서버 오류가 발생했습니다."})
+
+
 static_dir = Path(__file__).parent / "static"
 app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
 

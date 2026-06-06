@@ -672,6 +672,17 @@ async def _stream_analysis(
                     )
     except Exception as e:
         logger.exception(f"[ai/analyze stream] 실행 실패: {e}")
+        try:
+            import asyncio as _asyncio
+
+            from screener.services.error_log import log_error
+            await _asyncio.to_thread(
+                log_error, "ai_error", f"{type(e).__name__}: {e}",
+                uid=user_uid, ticker=ticker, agent="analyze_stream",
+                context={"persona": persona},
+            )
+        except Exception:
+            pass
         yield _sse("error", {"code": "AI_ERROR", "message": str(e)})
         return
 

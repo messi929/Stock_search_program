@@ -7,6 +7,7 @@ import { useEffect } from "react";
 import { AnalysisProgressBar } from "@/components/dashboard/AnalysisProgressBar";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
+import { useIsAdmin } from "@/hooks/useIsAdmin";
 import { useUserProfile } from "@/hooks/useUserProfile";
 import { signOut } from "@/lib/auth-actions";
 
@@ -18,6 +19,8 @@ const NAV = [
   { href: "/settings/profile", label: "설정", icon: "⚙️" },
 ];
 
+const ADMIN_NAV = { href: "/admin", label: "관리자", icon: "🛡️" };
+
 export default function DashboardLayout({
   children,
 }: {
@@ -27,6 +30,9 @@ export default function DashboardLayout({
   const pathname = usePathname();
   const { user, loading: authLoading } = useAuth();
   const { onboarded, loading: profileLoading } = useUserProfile();
+  const { isAdmin } = useIsAdmin();
+  // 관리자는 사이드바에 관리자 메뉴 추가 노출(모바일 하단 nav는 5개 유지).
+  const sidebarNav = isAdmin ? [...NAV, ADMIN_NAV] : NAV;
 
   useEffect(() => {
     if (authLoading || profileLoading) return;
@@ -55,7 +61,7 @@ export default function DashboardLayout({
         <Link href="/dashboard" className="text-xl font-bold mb-6 px-2">
           Axis
         </Link>
-        {NAV.map((item) => (
+        {sidebarNav.map((item) => (
           <Link
             key={item.href}
             href={item.href}

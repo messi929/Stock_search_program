@@ -412,3 +412,261 @@ async def admin_stats(request: Request):
             stats["suspended"] += 1
 
     return stats
+
+
+# ──────────────────────────────────────────────
+# 신규: 수입 / 사용량 / 에러 모니터링 (2026-06-07)
+# ──────────────────────────────────────────────
+
+# 분석으로 카운트되는 에이전트 (api/routes/ai.py:_ANALYSIS_AGENTS와 동일하게 유지)
+_ANALYSIS_AGENTS = ("strategist", "event_analyst", "macro_pm", "korean_specialist")
+
+
+@router.get("/me")
+async def admin_me(request: Request):
+    """프론트 관리자 게이트용 경량 체크. 관리자면 200, 아니면 403."""
+    if not _is_admin(request):
+        return _forbid()
+    user = getattr(request.state, "user", None) or {}
+    return {"is_admin": True, "email": user.get("email", "")}
+
+
+@router.get("/revenue")
+async def admin_revenue(request: Request):
+    """수입(MRR/ARR) 추정 + 활성 구독 집계. 가격은 코드 상수 기반(추정)."""
+    if not _is_admin(request):
+        return _forbid()
+
+    from screener.services.error_log import iso_ts
+    from screener.services.pricing import (
+        PRO_MONTHLY_KRW,
+        PRO_YEARLY_KRW,
+        monthly_recurring_krw,
+    )
+
+    now = datetime.now(timezone.utc)
+    soon = now + timedelta(days=30)
+    by_plan = {"monthly": 0, "yearly": 0}
+    active = 0          # status active|on_trial|cancelled (기간 끝까지 pro)
+    trial_active = 0    # on_trial
+    cancel_scheduled = 0
+    upcoming = []       # 30일 내 갱신/만료 예정
+
+    for d in _users_ref().stream():
+        dd = d.to_dict() or {}
+        sub = dd.get("subscription") or {}
+        status = sub.get("status", "")
+        if status not in ("active", "on_trial", "cancelled"):
+            continue
+        active += 1
+        if status == "on_trial":
+            trial_active += 1
+        plan = sub.get("plan", "")
+        if plan in by_plan:
+            by_plan[plan] += 1
+        if sub.get("cancel_at_period_end"):
+            cancel_scheduled += 1
+        pe = sub.get("current_period_end")
+        pe_dt = pe
+        if hasattr(pe, "timestamp"):
+            pe_dt = datetime.fromtimestamp(pe.timestamp(), tz=timezone.utc)
+        elif isinstance(pe, str):
+            try:
+                pe_dt = datetime.fromisoformat(pe.replace("Z", "+00:00"))
+            except Exception:
+                pe_dt = None
+        if isinstance(pe_dt, datetime) and now <= pe_dt <= soon:
+            upcoming.append({
+                "uid": d.id,
+                "email": dd.get("email", ""),
+                "plan": plan,
+                "period_end": iso_ts(pe),
+                "cancel_at_period_end": bool(sub.get("cancel_at_period_end")),
+            })
+
+    upcoming.sort(key=lambda x: x.get("period_end") or "")
+    mrr = round(monthly_recurring_krw(by_plan["monthly"], by_plan["yearly"]))
+    return {
+        "active_subscriptions": active,
+        "by_plan": by_plan,
+        "trial_active": trial_active,
+        "cancel_scheduled": cancel_scheduled,
+        "mrr_krw": mrr,
+        "arr_krw": mrr * 12,
+        "upcoming_renewals": upcoming,
+        "prices": {"monthly": PRO_MONTHLY_KRW, "yearly": PRO_YEARLY_KRW},
+        "estimated": True,
+    }
+
+
+def _parse_usage_doc(data: dict, acc: dict) -> None:
+    """ai_usage 일별 문서(평면 키)를 acc에 누적. acc는 호출자가 초기화."""
+    acc["krw"] += float(data.get("total.krw", 0) or 0)
+    acc["usd"] += float(data.get("total.usd", 0) or 0)
+    for agent in _ANALYSIS_AGENTS:
+        c = int(data.get(f"agents.{agent}.calls", 0) or 0)
+        acc["analyses"] += c
+        acc["by_agent"][agent] = acc["by_agent"].get(agent, 0) + c
+    v = int(data.get("agents.validator.calls", 0) or 0)
+    acc["validations"] += v
+    acc["by_agent"]["validator"] = acc["by_agent"].get("validator", 0) + v
+    disc = int(data.get("agents.discoverer.calls", 0) or 0)
+    acc["discoveries"] += disc
+    acc["by_agent"]["discoverer"] = acc["by_agent"].get("discoverer", 0) + disc
+
+
+def _new_usage_acc() -> dict:
+    return {"krw": 0.0, "usd": 0.0, "analyses": 0, "validations": 0,
+            "discoveries": 0, "by_agent": {}}
+
+
+@router.get("/usage")
+async def admin_usage(request: Request, month: str = "", top: int = 50):
+    """전체 + 고객별 AI 사용량 집계. month=YYYY-MM (기본 현재월, UTC).
+
+    cost_tracker가 users/{uid}/ai_usage/{YYYY-MM-DD}에 평면 키로 기록한 것을
+    collection_group으로 전량 스캔해 집계한다(현 사용자 규모에선 무리 없음).
+    """
+    if not _is_admin(request):
+        return _forbid()
+
+    from screener.db.firebase_client import get_db
+
+    db = get_db()
+    if not month:
+        month = datetime.now(timezone.utc).strftime("%Y-%m")
+
+    totals = _new_usage_acc()
+    per_uid: dict[str, dict] = {}
+
+    try:
+        for doc in db.collection_group("ai_usage").stream():
+            if not doc.id.startswith(month):
+                continue
+            uid_ref = doc.reference.parent.parent
+            uid = uid_ref.id if uid_ref is not None else ""
+            data = doc.to_dict() or {}
+            _parse_usage_doc(data, totals)
+            acc = per_uid.setdefault(uid, _new_usage_acc())
+            _parse_usage_doc(data, acc)
+    except Exception as e:
+        logger.warning(f"admin_usage 집계 실패: {e}")
+
+    # uid→email 매핑 (Top N만 조회)
+    ranked = sorted(per_uid.items(), key=lambda kv: kv[1]["krw"], reverse=True)
+    ranked = ranked[: max(1, min(top, 200))]
+    by_user = []
+    for uid, acc in ranked:
+        email = ""
+        try:
+            snap = _users_ref().document(uid).get()
+            if snap.exists:
+                email = (snap.to_dict() or {}).get("email", "")
+        except Exception:
+            pass
+        by_user.append({
+            "uid": uid,
+            "email": email,
+            "krw": round(acc["krw"]),
+            "usd": round(acc["usd"], 2),
+            "analyses": acc["analyses"],
+            "validations": acc["validations"],
+            "discoveries": acc["discoveries"],
+        })
+
+    return {
+        "month": month,
+        "totals": {
+            "krw": round(totals["krw"]),
+            "usd": round(totals["usd"], 2),
+            "analyses": totals["analyses"],
+            "validations": totals["validations"],
+            "discoveries": totals["discoveries"],
+            "active_users": len(per_uid),
+        },
+        "by_agent": totals["by_agent"],
+        "by_user": by_user,
+    }
+
+
+@router.get("/errors")
+async def admin_errors(request: Request, limit: int = 100, type: str = "", days: int = 0):
+    """최근 에러 목록. type 필터, days(최근 N일) 필터 옵션."""
+    if not _is_admin(request):
+        return _forbid()
+
+    from firebase_admin import firestore
+
+    from screener.db.firebase_client import get_db
+    from screener.services.error_log import iso_ts
+
+    db = get_db()
+    errors = []
+    try:
+        q = db.collection("admin_errors").order_by(
+            "created_at", direction=firestore.Query.DESCENDING
+        ).limit(max(1, min(limit, 500)))
+        since = None
+        if days and days > 0:
+            since = datetime.now(timezone.utc) - timedelta(days=days)
+        for d in q.stream():
+            dd = d.to_dict() or {}
+            ca = dd.get("created_at")
+            ca_dt = ca
+            if hasattr(ca, "timestamp"):
+                ca_dt = datetime.fromtimestamp(ca.timestamp(), tz=timezone.utc)
+            if since and isinstance(ca_dt, datetime) and ca_dt < since:
+                continue
+            if type and dd.get("type") != type:
+                continue
+            errors.append({
+                "id": d.id,
+                "type": dd.get("type", ""),
+                "message": dd.get("message", ""),
+                "uid": dd.get("uid", ""),
+                "ticker": dd.get("ticker", ""),
+                "agent": dd.get("agent", ""),
+                "context": dd.get("context", {}),
+                "created_at": iso_ts(ca),
+            })
+    except Exception as e:
+        logger.warning(f"admin_errors 조회 실패: {e}")
+    return {"errors": errors, "count": len(errors)}
+
+
+@router.get("/errors/summary")
+async def admin_errors_summary(request: Request, days: int = 7):
+    """최근 N일 에러 유형별/일별 빈도 집계."""
+    if not _is_admin(request):
+        return _forbid()
+
+    from firebase_admin import firestore
+
+    from screener.db.firebase_client import get_db
+
+    db = get_db()
+    days = max(1, min(days, 90))
+    since = datetime.now(timezone.utc) - timedelta(days=days)
+    by_type: dict[str, int] = {}
+    by_day: dict[str, int] = {}
+    total = 0
+    try:
+        q = db.collection("admin_errors").order_by(
+            "created_at", direction=firestore.Query.DESCENDING
+        ).limit(2000)
+        for d in q.stream():
+            dd = d.to_dict() or {}
+            ca = dd.get("created_at")
+            ca_dt = ca
+            if hasattr(ca, "timestamp"):
+                ca_dt = datetime.fromtimestamp(ca.timestamp(), tz=timezone.utc)
+            if not isinstance(ca_dt, datetime) or ca_dt < since:
+                continue
+            total += 1
+            t = dd.get("type", "unknown")
+            by_type[t] = by_type.get(t, 0) + 1
+            day = ca_dt.strftime("%Y-%m-%d")
+            by_day[day] = by_day.get(day, 0) + 1
+    except Exception as e:
+        logger.warning(f"admin_errors_summary 집계 실패: {e}")
+    return {"days": days, "total": total, "by_type": by_type, "by_day": by_day}

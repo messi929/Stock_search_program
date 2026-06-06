@@ -19,9 +19,20 @@
 
 from __future__ import annotations
 
+import asyncio
 from typing import Optional, TypedDict
 
 from loguru import logger
+
+
+async def _report_error(error_type: str, message: str, **kw) -> None:
+    """관리자 에러 모니터링 싱크에 best-effort 적재(이벤트 루프 비블로킹)."""
+    try:
+        from screener.services.error_log import log_error
+
+        await asyncio.to_thread(log_error, error_type, message, **kw)
+    except Exception:
+        pass
 
 from agents.analyst import AnalystAgent, AnalystInput, AnalystResult
 from agents.event_analyst import (
@@ -185,6 +196,11 @@ async def strategist_node(state: AnalysisState) -> dict:
         logger.error(
             f"[graph:strategist] Strategist 실행 실패: {type(e).__name__}: {e}"
         )
+        await _report_error(
+            "agent_failure", f"{type(e).__name__}: {e}", agent="strategist",
+            ticker=state.get("ticker", ""), uid=state.get("user_uid", ""),
+            context={"persona": persona},
+        )
         from agents.strategist import StrategistResult
         result = StrategistResult(
             persona_used=persona,
@@ -232,6 +248,10 @@ async def event_analyst_node(state: AnalysisState) -> dict:
     except Exception as e:
         logger.error(
             f"[graph:event] EventAnalyst 실행 실패: {type(e).__name__}: {e}"
+        )
+        await _report_error(
+            "agent_failure", f"{type(e).__name__}: {e}", agent="event_analyst",
+            ticker=ticker, uid=state.get("user_uid", ""),
         )
         # graceful — 에러를 응답으로 변환 (사용자에게 노출 가능한 형태)
         result = EventAnalystResult(
@@ -292,6 +312,10 @@ async def macro_pm_node(state: AnalysisState) -> dict:
         )
     except Exception as e:
         logger.error(f"[graph:macro] MacroPm 실행 실패: {type(e).__name__}: {e}")
+        await _report_error(
+            "agent_failure", f"{type(e).__name__}: {e}", agent="macro_pm",
+            ticker=ticker or "", uid=state.get("user_uid", ""),
+        )
         result = _fallback_macro_result(market or "GLOBAL", _friendly_error_msg(e))
     return {"macro_output": result}
 
@@ -308,6 +332,10 @@ async def korean_specialist_node(state: AnalysisState) -> dict:
     except Exception as e:
         logger.error(
             f"[graph:korean] KoreanSpecialist 실행 실패: {type(e).__name__}: {e}"
+        )
+        await _report_error(
+            "agent_failure", f"{type(e).__name__}: {e}", agent="korean_specialist",
+            ticker=ticker, uid=state.get("user_uid", ""),
         )
         result = _fallback_korean_result(ticker, _friendly_error_msg(e))
     return {"korean_output": result}

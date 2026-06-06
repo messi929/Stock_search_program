@@ -279,24 +279,38 @@ async def webhook(request: Request):
         logger.warning(f"LS webhook: firebase_uid 확인 불가 — 이벤트 무시 ({event_name})")
         return {"received": True}
 
-    # 활성화·갱신 이벤트
-    if event_name in (
-        "subscription_created",
-        "subscription_updated",
-        "subscription_resumed",
-        "subscription_payment_success",
-        "subscription_cancelled",  # 예약 해지 — status는 active 유지, ends_at만 세팅
-    ):
-        sync_subscription_to_firebase(uid, data)
+    try:
+        # 활성화·갱신 이벤트
+        if event_name in (
+            "subscription_created",
+            "subscription_updated",
+            "subscription_resumed",
+            "subscription_payment_success",
+            "subscription_cancelled",  # 예약 해지 — status는 active 유지, ends_at만 세팅
+        ):
+            sync_subscription_to_firebase(uid, data)
 
-    # 만료·결제 실패·환불 이벤트 → 즉시 Free 강등
-    elif event_name in (
-        "subscription_expired",
-        "subscription_payment_failed",
-        "subscription_payment_refunded",  # 환불 시 Pro 박탈 (7일 환불 보장 대응)
-    ):
-        clear_subscription(uid)
-        logger.warning(f"LS {event_name}: {uid} → free")
+        # 만료·결제 실패·환불 이벤트 → 즉시 Free 강등
+        elif event_name in (
+            "subscription_expired",
+            "subscription_payment_failed",
+            "subscription_payment_refunded",  # 환불 시 Pro 박탈 (7일 환불 보장 대응)
+        ):
+            clear_subscription(uid)
+            logger.warning(f"LS {event_name}: {uid} → free")
+    except Exception as e:
+        logger.exception(f"LS webhook 처리 실패 ({event_name}, uid={uid}): {e}")
+        try:
+            import asyncio as _asyncio
+
+            from screener.services.error_log import log_error
+            await _asyncio.to_thread(
+                log_error, "webhook_failure", f"{type(e).__name__}: {e}",
+                uid=uid, context={"event": event_name},
+            )
+        except Exception:
+            pass
+        return JSONResponse(status_code=500, content={"detail": "처리 실패"})
 
     return {"received": True}
 
