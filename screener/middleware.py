@@ -26,6 +26,7 @@ ADMIN_EMAILS = {
 # 인증 불필요 경로
 PUBLIC_PATHS = {"/", "/api/status", "/api/categories", "/favicon.ico",
                 "/api/auth-config",
+                "/api/ai/briefing",  # 외부 발행 시스템 연동(X-Briefing-Key로 별도 보호)
                 "/api/auth/kakao",  # 카카오 로그인(로그인 전 호출 — custom token 발급)
                 "/api/webhooks/lemonsqueezy", "/api/lemon-config",
                 "/pricing", "/terms", "/privacy", "/refund", "/admin", "/rank",

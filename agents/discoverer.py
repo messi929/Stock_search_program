@@ -40,6 +40,7 @@ class DiscovererInput(BaseModel):
     max_results: int = Field(5, ge=1, le=10)
     exclude_tickers: list[str] = Field(default_factory=list)
     filters: Optional[DiscoverFilters] = None
+    market: str = "KR"  # "KR" | "US" | "ALL" — 후보 풀 시장
 
 
 class StockSuggestion(BaseModel):
@@ -49,6 +50,15 @@ class StockSuggestion(BaseModel):
     sector: str = ""
     current_price: int = 0
     reason: str = ""  # 한국어 1~2문장 — 왜 이 쿼리에 부합하는지
+    # 결과 풍부화 — 후보 컨텍스트에서 결정론 주입(LLM 미경유). 카드에서 비교·판단용.
+    buy_score: float = 0.0
+    per: float = 0.0
+    pbr: float = 0.0
+    roe: float = 0.0
+    div_yield: float = 0.0
+    vs_high_52w: float = 0.0
+    foreign_consecutive: int = 0
+    themes: str = ""
 
 
 class DiscovererResult(BaseModel):
@@ -157,6 +167,12 @@ class DiscovererAgent(BaseAgent):
             ctx = candidate_map.get(s.ticker)
             if ctx is None:
                 continue  # 컨텍스트 외 종목 폐기
+            def _f(k: str) -> float:
+                try:
+                    return round(float(ctx.get(k, 0) or 0), 2)
+                except Exception:
+                    return 0.0
+
             rebuilt.append(
                 StockSuggestion(
                     ticker=s.ticker,
@@ -165,6 +181,15 @@ class DiscovererAgent(BaseAgent):
                     sector=str(ctx.get("sector", "") or ""),
                     current_price=int(ctx.get("close", 0) or 0),
                     reason=s.reason,  # 사유만 LLM 응답 사용
+                    # 지표는 컨텍스트(결정론)에서만 — LLM 창작 차단
+                    buy_score=_f("buy_score"),
+                    per=_f("per"),
+                    pbr=_f("pbr"),
+                    roe=_f("roe"),
+                    div_yield=_f("div_yield"),
+                    vs_high_52w=_f("vs_high_52w"),
+                    foreign_consecutive=int(ctx.get("foreign_consecutive", 0) or 0),
+                    themes=str(ctx.get("themes", "") or "")[:120],
                 )
             )
             if len(rebuilt) >= input_data.max_results:
@@ -178,14 +203,26 @@ class DiscovererAgent(BaseAgent):
     # ──────────────────────────────────────────
 
     def _gather_context(self, input_data: DiscovererInput) -> list[dict]:
-        """v7.5 KR stocks 중 buy_score 상위 80건 + filter 적용."""
-        from agents.analyst import _get_kr_with_score
+        """후보 풀 — market(KR/US/ALL) 스냅샷 중 buy_score 상위 + filter 적용."""
+        from agents.analyst import _get_stocks_with_score
 
+        market = (getattr(input_data, "market", "KR") or "KR").upper()
+        frames: list[pd.DataFrame] = []
         try:
-            df = _get_kr_with_score()
+            if market in ("KR", "ALL"):
+                kr = _get_stocks_with_score("005930")  # KR 스냅샷
+                if not kr.empty:
+                    frames.append(kr)
+            if market in ("US", "ALL"):
+                us = _get_stocks_with_score("AAPL")  # US 스냅샷
+                if not us.empty:
+                    frames.append(us)
         except Exception as e:
-            logger.warning(f"[discoverer] KR snapshot 로드 실패: {e}")
+            logger.warning(f"[discoverer] snapshot 로드 실패 (market={market}): {e}")
             return []
+        if not frames:
+            return []
+        df = pd.concat(frames, ignore_index=True) if len(frames) > 1 else frames[0]
         if df.empty:
             return []
 
@@ -208,9 +245,13 @@ class DiscovererAgent(BaseAgent):
         if df.empty:
             return []
 
-        # 상위 buy_score 40개 (NEXT_STEPS.md:148 — 80→40으로 input 50% 절감)
-        if "buy_score" in df.columns:
-            df = df.nlargest(40, "buy_score")
+        # 상위 40개 — buy_score 기준(KR). US는 buy_score 결측 가능 → market_cap fallback.
+        if "buy_score" in df.columns and df["buy_score"].fillna(0).max() > 0:
+            df = df.assign(buy_score=df["buy_score"].fillna(0)).nlargest(40, "buy_score")
+        elif "market_cap" in df.columns:
+            df = df.nlargest(40, "market_cap")
+        else:
+            df = df.head(40)
 
         cols = [
             c

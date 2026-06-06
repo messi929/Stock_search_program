@@ -13,6 +13,7 @@ import { signOut } from "@/lib/auth-actions";
 const NAV = [
   { href: "/dashboard", label: "대시보드", icon: "🏠" },
   { href: "/analyze", label: "종목 분석", icon: "🔍" },
+  { href: "/discover", label: "종목 발견", icon: "🧭" },
   { href: "/watchlist/add", label: "관심 종목", icon: "⭐" },
   { href: "/screener", label: "스크리너", icon: "📊" },
   { href: "/settings/profile", label: "설정", icon: "⚙️" },

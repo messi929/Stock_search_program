@@ -12,8 +12,9 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import AsyncGenerator, Optional
 
 from fastapi import APIRouter, HTTPException, Request
@@ -300,6 +301,82 @@ async def list_personas(request: Request) -> dict:
         "user_plan": user_plan,
         "user_default_persona": user_default,
     }
+
+
+# ──────────────────────────────────────────────
+# /api/ai/briefing — 시장 전체 시황 리서치 (외부 발행 시스템 연동)
+# ──────────────────────────────────────────────
+
+# 서버-투-서버 비용 보호용 시크릿. 미설정 시 개방(로컬 테스트 호환).
+_BRIEFING_KEY = os.environ.get("AXIS_BRIEFING_KEY", "")
+
+
+def _kst_today() -> str:
+    """Cloud Run은 UTC → +9h 보정한 KST 날짜(YYYY-MM-DD)."""
+    return (datetime.now(timezone.utc) + timedelta(hours=9)).strftime("%Y-%m-%d")
+
+
+def _briefing_cache_get(date_str: str) -> Optional[dict]:
+    """당일 브리핑 캐시 조회 — axis_briefing_cache/{KST날짜}. 실패 시 None."""
+    try:
+        from screener.db.firebase_client import get_db
+
+        doc = get_db().collection("axis_briefing_cache").document(date_str).get()
+        if doc.exists:
+            return (doc.to_dict() or {}).get("payload")
+    except Exception as e:
+        logger.warning(f"[briefing cache] 조회 실패 ({date_str}): {e}")
+    return None
+
+
+def _briefing_cache_set(date_str: str, payload: dict) -> None:
+    """당일 브리핑 캐시 저장. 실패는 무시(재실행돼도 Haiku ~5원)."""
+    try:
+        from firebase_admin import firestore
+
+        from screener.db.firebase_client import get_db
+
+        get_db().collection("axis_briefing_cache").document(date_str).set(
+            {"payload": payload, "created_at": firestore.SERVER_TIMESTAMP}
+        )
+    except Exception as e:
+        logger.warning(f"[briefing cache] 저장 실패 ({date_str}): {e}")
+
+
+@router.get("/briefing")
+async def market_briefing(request: Request):
+    """시장 전체 시황 리서치 — 뉴스·매크로·섹터·외인/기관 수급 종합.
+
+    외부 발행 시스템(StockBizView 매일 시황 브리핑)이 매일 아침 1회 호출.
+    ResearchAgent를 ticker 없이 시장 전체로 실행(Haiku ~5원). 당일 Firestore 캐시.
+    인증/쿼터는 거치지 않음 — X-Briefing-Key 시크릿으로만 보호(서버-투-서버).
+    """
+    if _BRIEFING_KEY and request.headers.get("X-Briefing-Key", "") != _BRIEFING_KEY:
+        raise HTTPException(401, {"code": "BRIEFING_KEY_INVALID", "message": "유효한 키가 필요합니다."})
+
+    date_str = _kst_today()
+    cached = _briefing_cache_get(date_str)
+    if cached is not None:
+        return cached
+
+    from agents.base import DISCLAIMER
+    from agents.research import ResearchAgent, ResearchInput
+
+    t0 = time.time()
+    result = await ResearchAgent().run(
+        ResearchInput(
+            query="오늘 한국 증시 전체 시황을 뉴스·매크로·섹터·외국인/기관 수급 관점에서 종합 분석",
+            timeframe_days=7,
+        )
+    )
+    payload = {
+        "date": date_str,
+        "research": result.model_dump(),
+        "disclaimer": DISCLAIMER,
+        "elapsed": round(time.time() - t0, 2),
+    }
+    _briefing_cache_set(date_str, payload)
+    return payload
 
 
 # ──────────────────────────────────────────────
@@ -963,6 +1040,7 @@ class DiscoverRequestBody(BaseModel):
     max_results: int = Field(5, ge=1, le=10)
     exclude_tickers: list[str] = Field(default_factory=list)
     filters: Optional[DiscoverFiltersBody] = None
+    market: str = Field("KR", description="KR | US | ALL — 후보 풀 시장")
 
 
 @router.post("/discover")
@@ -995,6 +1073,7 @@ async def discover(req: DiscoverRequestBody, request: Request):
             max_results=req.max_results,
             exclude_tickers=req.exclude_tickers,
             filters=filters,
+            market=(req.market or "KR").upper(),
         )
     except Exception as e:
         raise HTTPException(400, {"code": "INVALID_INPUT", "message": str(e)})

@@ -12,6 +12,7 @@ interface DiscoverPayload {
   query: string;
   max_results?: number;
   exclude_tickers?: string[];
+  market?: "KR" | "US" | "ALL";
   filters?: {
     market?: string[];
     min_market_cap?: number;
@@ -29,6 +30,7 @@ export function useDiscover() {
           query: payload.query,
           max_results: payload.max_results ?? 5,
           exclude_tickers: payload.exclude_tickers ?? [],
+          market: payload.market ?? "KR",
           filters: payload.filters ?? null,
         }),
       }),

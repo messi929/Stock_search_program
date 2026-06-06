@@ -379,6 +379,15 @@ export type StockSuggestion = {
   sector: string;
   current_price: number;
   reason: string;
+  // 결과 풍부화 (백엔드 결정론 주입)
+  buy_score?: number;
+  per?: number;
+  pbr?: number;
+  roe?: number;
+  div_yield?: number;
+  vs_high_52w?: number;
+  foreign_consecutive?: number;
+  themes?: string;
 };
 
 export type DiscoverResponse = {
