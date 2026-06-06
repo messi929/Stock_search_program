@@ -54,6 +54,11 @@ Desktop.ini
 docs/
 *.md
 !README.md
+# ⚠️ 페르소나 프롬프트는 런타임 필수 — *.md 재귀 제외에서 반드시 되살린다.
+# (event/korean/macro는 시스템 프롬프트가 오직 personas/*.md에서 옴. 빠지면 빈
+#  프롬프트로 동작해 점수 미산출 등 품질 저하 — 2026-06-06 prod 사고 원인.)
+!personas/
+!personas/*.md
 
 # ── 에셋 (아이콘 등) ──
 assets/
