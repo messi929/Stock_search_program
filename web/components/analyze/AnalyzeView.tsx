@@ -26,6 +26,7 @@ import { UsCandleChart } from "@/components/analyze/UsCandleChart";
 import { KoreanSpecialistCard } from "@/components/analyze/KoreanSpecialistCard";
 import { MacroPmCard } from "@/components/analyze/MacroPmCard";
 import { PersonaChooser } from "@/components/analyze/PersonaChooser";
+import { PreviousAnalysisCard } from "@/components/analyze/PreviousAnalysisCard";
 import { ResearchCard } from "@/components/analyze/ResearchCard";
 import { SaveEntryPointsButton } from "@/components/analyze/SaveEntryPointsButton";
 import { StrategistCard } from "@/components/analyze/StrategistCard";
@@ -294,6 +295,14 @@ export function AnalyzeView({ ticker }: { ticker: string }) {
           <UsCandleChart ticker={ticker} />
         </section>
       )}
+
+      {/* 이전 분석 핵심 — 차트 하단. 직전 strategist 분석의 진입/손절을 참고로 표시.
+          직전 분석이 없으면 렌더 안 함. 그 아래에서 새 분석 진행. */}
+      <PreviousAnalysisCard
+        ticker={ticker}
+        currentPrice={displayPrice}
+        isKR={isKR}
+      />
 
       {/* 선택 단계 — 분석 방식/관점 선택 (자동 실행 없음) */}
       {!runPersona ? (

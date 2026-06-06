@@ -82,7 +82,7 @@ def _extract_history_summary(final: dict) -> dict:
     strategist 흐름 → strategist.summary(종합 결론), 데이터 페르소나 → summary_neutral.
     당시 현재가는 analyst.technical.current_price.
     """
-    out: dict = {"summary": "", "price": None}
+    out: dict = {"summary": "", "price": None, "entry_points": None, "exit_points": None}
     a = final.get("analyst_output")
     if a is not None:
         try:
@@ -92,6 +92,16 @@ def _extract_history_summary(final: dict) -> dict:
     s = final.get("strategist_output")
     if s is not None:
         out["summary"] = (getattr(s, "summary", "") or "")[:800]
+        # 진입/청산 참고치 보존 — 차트 하단 '이전 분석' 표시용(GET /history/latest)
+        try:
+            ep = getattr(s, "entry_points", None)
+            if ep is not None:
+                out["entry_points"] = ep.model_dump() if hasattr(ep, "model_dump") else dict(ep)
+            xp = getattr(s, "exit_points", None)
+            if xp is not None:
+                out["exit_points"] = xp.model_dump() if hasattr(xp, "model_dump") else dict(xp)
+        except Exception:
+            pass
         return out
     for k in ("macro_output", "event_output", "korean_output"):
         o = final.get(k)
@@ -111,7 +121,12 @@ def _update_history_result(uid: str, hist_id: str, summary: dict) -> None:
         get_db().collection("users").document(uid).collection(
             "analysis_history"
         ).document(hist_id).set(
-            {"summary": summary.get("summary", ""), "price": summary.get("price")},
+            {
+                "summary": summary.get("summary", ""),
+                "price": summary.get("price"),
+                "entry_points": summary.get("entry_points"),
+                "exit_points": summary.get("exit_points"),
+            },
             merge=True,
         )
     except Exception as e:
@@ -813,6 +828,58 @@ async def get_usage(request: Request):
         "reset_at": reset_at,
         "upgrade_url": "/pricing",
     }
+
+
+@router.get("/history/latest")
+async def get_latest_analysis(request: Request, ticker: str = ""):
+    """특정 종목의 가장 최근 '분석(진입/청산 포함)' 1건 — 차트 하단 '이전 분석' 표시용.
+
+    strategist 흐름(진입선 보유)만 대상. 복합 인덱스 불필요하도록 최근 N건을
+    created_at desc로 읽어 코드에서 ticker+kind 필터(최초 일치 반환).
+    """
+    user = getattr(request.state, "user", None) or {}
+    uid = user.get("uid", "")
+    tk = (ticker or "").upper()
+    if not uid or not tk:
+        return {"item": None}
+    try:
+        from firebase_admin import firestore
+
+        from screener.db.firebase_client import get_db
+
+        docs = (
+            get_db()
+            .collection("users")
+            .document(uid)
+            .collection("analysis_history")
+            .order_by("created_at", direction=firestore.Query.DESCENDING)
+            .limit(60)
+            .stream()
+        )
+        for d in docs:
+            x = d.to_dict() or {}
+            if (x.get("ticker", "") or "").upper() != tk:
+                continue
+            if x.get("kind") != "analysis":
+                continue
+            if not x.get("entry_points"):  # 진입선 있는(strategist) 분석만
+                continue
+            ca = x.get("created_at")
+            return {
+                "item": {
+                    "ticker": tk,
+                    "persona": x.get("persona", ""),
+                    "at": ca.isoformat() if hasattr(ca, "isoformat") else "",
+                    "price": x.get("price"),
+                    "summary": x.get("summary", ""),
+                    "entry_points": x.get("entry_points"),
+                    "exit_points": x.get("exit_points"),
+                }
+            }
+        return {"item": None}
+    except Exception as e:
+        logger.warning(f"[history] latest 조회 실패 (uid={uid}, ticker={tk}): {e}")
+        return {"item": None}
 
 
 @router.get("/history")
