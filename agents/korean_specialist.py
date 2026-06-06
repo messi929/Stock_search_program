@@ -215,6 +215,10 @@ class KoreanSpecialistAgent(BaseAgent):
             max_tokens=4096,
             uid=uid,
             completeness_check=check_korean_completeness,
+            # 구조화 출력(강제 tool use) — 텍스트 파싱 flaky 제거(2026-06-07 근본 안정화).
+            # dict 블록은 free-form object로 스키마화되어 페르소나 프롬프트가 내부 키를 주도.
+            # 점수 0 방지·6블록 충실도는 completeness_check 재요청이 그대로 보강.
+            structured_output=True,
         )
 
         # 3) 메타 보정
@@ -433,7 +437,7 @@ class KoreanSpecialistAgent(BaseAgent):
 
         lines.append(
             "\n# 출력 지시 (반드시 준수)\n"
-            "위 입력 데이터로 시스템 프롬프트 JSON 스키마에 맞춰 응답하세요.\n"
+            "위 입력 데이터로 분석한 뒤 제공된 구조화 출력 도구를 호출해 결과를 제출하세요.\n"
             "\n"
             "## ⭐ korea_specific_score 5필드 — 모두 필수, 0.0 금지 (단 예외 명시)\n"
             "다음 5개 점수 필드를 **반드시 1~10 사이 float로 매겨야 합니다**:\n"

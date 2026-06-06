@@ -318,8 +318,12 @@ class EventAnalystAgent(BaseAgent):
         # 3) user message 구성
         user_message = self._build_user_message(input_data, bundle)
 
-        # 4) Claude 호출 — 단순 평탄 스키마(_EventLLMOutput). 전부 default+extra 무시라
-        #    검증 실패가 사실상 없음. 만일의 실패에도 graceful 강등(raw 에러 노출 금지).
+        # 4) Claude 호출 — 구조화 출력(강제 tool use). _EventLLMOutput 스키마를 그대로
+        #    tool로 만들어 호출을 강제하므로 출력이 항상 유효 JSON으로 보장된다 →
+        #    텍스트 파싱·json-repair·펜스 제거가 불필요해지고 검증 실패 사실상 0
+        #    (2026-06-06 event 페르소나 flaky의 근본 안정화). completeness_check는
+        #    그대로 둬 4차원 점수·시나리오·summary 내용 충실도를 보강(빈 점수 재요청).
+        #    만일의 실패에도 graceful 강등(raw 에러 노출 금지).
         try:
             llm, _raw = await self.call_claude_json(
                 user_message=user_message,
@@ -328,6 +332,7 @@ class EventAnalystAgent(BaseAgent):
                 uid=uid,
                 max_retries=2,
                 completeness_check=check_event_completeness,
+                structured_output=True,
             )
         except ValueError as e:
             logger.warning(f"[event_analyst] 파싱 최종 실패 — graceful 반환: {e}")
@@ -664,12 +669,13 @@ class EventAnalystAgent(BaseAgent):
 
         lines.append(
             "\n# 출력 지시\n"
-            "위 데이터로 시스템 프롬프트 JSON 스키마에 맞춰 응답하세요. "
+            "위 데이터로 분석한 뒤 제공된 구조화 출력 도구를 호출해 결과를 제출하세요. "
             "4차원 확실성 점수(source/timing/probability/impact)를 각 0~10으로 산출하고, "
-            "scenario_analysis(bullish/base/bearish 3개)·reference_observation_zones·"
-            "summary_neutral을 **반드시** 채우세요 (생략 시 빈 카드 노출). "
-            "표본 < 5건이면 historical_statistics에서 통계 미제시(정성만), "
-            "5~9면 '표본 부족' 명시. 수치를 새로 만들지 말고 위 입력 그대로 사용."
+            "시나리오 3종(bullish_case/base_case/bearish_case)·관찰 구간"
+            "(current_position_vs_history·vol_lower_1sigma·vol_upper_1sigma)·"
+            "summary_neutral·key_risks·what_to_watch를 **반드시** 채우세요 (생략 시 빈 카드 노출). "
+            "comparable_events_count는 위 LLM 유사 이벤트 표본 수를 그대로 쓰고, 표본이 없으면 0. "
+            "수치를 새로 만들지 말고 위 입력 그대로 사용."
         )
         return "\n".join(lines)
 

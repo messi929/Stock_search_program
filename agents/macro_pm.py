@@ -198,6 +198,10 @@ class MacroPmAgent(BaseAgent):
             max_tokens=3000,
             uid=uid,
             completeness_check=check_macro_completeness,
+            # 구조화 출력(강제 tool use) — 텍스트 파싱 flaky 제거(2026-06-07 근본 안정화).
+            # 중첩 스키마($defs/$ref)도 tool input_schema로 그대로 수용. 가중치·regime은
+            # run() 후처리가 정량값으로 강제하고, 4축·summary 충실도는 completeness가 보강.
+            structured_output=True,
         )
 
         # 5) 메타 보정
@@ -363,7 +367,7 @@ class MacroPmAgent(BaseAgent):
 
         lines.append(
             "\n# 출력 지시\n"
-            "위 정량 결과를 그대로 사용하여 시스템 프롬프트 JSON 스키마에 맞춰 응답. "
+            "위 정량 결과를 그대로 사용하여 제공된 구조화 출력 도구를 호출해 결과를 제출. "
             "regime은 위 정량 결과와 일치해야 하며, 사이클 4축의 stage 단어를 그대로 사용. "
             "cycle_analysis 4축과 summary_neutral은 **반드시** 채울 것 (생략 시 빈 카드 노출). "
             "weighting_used는 위 정량 가중치 그대로. "

@@ -32,9 +32,11 @@ class _FakeClaude:
     def __init__(self, responses: list[str]):
         self._responses = list(responses)
         self.call_count = 0
+        self.last_kwargs: dict = {}
 
     async def complete(self, **kwargs):
         self.call_count += 1
+        self.last_kwargs = kwargs
         content = self._responses.pop(0)
         return {"content": content, "usage": None, "cached": False}
 
@@ -119,6 +121,43 @@ def test_complete_response_no_retry():
     model, _ = asyncio.run(run())
     assert model.body == "처음부터 채움"
     assert fake.call_count == 1
+
+
+# ──────────────────────────────────────────────
+# structured_output — 강제 tool use 라우팅
+# ──────────────────────────────────────────────
+
+
+def test_structured_output_passes_schema_and_skips_json_instruction():
+    """structured_output=True면 schema가 output_schema로 전달되고, 텍스트 JSON
+    지시문은 user_message에 덧붙지 않는다 (tool 스키마가 형식을 강제하므로)."""
+    agent, fake = _agent([json.dumps({"name": "A", "body": "구조화"})])
+
+    async def run():
+        return await agent.call_claude_json(
+            user_message="원본 메시지",
+            schema=_Schema,
+            structured_output=True,
+        )
+
+    model, _ = asyncio.run(run())
+    assert model.body == "구조화"
+    assert fake.last_kwargs["output_schema"] is _Schema
+    # 구조화 모드에서는 "JSON 출력 지시" 텍스트를 덧붙이지 않음
+    sent = fake.last_kwargs["messages"][0]["content"]
+    assert sent == "원본 메시지"
+
+
+def test_non_structured_keeps_json_instruction_and_no_schema():
+    """기본(비구조화) 경로는 output_schema=None이고 JSON 지시문을 덧붙인다 — 기존 동작 보존."""
+    agent, fake = _agent([json.dumps({"name": "A"})])
+
+    async def run():
+        return await agent.call_claude_json(user_message="원본", schema=_Schema)
+
+    asyncio.run(run())
+    assert fake.last_kwargs["output_schema"] is None
+    assert "JSON 출력 지시" in fake.last_kwargs["messages"][0]["content"]
 
 
 def test_retry_exhausted_returns_gracefully():

@@ -138,10 +138,12 @@ class BaseAgent(ABC):
         prefill: str | None = None,
         system: str | None = None,
         thinking_budget: int = 0,
+        output_schema: type[BaseModel] | None = None,
     ) -> dict:
         """Claude 호출 헬퍼. system override로 페르소나별 동적 프롬프트 가능.
 
         thinking_budget>0이면 Extended Thinking 활성화 (복잡 추론 품질↑).
+        output_schema 지정 시 구조화 출력(강제 tool use) — content가 유효 JSON 보장.
         """
         messages: list[dict] = [{"role": "user", "content": user_message}]
         if prefill is not None:
@@ -156,6 +158,7 @@ class BaseAgent(ABC):
             temperature=temperature,
             uid=uid,
             thinking_budget=thinking_budget,
+            output_schema=output_schema,
         )
 
         # prefill이 있으면 응답 앞에 prefill 복원
@@ -173,12 +176,20 @@ class BaseAgent(ABC):
         system: str | None = None,
         completeness_check: Callable[[BaseModel], list[str]] | None = None,
         thinking_budget: int = 0,
+        structured_output: bool = False,
     ) -> tuple[BaseModel, dict]:
         """Claude 호출 + JSON 파싱 + Pydantic 검증.
 
         Sonnet 4.6 등 일부 모델은 assistant prefill을 지원하지 않으므로,
         prefill 없이 user message에 강한 JSON 출력 지시를 추가하여 호환성 확보.
         extract_json()이 ```json 코드 블록과 raw JSON 모두 처리.
+
+        structured_output:
+            True면 schema를 그대로 tool로 만들어 호출을 강제(강제 tool use). 모델 출력이
+            항상 유효한 JSON 객체로 보장돼 파싱/검증 실패가 사실상 0이 된다 — flaky한
+            페르소나의 근본 안정화책. content는 tool_use.input을 직렬화한 JSON이라 아래
+            파싱 경로(extract_json+json.loads)가 그대로 성공한다. 텍스트 JSON 지시문은
+            불필요하므로 생략. completeness_check는 그대로 동작(내용 충실도 보강).
 
         completeness_check:
             Pydantic 검증 통과 후 실행되는 선택적 콜백. 비어있거나 누락된
@@ -197,7 +208,9 @@ class BaseAgent(ABC):
             "코드 블록 펜스(```json) 금지, 설명 텍스트 금지, JSON 외 문자 절대 금지."
         )
 
-        message = user_message + json_instruction
+        # 구조화 출력이면 tool 스키마가 형식을 강제하므로 텍스트 JSON 지시문 불필요.
+        message = user_message if structured_output else user_message + json_instruction
+        schema_for_call = schema if structured_output else None
         last_err: Exception | None = None
         for attempt in range(max_retries + 1):
             result = await self.call_claude(
@@ -207,6 +220,7 @@ class BaseAgent(ABC):
                 prefill=None,
                 system=system,
                 thinking_budget=thinking_budget,
+                output_schema=schema_for_call,
             )
             json_str = extract_json(result["content"])
 
