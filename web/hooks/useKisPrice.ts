@@ -27,6 +27,14 @@ function isKrTicker(ticker: string): boolean {
   return /^\d{6}$/.test(ticker.trim());
 }
 
+// 콜드스타트 대응 재시도 — 전역 retry:1은 Cloud Run 콜드스타트(~5-15s) 윈도우를
+// 못 넘겨 첫 진입 시 차트/시세가 실패(CORS-마스킹된 5xx)할 수 있음. KIS REST 훅은
+// 백오프 재시도로 콜드스타트 깜빡임을 흡수한다(1s→2s→4s, 최대 8s).
+const KIS_RETRY = {
+  retry: 3,
+  retryDelay: (attempt: number) => Math.min(1000 * 2 ** attempt, 8000),
+} as const;
+
 type ExtraOpts<T> = Pick<
   UseQueryOptions<T>,
   "enabled" | "refetchInterval" | "staleTime"
@@ -42,6 +50,7 @@ export function useKisPrice(
     queryKey: ["kis-price", ticker],
     queryFn: () => fetchKisPrice(ticker),
     enabled,
+    ...KIS_RETRY,
     staleTime: opts.staleTime ?? 5_000,
     refetchInterval: opts.refetchInterval,
   });
@@ -58,6 +67,7 @@ export function useKisDailyChart(
     queryKey: ["kis-chart-daily", ticker, period],
     queryFn: () => fetchKisDailyChart(ticker, period),
     enabled,
+    ...KIS_RETRY,
     staleTime: opts.staleTime ?? 300_000,
     refetchInterval: opts.refetchInterval,
   });
@@ -73,6 +83,7 @@ export function useKisMinuteChart(
     queryKey: ["kis-chart-minute", ticker],
     queryFn: () => fetchKisMinuteChart(ticker),
     enabled,
+    ...KIS_RETRY,
     staleTime: opts.staleTime ?? 30_000,
     refetchInterval: opts.refetchInterval,
   });
@@ -88,6 +99,7 @@ export function useKisOrderbook(
     queryKey: ["kis-orderbook", ticker],
     queryFn: () => fetchKisOrderbook(ticker),
     enabled,
+    ...KIS_RETRY,
     staleTime: opts.staleTime ?? 5_000,
     refetchInterval: opts.refetchInterval,
   });
@@ -103,6 +115,7 @@ export function useKisInvestor(
     queryKey: ["kis-investor", ticker],
     queryFn: () => fetchKisInvestor(ticker),
     enabled,
+    ...KIS_RETRY,
     staleTime: opts.staleTime ?? 300_000,
     refetchInterval: opts.refetchInterval,
   });
