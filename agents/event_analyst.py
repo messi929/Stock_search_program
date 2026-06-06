@@ -162,38 +162,75 @@ class EventAnalystResult(BaseModel):
 
 
 # ──────────────────────────────────────────────
-# 완전성 검사 — Claude 응답 필드 누락 탐지
+# LLM 출력 스키마 (단순·평탄) — 코드가 EventAnalystResult로 조립
+# ──────────────────────────────────────────────
+# 설계(2026-06-06): 기존엔 LLM이 EventAnalystResult(8블록 중첩) 전체를 직접 채워
+# flaky 실패(필드 누락/타입오류)가 잦았다. 프론트(EventAnalystCard)가 실제 쓰는
+# 필드만, 평탄하고 전부 optional + extra 무시인 스키마로 받아 검증 실패를 제거한다.
+# final_score/mode/badge/sample_reliability/event_type/target 등 코드가 산출하는 것은
+# LLM에서 요구하지 않는다. 미표시 필드(SignalBlock 3종·rationale·comparable_events
+# 리스트)도 제거 — LLM은 프롬프트에서 데이터를 보고 summary/시나리오에 녹이면 된다.
+
+
+class _ScenarioOut(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    trigger: str = ""
+    historical_pattern: str = ""
+    probability: str = ""
+
+
+class _BeneficiaryOut(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    ticker: str = ""
+    rationale: str = ""
+
+
+class _EventLLMOutput(BaseModel):
+    """LLM이 채우는 단순 스키마. 전부 default + extra 무시 → 검증 실패 사실상 0."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    # 4차원 확실성 점수(0~10) — final_score/mode/badge는 코드가 계산
+    source: float = 0.0
+    timing: float = 0.0
+    probability: float = 0.0
+    impact: float = 0.0
+    certainty_rationale: str = ""
+    # 영향 매핑
+    direct_beneficiary: _BeneficiaryOut = Field(default_factory=_BeneficiaryOut)
+    secondary_beneficiaries: list[_BeneficiaryOut] = Field(default_factory=list)
+    # 통계/관찰 구간
+    comparable_events_count: int = 0
+    current_position_vs_history: str = ""
+    vol_lower_1sigma: str = ""
+    vol_upper_1sigma: str = ""
+    # 시나리오 3종
+    bullish_case: _ScenarioOut = Field(default_factory=_ScenarioOut)
+    base_case: _ScenarioOut = Field(default_factory=_ScenarioOut)
+    bearish_case: _ScenarioOut = Field(default_factory=_ScenarioOut)
+    # 종합
+    key_risks: list[str] = Field(default_factory=list)
+    what_to_watch: list[str] = Field(default_factory=list)
+    summary_neutral: str = ""
+
+
+# ──────────────────────────────────────────────
+# 완전성 검사 — LLM 응답 핵심 필드 누락 탐지 (재요청 유발)
 # ──────────────────────────────────────────────
 
 
-def check_event_completeness(result: EventAnalystResult) -> list[str]:
-    """Claude가 통째로 빠뜨려도 default_factory로 검증 통과하는 핵심 필드 탐지.
-
-    반환 리스트가 비어있지 않으면 call_claude_json이 1회 재요청한다.
-    사용자에게 빈 카드가 노출되는 것을 막기 위한 근본 방어선.
-    """
+def check_event_completeness(out: _EventLLMOutput) -> list[str]:
+    """핵심 분석 필드가 비면 1회 재요청. 단순 스키마라 검증은 통과하므로 내용 충실도만 체크."""
     missing: list[str] = []
-
-    if not result.summary_neutral.strip():
+    if not out.summary_neutral.strip():
         missing.append("summary_neutral")
-
-    # event_summary 핵심 누락 — 기본값(빈 event_type + 전부 0점)으로 통과한 경우 재요청.
-    # (event_type은 run의 사후 보정 전이라 raw 모델값 기준으로 판정 가능)
-    es = result.event_summary
-    cb = es.certainty_breakdown
-    if not es.event_type.strip() and (cb.source + cb.timing + cb.probability + cb.impact) == 0:
-        missing.append("event_summary")
-
-    sa = result.scenario_analysis
+    if (out.source + out.timing + out.probability + out.impact) == 0:
+        missing.append("certainty_scores")
     if not any(
-        case.trigger.strip() or case.historical_pattern.strip()
-        for case in (sa.bullish_case, sa.base_case, sa.bearish_case)
+        c.trigger.strip() or c.historical_pattern.strip()
+        for c in (out.bullish_case, out.base_case, out.bearish_case)
     ):
         missing.append("scenario_analysis")
-
-    if not result.reference_observation_zones.current_position_vs_history.strip():
-        missing.append("reference_observation_zones")
-
     return missing
 
 
@@ -273,23 +310,21 @@ class EventAnalystAgent(BaseAgent):
         # 1) 데이터 수집 (Week C 모듈 호출)
         bundle = await self._collect_data_bundle(input_data)
 
-        # 2) 확실성 점수 0~2 사전 차단 (Refused 모드)
-        if bundle.get("certainty_pre_check", 10) < 3:
+        # 2) 확실성 점수 0~2 사전 차단 (Refused 모드). None은 미산정 → 진행.
+        cpc = bundle.get("certainty_pre_check", 10)
+        if cpc is not None and cpc < 3:
             return self._refused_response(input_data, bundle)
 
         # 3) user message 구성
         user_message = self._build_user_message(input_data, bundle)
 
-        # 4) Claude 호출 (JSON 파싱 + Pydantic 검증 + 완전성 재시도)
-        #    event 스키마는 8블록 중첩이라 모델이 일부 필드를 잘못된 타입으로 주는
-        #    경우가 종목/실행마다 flaky하게 발생(prod 확인 2026-06-06). default로 누락은
-        #    커버되나 타입 오류는 남으므로, 최종 실패 시 graceful Refused로 강등 —
-        #    사용자에게 raw 에러 대신 깔끔한 "분석 제한" 메시지를 보장.
+        # 4) Claude 호출 — 단순 평탄 스키마(_EventLLMOutput). 전부 default+extra 무시라
+        #    검증 실패가 사실상 없음. 만일의 실패에도 graceful 강등(raw 에러 노출 금지).
         try:
-            result, raw = await self.call_claude_json(
+            llm, _raw = await self.call_claude_json(
                 user_message=user_message,
-                schema=EventAnalystResult,
-                max_tokens=8192,
+                schema=_EventLLMOutput,
+                max_tokens=4096,  # 단순 스키마라 출력 작음 (구 8192 불필요)
                 uid=uid,
                 max_retries=2,
                 completeness_check=check_event_completeness,
@@ -298,64 +333,81 @@ class EventAnalystAgent(BaseAgent):
             logger.warning(f"[event_analyst] 파싱 최종 실패 — graceful 반환: {e}")
             return self._graceful_fallback(input_data, bundle)
 
-        # 5) 메타 보정 — Claude가 ticker/timestamp를 부정확하게 줄 수 있음
-        result.ticker = input_data.ticker
-        result.market = input_data.market or ("KR" if is_kr_ticker(input_data.ticker) else "US")
-        result.persona = "event"
-        result.timestamp = datetime.now(timezone.utc).isoformat()
+        # 5) LLM 단순 출력 → 전체 EventAnalystResult로 조립
+        return self._assemble(llm, input_data, bundle)
 
-        # 5.5) event_summary 구조 필드 보정 — Claude 누락 시 입력에서 채움(검증 견고화)
-        es = result.event_summary
-        if not es.event_type:
-            es.event_type = input_data.event_type or "unknown"
-        if not es.event_target:
-            es.event_target = (
-                input_data.event_target or input_data.name or input_data.ticker
-            )
+    def _assemble(
+        self,
+        llm: _EventLLMOutput,
+        inp: EventAnalystInput,
+        bundle: dict[str, Any],
+    ) -> EventAnalystResult:
+        """단순 LLM 출력 + 코드 계산값(점수/모드/배지/표본/보유)을 합쳐 최종 결과 생성."""
+        market = inp.market or ("KR" if is_kr_ticker(inp.ticker) else "US")
 
-        # 6) 확실성 점수 → 모드/배지 강제 일관 (Claude가 부정확한 분기를 줄 수 있음)
-        cb = result.event_summary.certainty_breakdown
-        # final_score를 4차원으로 재계산 (강제 일관성)
-        recalculated = calculate_final_score(
-            cb.source, cb.timing, cb.probability, cb.impact
+        # 확실성: 코드가 final_score/mode/badge 계산
+        final_score = round(
+            calculate_final_score(llm.source, llm.timing, llm.probability, llm.impact), 2
         )
-        cb.final_score = round(recalculated, 2)
-        mode, badge = determine_mode(cb.final_score)
-        cb.mode = mode
-        result.event_summary.badge = badge
-
-        # 7) 표본 신뢰도 자동 라벨 (Claude가 누락 가능)
-        sample_n = result.historical_statistics.comparable_events_count
-        result.historical_statistics.sample_reliability = (
-            self._classify_sample_reliability(sample_n)
+        mode, badge = determine_mode(final_score)
+        certainty = CertaintyBreakdown(
+            source=llm.source, timing=llm.timing, probability=llm.probability,
+            impact=llm.impact, source_rationale=llm.certainty_rationale,
+            final_score=final_score, mode=mode,
         )
 
-        # 8) fabrication 경고 자동 첨부 (LLM 추론 한계 명시)
-        if not result.historical_statistics.fabrication_warning:
-            result.historical_statistics.fabrication_warning = (
-                "비교 사례 통계는 LLM 학습 데이터 기반 추정이며, "
-                "각 사례의 실제 수치는 외부 검증을 권장합니다."
-            )
-
-        # 9) summary_neutral에 단정어 후처리 필터링
-        filtered, found = self.filter_forbidden(result.summary_neutral)
+        # summary 단정어 후처리
+        summary, found = self.filter_forbidden(llm.summary_neutral)
         if found:
-            logger.warning(
-                f"[event_analyst] summary_neutral에 단정어 발견 — 필터링: {found}"
-            )
-            result.summary_neutral = filtered
+            logger.warning(f"[event_analyst] summary_neutral 단정어 필터링: {found}")
 
-        # 10) 기관 보유 스냅샷 직접 주입 (US — LLM 미경유 사실 passthrough, 신호 아님)
+        result = EventAnalystResult(
+            ticker=inp.ticker,
+            market=market,
+            event_summary=EventSummary(
+                event_type=inp.event_type or "unknown",
+                event_target=inp.event_target or inp.name or inp.ticker,
+                certainty_breakdown=certainty,
+                badge=badge,
+            ),
+            impact_mapping=ImpactMapping(
+                direct_beneficiary=llm.direct_beneficiary.model_dump(),
+                secondary_beneficiaries=[b.model_dump() for b in llm.secondary_beneficiaries],
+            ),
+            historical_statistics=HistoricalStatistics(
+                comparable_events_count=llm.comparable_events_count,
+                sample_reliability=self._classify_sample_reliability(
+                    llm.comparable_events_count
+                ),
+                fabrication_warning=(
+                    "비교 사례 통계는 LLM 학습 데이터 기반 추정이며, "
+                    "각 사례의 실제 수치는 외부 검증을 권장합니다."
+                ),
+            ),
+            reference_observation_zones=ReferenceZones(
+                current_position_vs_history=llm.current_position_vs_history,
+                historical_volatility_lower_1sigma=llm.vol_lower_1sigma,
+                historical_volatility_upper_1sigma=llm.vol_upper_1sigma,
+            ),
+            scenario_analysis=ScenarioAnalysis(
+                bullish_case=ScenarioCase(**llm.bullish_case.model_dump()),
+                base_case=ScenarioCase(**llm.base_case.model_dump()),
+                bearish_case=ScenarioCase(**llm.bearish_case.model_dump()),
+            ),
+            key_risks=llm.key_risks,
+            what_to_watch=llm.what_to_watch,
+            summary_neutral=summary,
+            persona="event",
+            timestamp=datetime.now(timezone.utc).isoformat(),
+        )
+
+        # 기관 보유 스냅샷 주입 (US — LLM 미경유 사실 passthrough)
         io_data = bundle.get("institutional_ownership")
         if isinstance(io_data, dict) and io_data.get("available"):
             try:
-                result.institutional_ownership = InstitutionalOwnership.model_validate(
-                    io_data
-                )
+                result.institutional_ownership = InstitutionalOwnership.model_validate(io_data)
             except Exception as e:
-                logger.debug(
-                    f"[event_analyst] institutional_ownership 주입 실패: {type(e).__name__}"
-                )
+                logger.debug(f"[event_analyst] institutional_ownership 주입 실패: {type(e).__name__}")
 
         return result
 

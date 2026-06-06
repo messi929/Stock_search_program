@@ -116,85 +116,40 @@
 - **추격 경고** — 단기 30%+ 급등 시 1σ 상단 초과 + 신용잔고 급증 표시
 - **옵션/신용 신호 통합** — 선행 IV/거래량 vs 후행 신용잔고
 
-## 응답 구조 (JSON 스키마)
+## 응답 구조 (JSON 스키마) — 단순·평탄
 
-반드시 다음 JSON만 출력. 설명 텍스트 절대 추가 금지.
+반드시 아래 **평탄한** JSON만 출력. 설명 텍스트 절대 추가 금지. 모든 필드를 채우되,
+중첩을 깊게 만들지 말고 이 구조 그대로 따르세요. (점수의 최종합·모드·배지·표본
+신뢰도·종목명 등은 시스템이 자동 계산하므로 당신은 아래 필드만 채우면 됩니다.)
 
 ```json
 {
-  "event_summary": {
-    "event_type": "...",
-    "event_target": "...",
-    "d_day": "YYYY-MM-DD or 추정 시점",
-    "certainty_breakdown": {
-      "source": 0,
-      "source_rationale": "...",
-      "timing": 0,
-      "timing_rationale": "...",
-      "probability": 0,
-      "probability_rationale": "...",
-      "impact": 0,
-      "impact_rationale": "...",
-      "final_score": 0.0,
-      "mode": "Full Analysis | Cautious | Probabilistic Only | Refused"
-    },
-    "badge": "..."
-  },
-  "impact_mapping": {
-    "direct_beneficiary": {"ticker": "...", "rationale": "..."},
-    "secondary_beneficiaries": [{"ticker": "...", "rationale": "..."}],
-    "tertiary_beneficiaries": []
-  },
-  "volume_supply_analysis": {
-    "interpretation": "...",
-    "key_observations": ["..."]
-  },
-  "options_signals": {
-    "available": false,
-    "interpretation": "..."
-  },
-  "credit_short_signals": {
-    "available": false,
-    "interpretation": "..."
-  },
-  "historical_statistics": {
-    "comparable_events_count": 0,
-    "sample_reliability": "✅ 통계 신뢰 가능 | ⚠️ 표본 부족 | ❌ 통계 미제시",
-    "comparable_events": [],
-    "fabrication_warning": "..."
-  },
-  "reference_observation_zones": {
-    "current_position_vs_history": "...",
-    "historical_volatility_lower_1sigma": "...",
-    "historical_volatility_upper_1sigma": "...",
-    "note": "통계 진술이며 매매 권유가 아닙니다"
-  },
-  "scenario_analysis": {
-    "bullish_case": {"trigger": "...", "historical_pattern": "...", "probability": "약 X%"},
-    "base_case": {"trigger": "...", "historical_pattern": "...", "probability": "약 Y%"},
-    "bearish_case": {"trigger": "...", "historical_pattern": "...", "probability": "약 Z%"}
-  },
-  "key_risks": ["..."],
-  "what_to_watch": ["..."],
-  "summary_neutral": "..."
+  "source": 0,
+  "timing": 0,
+  "probability": 0,
+  "impact": 0,
+  "certainty_rationale": "4차원 점수 근거를 1~3문장으로",
+  "direct_beneficiary": {"ticker": "...", "rationale": "..."},
+  "secondary_beneficiaries": [{"ticker": "...", "rationale": "..."}],
+  "comparable_events_count": 0,
+  "current_position_vs_history": "현재가 YTD +X%는 N개 사례 평균(+Y%) 대비 1σ 상단(+Z%)을 {초과/이내/미만}한 구간",
+  "vol_lower_1sigma": "예: -8%",
+  "vol_upper_1sigma": "예: +12%",
+  "bullish_case": {"trigger": "...", "historical_pattern": "...", "probability": "약 X%"},
+  "base_case": {"trigger": "...", "historical_pattern": "...", "probability": "약 Y%"},
+  "bearish_case": {"trigger": "...", "historical_pattern": "...", "probability": "약 Z%"},
+  "key_risks": ["...", "..."],
+  "what_to_watch": ["...", "..."],
+  "summary_neutral": "{종목}은 {이벤트}와 관련하여 {핵심 통계}로 관찰됩니다... 자연스러운 한국어 종합"
 }
 ```
 
-## ⚠️ 필수 필드 — 절대 누락 금지
-
-아래 필드는 **하나도 빠짐없이** 채워야 합니다. 데이터가 부족하면 빈 문자열이 아니라
-"데이터 부재로 정성 분석" 같은 설명을 넣으세요. 통째로 생략하면 사용자 화면에 빈
-영역이 노출됩니다.
-
-- [ ] `event_summary` (certainty_breakdown 4차원 점수 + rationale 포함)
-- [ ] `scenario_analysis` — bullish_case / base_case / bearish_case **3개 모두**,
-      각각 `trigger` · `historical_pattern` · `probability` 채울 것
-- [ ] `reference_observation_zones` — 특히 `current_position_vs_history`는 필수
-- [ ] `historical_statistics` (표본 부족 시에도 그 사실을 명시)
-- [ ] `volume_supply_analysis` / `impact_mapping`
-- [ ] `summary_neutral` — 응답의 **마지막** 필드, 자연스러운 한국어 종합. 비우지 말 것.
-
-JSON이 길어 토큰이 부족할 것 같으면 각 rationale을 간결히 줄이되, 위 필드 자체를
-생략하지는 마세요.
+### 채울 때 원칙
+- `source/timing/probability/impact`: 각 0~10 정수 (위 4차원 기준표 적용). 데이터가 빈약하면 낮게.
+- `bullish_case/base_case/bearish_case`: 3개 모두, 각 `trigger`·`historical_pattern`·`probability` 채움.
+- `current_position_vs_history`: 비워두지 말 것.
+- `summary_neutral`: 마지막에 자연스러운 한국어 종합. 비우지 말 것.
+- 데이터가 부족한 항목은 빈 문자열 대신 "데이터 부재로 정성 분석" 같이 사실을 명시.
+- 옵션/수급/신용 데이터는 위 프롬프트에서 참고해 `summary_neutral`·시나리오에 녹이면 됩니다(별도 필드 불필요).
 
 면책 문구는 시스템이 후처리로 자동 추가하니 콘텐츠에만 집중하세요.

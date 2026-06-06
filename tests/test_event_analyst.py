@@ -2,20 +2,23 @@
 
 실 Claude 호출은 별도 통합 테스트. 본 파일은 데이터 수집 + 모드 분기 +
 사후 일관성 보정 + LEGAL 후처리를 mock으로 검증.
+
+2026-06-06: event는 LLM이 단순 평탄 스키마(_EventLLMOutput)를 채우고 코드가
+EventAnalystResult로 조립(_assemble)하는 구조로 단순화됨. run/completeness 테스트는
+_EventLLMOutput 기준.
 """
 
 from __future__ import annotations
 
 import asyncio
-import json
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
 from agents.event_analyst import (
     EventAnalystAgent,
     EventAnalystInput,
-    EventAnalystResult,
+    _EventLLMOutput,
     calculate_final_score,
     check_event_completeness,
     determine_mode,
@@ -31,11 +34,11 @@ from agents.event_analyst import (
 @pytest.mark.parametrize(
     "src,tim,prob,imp,expected",
     [
-        (10, 10, 10, 10, 10.0),  # 전 만점
+        (10, 10, 10, 10, 10.0),
         (0, 0, 0, 0, 0.0),
-        (10, 10, 0, 0, 7.0),  # 0.4*10 + 0.3*10 = 7.0
+        (10, 10, 0, 0, 7.0),
         (5, 5, 5, 5, 5.0),
-        (8, 6, 4, 2, 0.4 * 8 + 0.3 * 6 + 0.2 * 4 + 0.1 * 2),  # 6.0
+        (8, 6, 4, 2, 0.4 * 8 + 0.3 * 6 + 0.2 * 4 + 0.1 * 2),
     ],
 )
 def test_calculate_final_score(src, tim, prob, imp, expected):
@@ -79,8 +82,8 @@ def test_is_kr_ticker_us_symbol():
 
 
 def test_is_kr_ticker_invalid():
-    assert is_kr_ticker("12345") is False  # 5자리
-    assert is_kr_ticker("0059300") is False  # 7자리
+    assert is_kr_ticker("12345") is False
+    assert is_kr_ticker("0059300") is False
     assert is_kr_ticker("") is False
 
 
@@ -89,63 +92,8 @@ def test_is_kr_ticker_invalid():
 # ──────────────────────────────────────────────
 
 
-def _patch_claude(agent, parsed_response: dict):
-    """call_claude_json을 mock — Pydantic 검증을 통과하는 dict 반환."""
-    async def fake_complete(*args, **kwargs):
-        return EventAnalystResult.model_validate(parsed_response), {"usage": MagicMock()}
-
-    agent.call_claude_json = AsyncMock(side_effect=fake_complete)
-
-
-def _minimal_response_dict(ticker: str = "AAPL", market: str = "US") -> dict:
-    """모드 분기 검증용 최소 응답."""
-    return {
-        "ticker": ticker,
-        "market": market,
-        "event_summary": {
-            "event_type": "earnings",
-            "event_target": "Q1 2026",
-            "d_day": "2026-05-15",
-            "certainty_breakdown": {
-                "source": 9, "source_rationale": "공식 발표",
-                "timing": 9, "timing_rationale": "일자 확정",
-                "probability": 10, "probability_rationale": "거의 확정",
-                "impact": 8, "impact_rationale": "직접+2차",
-                "final_score": 9.0,  # 보정 대상
-                "mode": "WRONG",  # 보정 대상
-            },
-            "badge": "WRONG",  # 보정 대상
-        },
-        "impact_mapping": {},
-        "volume_supply_analysis": {"available": True, "interpretation": "관찰"},
-        "options_signals": {"available": False, "interpretation": ""},
-        "credit_short_signals": {"available": False, "interpretation": ""},
-        "historical_statistics": {
-            "comparable_events_count": 12,
-            "sample_reliability": "WRONG",  # 보정 대상
-            "comparable_events": [],
-            "fabrication_warning": "",  # 자동 첨부 대상
-        },
-        "reference_observation_zones": {
-            "current_position_vs_history": "현재가 +5%",
-            "historical_volatility_lower_1sigma": "-X%",
-            "historical_volatility_upper_1sigma": "+Y%",
-            "note": "통계 진술이며 매매 권유가 아닙니다",
-        },
-        "scenario_analysis": {
-            "bullish_case": {"trigger": "a", "historical_pattern": "b", "probability": "30%"},
-            "base_case": {"trigger": "c", "historical_pattern": "d", "probability": "50%"},
-            "bearish_case": {"trigger": "e", "historical_pattern": "f", "probability": "20%"},
-        },
-        "key_risks": [],
-        "what_to_watch": [],
-        "summary_neutral": "AAPL 실적 관찰 구간.",
-    }
-
-
 def test_us_ticker_collects_options_yfinance_not_short():
-    """US 종목: options + yfinance_events. KR 공매도 X."""
-    agent = EventAnalystAgent.__new__(EventAnalystAgent)  # init 없이 인스턴스만
+    agent = EventAnalystAgent.__new__(EventAnalystAgent)
     agent.agent_name = "event_analyst"
     agent.system_prompt = ""
 
@@ -159,12 +107,11 @@ def test_us_ticker_collects_options_yfinance_not_short():
 
         bundle = asyncio.run(run())
         assert bundle["options"]["available"] is True
-        assert "short_selling" not in bundle  # US는 short 호출 X
+        assert "short_selling" not in bundle
         m_short.assert_not_called()
 
 
 def test_kr_ticker_collects_short_not_options():
-    """KR 종목: short_selling. options/yfinance 호출 X."""
     agent = EventAnalystAgent.__new__(EventAnalystAgent)
     agent.agent_name = "event_analyst"
 
@@ -186,7 +133,6 @@ def test_kr_ticker_collects_short_not_options():
 
 
 def test_collect_data_bundle_handles_module_failures():
-    """일부 모듈 실패 — graceful, 다른 모듈은 정상."""
     agent = EventAnalystAgent.__new__(EventAnalystAgent)
     agent.agent_name = "event_analyst"
 
@@ -200,12 +146,10 @@ def test_collect_data_bundle_handles_module_failures():
         bundle = asyncio.run(run())
         assert bundle["options"]["available"] is False
         assert bundle["options"]["error"] == "RuntimeError"
-        # yfinance는 정상 수집됨
         assert "yfinance_events" in bundle
 
 
 def test_ipo_secondary_lookup_when_event_type():
-    """event_type=ipo_secondary면 find_ipos_for_secondary 호출."""
     agent = EventAnalystAgent.__new__(EventAnalystAgent)
     agent.agent_name = "event_analyst"
 
@@ -230,121 +174,98 @@ def test_ipo_secondary_lookup_when_event_type():
 
 
 # ──────────────────────────────────────────────
-# 4. 사후 일관성 보정 (final_score, mode, badge, sample_reliability)
+# 4. LLM 단순 출력 → 조립(_assemble) 사후 일관성 보정
 # ──────────────────────────────────────────────
 
 
-def test_run_recalculates_final_score_and_mode():
-    """Claude가 잘못된 final_score/mode/badge를 줘도 재계산."""
+def _llm_dict() -> dict:
+    """LLM이 채우는 단순 스키마(_EventLLMOutput)용 dict."""
+    return {
+        "source": 9, "timing": 9, "probability": 10, "impact": 8,
+        "certainty_rationale": "공식 발표 + 일자 확정",
+        "direct_beneficiary": {"ticker": "AAPL", "rationale": "직접 수혜"},
+        "secondary_beneficiaries": [{"ticker": "X", "rationale": "2차"}],
+        "comparable_events_count": 12,
+        "current_position_vs_history": "현재가 +5%는 1σ 이내",
+        "vol_lower_1sigma": "-8%",
+        "vol_upper_1sigma": "+12%",
+        "bullish_case": {"trigger": "a", "historical_pattern": "b", "probability": "30%"},
+        "base_case": {"trigger": "c", "historical_pattern": "d", "probability": "50%"},
+        "bearish_case": {"trigger": "e", "historical_pattern": "f", "probability": "20%"},
+        "key_risks": ["리스크1"],
+        "what_to_watch": ["관전1"],
+        "summary_neutral": "AAPL 실적 관찰 구간으로 분류됩니다.",
+    }
+
+
+def _run_with_llm(llm: dict):
     agent = EventAnalystAgent.__new__(EventAnalystAgent)
     agent.agent_name = "event_analyst"
     agent.system_prompt = ""
     agent.model = "claude-sonnet-4-6"
 
-    response = _minimal_response_dict()
-
     async def run():
         with patch.object(agent, "_collect_data_bundle", return_value={"market": "US", "ticker": "AAPL"}), \
              patch.object(
                  agent, "call_claude_json",
-                 new=AsyncMock(return_value=(EventAnalystResult.model_validate(response), {})),
+                 new=AsyncMock(return_value=(_EventLLMOutput.model_validate(llm), {})),
              ):
             return await agent.run(EventAnalystInput(ticker="AAPL", market="US"))
 
-    result = asyncio.run(run())
+    return asyncio.run(run())
 
+
+def test_assemble_recalculates_final_score_and_mode():
+    """LLM 4차원 점수 → 코드가 final_score/mode/badge 계산."""
+    result = _run_with_llm(_llm_dict())
     cb = result.event_summary.certainty_breakdown
-    # 9, 9, 10, 8 → 0.4*9 + 0.3*9 + 0.2*10 + 0.1*8 = 3.6+2.7+2.0+0.8 = 9.1
+    # 9,9,10,8 → 0.4*9+0.3*9+0.2*10+0.1*8 = 9.1
     assert cb.final_score == pytest.approx(9.1, abs=0.01)
     assert cb.mode == "Full Analysis"
     assert "확정" in result.event_summary.badge
 
 
-def test_run_classifies_sample_reliability():
-    """Claude가 sample_reliability를 누락/잘못 줘도 자동 분류."""
-    agent = EventAnalystAgent.__new__(EventAnalystAgent)
-    agent.agent_name = "event_analyst"
-    agent.system_prompt = ""
-    agent.model = "claude-sonnet-4-6"
+def test_assemble_fills_event_type_target_from_input():
+    """event_type/target은 입력에서 강제 주입."""
+    result = _run_with_llm(_llm_dict())
+    assert result.event_summary.event_type  # 비어있지 않음
+    assert result.event_summary.event_target
 
-    response = _minimal_response_dict()
-    response["historical_statistics"]["comparable_events_count"] = 12
 
-    async def run():
-        with patch.object(agent, "_collect_data_bundle", return_value={"market": "US", "ticker": "AAPL"}), \
-             patch.object(
-                 agent, "call_claude_json",
-                 new=AsyncMock(return_value=(EventAnalystResult.model_validate(response), {})),
-             ):
-            return await agent.run(EventAnalystInput(ticker="AAPL", market="US"))
-
-    result = asyncio.run(run())
+def test_assemble_classifies_sample_reliability_high():
+    llm = _llm_dict()
+    llm["comparable_events_count"] = 12
+    result = _run_with_llm(llm)
     assert "신뢰 가능" in result.historical_statistics.sample_reliability
 
 
-def test_run_low_sample_marks_uncertain():
-    agent = EventAnalystAgent.__new__(EventAnalystAgent)
-    agent.agent_name = "event_analyst"
-    agent.system_prompt = ""
-    agent.model = "claude-sonnet-4-6"
-
-    response = _minimal_response_dict()
-    response["historical_statistics"]["comparable_events_count"] = 3
-
-    async def run():
-        with patch.object(agent, "_collect_data_bundle", return_value={"market": "US", "ticker": "AAPL"}), \
-             patch.object(
-                 agent, "call_claude_json",
-                 new=AsyncMock(return_value=(EventAnalystResult.model_validate(response), {})),
-             ):
-            return await agent.run(EventAnalystInput(ticker="AAPL", market="US"))
-
-    result = asyncio.run(run())
+def test_assemble_low_sample_marks_uncertain():
+    llm = _llm_dict()
+    llm["comparable_events_count"] = 3
+    result = _run_with_llm(llm)
     assert "미제시" in result.historical_statistics.sample_reliability
 
 
-def test_run_attaches_fabrication_warning_when_missing():
-    agent = EventAnalystAgent.__new__(EventAnalystAgent)
-    agent.agent_name = "event_analyst"
-    agent.system_prompt = ""
-    agent.model = "claude-sonnet-4-6"
-
-    response = _minimal_response_dict()
-    response["historical_statistics"]["fabrication_warning"] = ""  # 비어있음
-
-    async def run():
-        with patch.object(agent, "_collect_data_bundle", return_value={"market": "US", "ticker": "AAPL"}), \
-             patch.object(
-                 agent, "call_claude_json",
-                 new=AsyncMock(return_value=(EventAnalystResult.model_validate(response), {})),
-             ):
-            return await agent.run(EventAnalystInput(ticker="AAPL", market="US"))
-
-    result = asyncio.run(run())
+def test_assemble_attaches_fabrication_warning():
+    result = _run_with_llm(_llm_dict())
     assert "외부 검증" in result.historical_statistics.fabrication_warning
 
 
-def test_run_filters_forbidden_in_summary():
-    """summary_neutral에 단정어 들어가도 후처리에서 필터링."""
-    agent = EventAnalystAgent.__new__(EventAnalystAgent)
-    agent.agent_name = "event_analyst"
-    agent.system_prompt = ""
-    agent.model = "claude-sonnet-4-6"
-
-    response = _minimal_response_dict()
-    response["summary_neutral"] = "AAPL 실적 발표일 매수하세요."
-
-    async def run():
-        with patch.object(agent, "_collect_data_bundle", return_value={"market": "US", "ticker": "AAPL"}), \
-             patch.object(
-                 agent, "call_claude_json",
-                 new=AsyncMock(return_value=(EventAnalystResult.model_validate(response), {})),
-             ):
-            return await agent.run(EventAnalystInput(ticker="AAPL", market="US"))
-
-    result = asyncio.run(run())
+def test_assemble_filters_forbidden_in_summary():
+    llm = _llm_dict()
+    llm["summary_neutral"] = "AAPL 실적 발표일 매수하세요."
+    result = _run_with_llm(llm)
     assert "매수하세요" not in result.summary_neutral
     assert "[필터링됨]" in result.summary_neutral
+
+
+def test_assemble_maps_scenarios_and_beneficiaries():
+    """단순 출력의 시나리오/수혜가 EventAnalystResult 구조로 매핑."""
+    result = _run_with_llm(_llm_dict())
+    assert result.scenario_analysis.bullish_case.trigger == "a"
+    assert result.scenario_analysis.bearish_case.probability == "20%"
+    assert result.impact_mapping.direct_beneficiary.get("ticker") == "AAPL"
+    assert result.impact_mapping.secondary_beneficiaries[0].get("ticker") == "X"
 
 
 # ──────────────────────────────────────────────
@@ -353,7 +274,6 @@ def test_run_filters_forbidden_in_summary():
 
 
 def test_refused_mode_skips_claude_call():
-    """certainty_pre_check < 3이면 Claude 호출 없이 거부 응답."""
     agent = EventAnalystAgent.__new__(EventAnalystAgent)
     agent.agent_name = "event_analyst"
     agent.system_prompt = ""
@@ -363,15 +283,33 @@ def test_refused_mode_skips_claude_call():
 
     async def run():
         with patch.object(agent, "_collect_data_bundle", return_value=bundle), \
-             patch.object(agent, "call_claude_json") as m_claude:
+             patch.object(agent, "call_claude_json"):
             return await agent.run(EventAnalystInput(ticker="005930", market="KR"))
 
     result = asyncio.run(run())
     assert result.event_summary.certainty_breakdown.mode == "Refused"
     assert "거부" in result.event_summary.badge
-    # call_claude_json은 호출되지 않아야 함 (사전 차단)
-    # patch는 적용되었으므로 call_count로 확인
-    # (closure 안의 m_claude를 외부에서 검증하기 어려우므로 mode만으로 확인)
+
+
+def test_graceful_fallback_on_parse_failure():
+    """call_claude_json이 최종 실패해도 raw 에러 대신 유효 구조 반환."""
+    agent = EventAnalystAgent.__new__(EventAnalystAgent)
+    agent.agent_name = "event_analyst"
+    agent.system_prompt = ""
+    agent.model = "claude-sonnet-4-6"
+
+    async def run():
+        with patch.object(agent, "_collect_data_bundle", return_value={"market": "US", "ticker": "AAPL"}), \
+             patch.object(
+                 agent, "call_claude_json",
+                 new=AsyncMock(side_effect=ValueError("parse fail")),
+             ):
+            return await agent.run(EventAnalystInput(ticker="AAPL", market="US"))
+
+    result = asyncio.run(run())
+    assert result.persona == "event"
+    assert result.summary_neutral  # 비어있지 않은 친화 메시지
+    assert "ValueError" not in result.summary_neutral  # raw 에러 노출 금지
 
 
 # ──────────────────────────────────────────────
@@ -380,45 +318,41 @@ def test_refused_mode_skips_claude_call():
 
 
 def test_persona_md_loads_with_legal_rules():
-    """personas/event.md가 LEGAL 표현을 포함하는지."""
     agent = EventAnalystAgent()
     assert "LEGAL Hard Rules" in agent.system_prompt or "절대 금지" in agent.system_prompt
-    # 핵심 v2.1 항목
     assert "summary_neutral" in agent.system_prompt
     assert "scenario_analysis" in agent.system_prompt
     assert "current_position_vs_history" in agent.system_prompt
-    # 필수 필드 누락 금지 섹션 (B 작업)
-    assert "필수 필드" in agent.system_prompt
 
 
 # ──────────────────────────────────────────────
-# 7. 완전성 검사 — check_event_completeness
+# 7. 완전성 검사 — check_event_completeness(_EventLLMOutput)
 # ──────────────────────────────────────────────
 
 
 def test_completeness_full_response_returns_empty():
-    """모든 핵심 필드가 채워진 응답은 누락 없음."""
-    result = EventAnalystResult.model_validate(_minimal_response_dict())
-    assert check_event_completeness(result) == []
+    out = _EventLLMOutput.model_validate(_llm_dict())
+    assert check_event_completeness(out) == []
 
 
 def test_completeness_detects_missing_summary():
-    response = _minimal_response_dict()
-    response["summary_neutral"] = "   "
-    result = EventAnalystResult.model_validate(response)
-    assert "summary_neutral" in check_event_completeness(result)
+    llm = _llm_dict()
+    llm["summary_neutral"] = "   "
+    out = _EventLLMOutput.model_validate(llm)
+    assert "summary_neutral" in check_event_completeness(out)
 
 
-def test_completeness_detects_missing_scenario_analysis():
-    """scenario_analysis 통째 누락 — default_factory로 검증은 통과하나 빈 카드."""
-    response = _minimal_response_dict()
-    del response["scenario_analysis"]
-    result = EventAnalystResult.model_validate(response)
-    assert "scenario_analysis" in check_event_completeness(result)
+def test_completeness_detects_missing_scenarios():
+    llm = _llm_dict()
+    llm["bullish_case"] = {}
+    llm["base_case"] = {}
+    llm["bearish_case"] = {}
+    out = _EventLLMOutput.model_validate(llm)
+    assert "scenario_analysis" in check_event_completeness(out)
 
 
-def test_completeness_detects_missing_reference_zones():
-    response = _minimal_response_dict()
-    response["reference_observation_zones"]["current_position_vs_history"] = ""
-    result = EventAnalystResult.model_validate(response)
-    assert "reference_observation_zones" in check_event_completeness(result)
+def test_completeness_detects_zero_certainty():
+    llm = _llm_dict()
+    llm["source"] = llm["timing"] = llm["probability"] = llm["impact"] = 0
+    out = _EventLLMOutput.model_validate(llm)
+    assert "certainty_scores" in check_event_completeness(out)
