@@ -9,6 +9,10 @@ import { Card, CardContent } from "@/components/ui/card";
 import { useKisLivePrices } from "@/hooks/useKisLivePrices";
 import { usePersonas } from "@/hooks/usePersonas";
 import { useUpdateWatchlist, useWatchlist } from "@/hooks/useWatchlist";
+import {
+  entryProximity,
+  useWatchlistEntryPoints,
+} from "@/hooks/useWatchlistEntryPoints";
 import { apiCall } from "@/lib/api";
 import type { StockSearchResponse } from "@/types/api";
 
@@ -59,6 +63,10 @@ export function WatchlistPreview() {
   // KIS WebSocket 실시간 가격 (KR 종목만 자동 활성)
   const livePrices = useKisLivePrices(visibleTickers);
 
+  // 저장된 진입선 — 진입선 근접/도달 모니터링용
+  const { data: entryData } = useWatchlistEntryPoints(visibleTickers.length > 0);
+  const entryMap = entryData?.items ?? {};
+
   return (
     <Card>
       <CardContent className="p-4 space-y-3">
@@ -91,11 +99,13 @@ export function WatchlistPreview() {
               const name = nameByTicker[t];
               const live = livePrices[t];
               const hasLive = live?.price != null;
+              const prox = entryProximity(entryMap[t]?.entry_points, live?.price);
               return (
                 <li
                   key={t}
-                  className="flex items-center justify-between p-2 rounded-md hover:bg-muted text-sm gap-2"
+                  className="p-2 rounded-md hover:bg-muted text-sm space-y-1"
                 >
+                  <div className="flex items-center justify-between gap-2">
                   <span className="min-w-0 truncate">
                     {name ? (
                       <>
@@ -150,6 +160,33 @@ export function WatchlistPreview() {
                       ✕
                     </button>
                   </div>
+                  </div>
+
+                  {/* 진입선 근접/도달 모니터링 */}
+                  {prox &&
+                    (prox.reached > 0 ? (
+                      <div className="text-[11px] font-medium text-red-500">
+                        🎯 {prox.reached}차 진입 구간 도달 (진입선{" "}
+                        {prox.tier1.toLocaleString("ko-KR")})
+                      </div>
+                    ) : prox.distPct != null ? (
+                      <div className="text-[11px] text-muted-foreground">
+                        1차 진입선 {prox.tier1.toLocaleString("ko-KR")} · 현재가 대비{" "}
+                        <span
+                          className={
+                            prox.distPct > -3
+                              ? "text-amber-600 font-medium"
+                              : ""
+                          }
+                        >
+                          {prox.distPct.toFixed(1)}%
+                        </span>
+                      </div>
+                    ) : (
+                      <div className="text-[11px] text-muted-foreground">
+                        진입선 {prox.tier1.toLocaleString("ko-KR")} 저장됨
+                      </div>
+                    ))}
                 </li>
               );
             })}

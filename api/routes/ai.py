@@ -776,6 +776,41 @@ def _watchlist_meta_doc(uid: str, ticker: str):
     )
 
 
+@router.get("/watchlist/entry-points")
+async def get_all_entry_points(request: Request):
+    """관심종목 전체의 저장된 진입선 맵 — 대시보드 모니터링(진입선 근접/도달)용.
+
+    users/{uid}/watchlist_meta 컬렉션을 1회 읽어 ticker→entry_points 맵 반환.
+    """
+    user = getattr(request.state, "user", None) or {}
+    uid = user.get("uid", "")
+    if not uid:
+        return {"items": {}}
+    try:
+        from screener.db.firebase_client import get_db
+
+        col = (
+            get_db()
+            .collection("users")
+            .document(uid)
+            .collection("watchlist_meta")
+            .stream()
+        )
+        items: dict[str, dict] = {}
+        for d in col:
+            x = d.to_dict() or {}
+            if x.get("entry_points"):
+                items[d.id] = {
+                    "entry_points": x.get("entry_points"),
+                    "persona_used": x.get("persona_used", "manual"),
+                    "source": x.get("source", "manual"),
+                }
+        return {"items": items}
+    except Exception as e:
+        logger.warning(f"[watchlist] 전체 entry_points 조회 실패 (uid={uid}): {e}")
+        return {"items": {}}
+
+
 @router.get("/watchlist/{ticker}/entry-points")
 async def get_entry_points(ticker: str, request: Request):
     """저장된 진입선 조회. 없으면 entry_points=null."""
