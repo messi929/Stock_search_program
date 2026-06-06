@@ -122,16 +122,21 @@
 중첩을 깊게 만들지 말고 이 구조 그대로 따르세요. (점수의 최종합·모드·배지·표본
 신뢰도·종목명 등은 시스템이 자동 계산하므로 당신은 아래 필드만 채우면 됩니다.)
 
+⚠️ **source/timing/probability/impact는 반드시 0~10 정수로 점수를 매겨 채우세요.**
+0으로 비워두지 마세요. 위 "4차원 확실성 점수" 기준표를 적용 — 예: 실적 발표처럼 일정·
+출처가 공식 확인되면 timing 8~10·source 8~10, 발생 거의 확정이면 probability 8~10.
+점수를 비우면 시스템이 "분석 거부"로 처리합니다. 아래는 예시값(실제 데이터로 대체):
+
 ```json
 {
-  "source": 0,
-  "timing": 0,
-  "probability": 0,
-  "impact": 0,
-  "certainty_rationale": "4차원 점수 근거를 1~3문장으로",
+  "source": 9,
+  "timing": 8,
+  "probability": 9,
+  "impact": 7,
+  "certainty_rationale": "4차원 점수 근거를 1~3문장으로 (각 점수가 왜 그 값인지)",
   "direct_beneficiary": {"ticker": "...", "rationale": "..."},
   "secondary_beneficiaries": [{"ticker": "...", "rationale": "..."}],
-  "comparable_events_count": 0,
+  "comparable_events_count": 4,
   "current_position_vs_history": "현재가 YTD +X%는 N개 사례 평균(+Y%) 대비 1σ 상단(+Z%)을 {초과/이내/미만}한 구간",
   "vol_lower_1sigma": "예: -8%",
   "vol_upper_1sigma": "예: +12%",
@@ -145,7 +150,7 @@
 ```
 
 ### 채울 때 원칙
-- `source/timing/probability/impact`: 각 0~10 정수 (위 4차원 기준표 적용). 데이터가 빈약하면 낮게.
+- `source/timing/probability/impact`: 각 0~10 정수 (위 4차원 기준표 적용). **절대 0으로 비우지 말 것** — 공식 일정/출처 확인 시 8~10, 데이터가 빈약하면 3~5. `comparable_events_count`도 실제 추정 건수로 채움.
 - `bullish_case/base_case/bearish_case`: 3개 모두, 각 `trigger`·`historical_pattern`·`probability` 채움.
 - `current_position_vs_history`: 비워두지 말 것.
 - `summary_neutral`: 마지막에 자연스러운 한국어 종합. 비우지 말 것.
