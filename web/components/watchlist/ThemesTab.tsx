@@ -21,9 +21,8 @@ interface Props {
 }
 
 /**
- * 큐레이션 테마 그리드 — 클릭 시 부모(AddView)가 DiscoverTab으로 전환.
- * 자체 useDiscover()를 가지지 않음 (별도 인스턴스라 disabled 동기 안 됨).
- * 부모에서 isPending과 debounce 처리.
+ * 큐레이션 테마 그리드 — 클릭 시 부모가 종목 발견(/discover?q=)으로 런치.
+ * 자체 useDiscover()를 가지지 않음. 부모에서 debounce 처리.
  */
 export function ThemesTab({ onSelect, isPending = false }: Props) {
   return (
@@ -31,7 +30,7 @@ export function ThemesTab({ onSelect, isPending = false }: Props) {
       <CardContent className="p-5 space-y-3">
         <h3 className="font-semibold">🎯 큐레이션 테마</h3>
         <p className="text-sm text-muted-foreground">
-          클릭 시 AI 발견 탭으로 이동하며 자동 검색됩니다.
+          클릭 시 종목 발견에서 자동으로 검색됩니다.
         </p>
         <div className="grid grid-cols-3 gap-2">
           {THEMES.map((t) => (

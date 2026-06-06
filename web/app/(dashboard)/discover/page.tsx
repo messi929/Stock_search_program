@@ -1,9 +1,17 @@
 "use client";
 
+import { useSearchParams } from "next/navigation";
+import { Suspense } from "react";
+
 import { Disclaimer } from "@/components/legal/Disclaimer";
 import { DiscoverView } from "@/components/discover/DiscoverView";
 
-export default function DiscoverPage() {
+function DiscoverInner() {
+  // ?q=... 로 진입하면(테마 런치 등) 해당 쿼리로 자동 발견.
+  const sp = useSearchParams();
+  const q = (sp.get("q") || "").trim();
+  const external = q ? { query: q, nonce: 1 } : null;
+
   return (
     <div className="space-y-6 max-w-3xl">
       <header>
@@ -14,9 +22,21 @@ export default function DiscoverPage() {
         </p>
       </header>
 
-      <DiscoverView />
+      <DiscoverView externalQuery={external} />
 
       <Disclaimer />
     </div>
+  );
+}
+
+export default function DiscoverPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="p-2 text-sm text-muted-foreground">불러오는 중...</div>
+      }
+    >
+      <DiscoverInner />
+    </Suspense>
   );
 }

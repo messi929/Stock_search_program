@@ -133,13 +133,13 @@ export default function DashboardHome() {
             </div>
           </Link>
           <Link
-            href="/watchlist/add"
+            href="/discover"
             className={`${buttonVariants({ variant: "outline", size: "lg" })} h-auto py-4 px-4 justify-start`}
           >
             <div className="text-left w-full">
-              <div className="font-semibold">⭐ 관심 종목 추가</div>
+              <div className="font-semibold">🧭 종목 발견</div>
               <div className="text-xs text-muted-foreground mt-1">
-                검색 / AI 발견 / 큐레이션 테마
+                AI에게 조건·테마로 관찰 가치 종목 찾기
               </div>
             </div>
           </Link>

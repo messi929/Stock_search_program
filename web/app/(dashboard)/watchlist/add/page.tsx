@@ -1,10 +1,10 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useRouter } from "next/navigation";
+import { useRef } from "react";
 import { toast } from "sonner";
 
 import { Disclaimer } from "@/components/legal/Disclaimer";
-import { DiscoverTab } from "@/components/watchlist/DiscoverTab";
 import { SearchTab } from "@/components/watchlist/SearchTab";
 import { ThemesTab } from "@/components/watchlist/ThemesTab";
 import {
@@ -14,31 +14,21 @@ import {
   TabsTrigger,
 } from "@/components/ui/tabs";
 
-type TabId = "search" | "discover" | "themes";
-
-const THEME_DEBOUNCE_MS = 800;
+const DEBOUNCE_MS = 800;
 
 export default function AddWatchlistPage() {
-  const [tab, setTab] = useState<TabId>("search");
-  const [externalQuery, setExternalQuery] = useState<{
-    query: string;
-    nonce: number;
-  } | null>(null);
-  const [debouncing, setDebouncing] = useState(false);
+  const router = useRouter();
   const lastClickRef = useRef<number>(0);
 
-  const triggerDiscover = (query: string) => {
-    // 800ms 내 중복 클릭 차단 (비용 보호 — Discover Sonnet ~70원/호출)
+  // 테마 선택 → 종목 발견(/discover)으로 런치. AI 발견은 이제 종목 발견 페이지가 전담.
+  const launchDiscover = (query: string) => {
     const now = Date.now();
-    if (now - lastClickRef.current < THEME_DEBOUNCE_MS) {
+    if (now - lastClickRef.current < DEBOUNCE_MS) {
       toast.info("잠시만 기다려주세요...");
       return;
     }
     lastClickRef.current = now;
-    setDebouncing(true);
-    window.setTimeout(() => setDebouncing(false), THEME_DEBOUNCE_MS);
-    setExternalQuery({ query, nonce: now });
-    setTab("discover");
+    router.push(`/discover?q=${encodeURIComponent(query)}`);
   };
 
   return (
@@ -46,14 +36,15 @@ export default function AddWatchlistPage() {
       <header>
         <h1 className="text-2xl font-bold">⭐ 관심 종목 추가</h1>
         <p className="text-sm text-muted-foreground mt-1">
-          종목 코드 검색, AI에게 자연어 발견 요청, 큐레이션 테마 중 선택하세요.
+          종목 코드로 직접 검색해 추가하거나, 테마에서 골라 AI 발견으로 이어가세요.
+          (AI에게 조건으로 찾기는{" "}
+          <span className="font-medium">사이드바 · 종목 발견</span>)
         </p>
       </header>
 
-      <Tabs value={tab} onValueChange={(v) => setTab(v as TabId)}>
+      <Tabs defaultValue="search">
         <TabsList>
           <TabsTrigger value="search">🔎 검색</TabsTrigger>
-          <TabsTrigger value="discover">🤖 AI 발견</TabsTrigger>
           <TabsTrigger value="themes">🎯 테마</TabsTrigger>
         </TabsList>
 
@@ -61,14 +52,10 @@ export default function AddWatchlistPage() {
           <SearchTab />
         </TabsContent>
 
-        <TabsContent value="discover">
-          <DiscoverTab externalQuery={externalQuery} />
-        </TabsContent>
-
         <TabsContent value="themes">
           <ThemesTab
-            isPending={debouncing}
-            onSelect={(_label, query) => triggerDiscover(query)}
+            isPending={false}
+            onSelect={(_label, query) => launchDiscover(query)}
           />
         </TabsContent>
       </Tabs>
