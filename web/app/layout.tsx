@@ -28,6 +28,14 @@ export const metadata: Metadata = {
     title: SITE_TITLE,
     description: SITE_DESC,
   },
+  // 검색엔진 소유권 인증 — Search Console에서 발급받은 토큰을 Vercel env로 주입(코드 변경 없이 인증).
+  verification: {
+    google: process.env.GOOGLE_SITE_VERIFICATION,
+    other: process.env.NAVER_SITE_VERIFICATION
+      ? { "naver-site-verification": process.env.NAVER_SITE_VERIFICATION }
+      : {},
+  },
+  robots: { index: true, follow: true },
 };
 
 export default function RootLayout({
