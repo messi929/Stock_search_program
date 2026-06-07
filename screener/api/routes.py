@@ -528,9 +528,11 @@ async def export_stocks(
         )
 
 
-@router.get("/chart")
-async def get_chart_data(ticker: str):
-    """종목 차트 데이터 (OHLCV) — Firestore에서 로드."""
+async def _build_chart(ticker: str) -> dict:
+    """종목 차트 데이터 (OHLCV + 이동평균) — Firestore history 로드. KR/US 공통.
+
+    /api/chart 와 공개 종목 페이지(/api/stocks/{ticker})가 공유.
+    """
     import asyncio
 
     empty = {"candles": [], "ma5": [], "ma20": [], "ma60": []}
@@ -573,6 +575,90 @@ async def get_chart_data(ticker: str):
         ]
 
     return {"candles": candles, **ma_data}
+
+
+@router.get("/chart")
+async def get_chart_data(ticker: str):
+    """종목 차트 데이터 (OHLCV) — Firestore에서 로드."""
+    return await _build_chart(ticker)
+
+
+def _public_stock_payload(row) -> dict:
+    """공개 종목 페이지(/stocks/{ticker})용 중립 데이터.
+
+    ⚠️ 법적 원칙: target_price·buy_score·buy_grade 등 '추천/목표가' 성격 필드는
+    절대 포함하지 않는다(사실 데이터만). _row_to_item 과 의도적으로 분리.
+    """
+    g = lambda k, d=0: _safe(row.get(k, d), d)
+    return {
+        "ticker": str(g("ticker", "")),
+        "name": str(g("name", "") or g("ticker", "")),
+        "market": str(g("market", "")),
+        "stock_type": str(g("stock_type", "stock")),
+        "close": float(g("close")),
+        "change_pct": round(float(g("change_pct")), 2),
+        "volume": int(g("volume")),
+        "trading_value": round(float(g("trading_value")), 0),
+        "market_cap": round(float(g("market_cap")), 0),
+        "per": round(float(g("per")), 2),
+        "pbr": round(float(g("pbr")), 2),
+        "roe": round(float(g("roe")), 2),
+        "div_yield": round(float(g("div_yield")), 2),
+        "vs_high_52w": round(float(g("vs_high_52w")), 2),
+        "vs_low_52w": round(float(g("vs_low_52w")), 2),
+        "rsi": round(float(g("rsi")), 1),
+        "sector": str(g("sector", "")),
+        "industry": str(g("industry", "")),
+        "themes": str(g("themes", "")),
+    }
+
+
+def _find_stock_row(ticker: str):
+    """ticker로 종목 row 조회 (대소문자 무시, 주식+ETF). 없으면 None."""
+    df = _get_combined_df()
+    if df is None or df.empty:
+        return None
+    t = str(ticker).strip().upper()
+    mask = df["ticker"].astype(str).str.upper() == t
+    matched = df[mask]
+    if matched.empty:
+        return None
+    return matched.iloc[0]
+
+
+@router.get("/stocks")
+async def list_public_stocks():
+    """공개 sitemap/색인용 전체 종목 경량 목록 (ticker/name/market). 무인증."""
+    df = _get_combined_df()
+    if df is None or df.empty:
+        return {"stocks": [], "last_update": _data_store.get("last_update", "")}
+    stocks = [
+        {
+            "ticker": str(row.get("ticker", "")),
+            "name": str(row.get("name", "") or row.get("ticker", "")),
+            "market": str(row.get("market", "") or ""),
+        }
+        for _, row in df.iterrows()
+        if str(row.get("ticker", ""))
+    ]
+    return {"stocks": stocks, "last_update": _data_store.get("last_update", "")}
+
+
+@router.get("/stocks/{ticker}")
+async def get_public_stock(ticker: str):
+    """공개 종목 상세 (SSR/SEO용) — 중립 데이터 + 차트. 무인증.
+
+    AI 딥다이브·실시간 검증은 로그인 뒤(/api/ai/analyze)에서만 제공.
+    """
+    row = _find_stock_row(ticker)
+    if row is None:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="종목을 찾을 수 없습니다.")
+    payload = _public_stock_payload(row)
+    chart = await _build_chart(payload["ticker"])
+    payload["chart"] = chart.get("candles", [])
+    payload["updated_at"] = _data_store.get("last_update", "")
+    return payload
 
 
 @router.get("/themes")

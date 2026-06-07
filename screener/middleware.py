@@ -31,7 +31,7 @@ PUBLIC_PATHS = {"/", "/api/status", "/api/categories", "/favicon.ico",
                 "/api/webhooks/lemonsqueezy", "/api/lemon-config",
                 "/pricing", "/terms", "/privacy", "/refund", "/admin", "/rank",
                 "/backtest-report", "/sitemap.xml", "/robots.txt"}
-PUBLIC_PREFIXES = ("/static/", "/rank/", "/og/")
+PUBLIC_PREFIXES = ("/static/", "/rank/", "/og/", "/api/stocks")
 
 # 무료 티어 허용 카테고리 (foreign_inst = 스마트머니/외국인·기관 수급)
 FREE_CATEGORIES = {"surge", "bluechip", "recommend", "watchlist", "etf", "foreign_inst"}
