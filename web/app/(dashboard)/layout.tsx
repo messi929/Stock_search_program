@@ -87,19 +87,33 @@ export default function DashboardLayout({
         </div>
       </aside>
 
-      {/* Mobile top bar */}
+      {/* Mobile top bar — 하단 nav는 5개 유지, 관리자 진입은 여기(관리자만 🛡️ 노출). */}
       <header className="md:hidden flex items-center justify-between px-4 py-3 border-b">
         <Link href="/dashboard" className="text-lg font-bold">
           Axis
         </Link>
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          onClick={() => signOut().then(() => router.replace("/"))}
-        >
-          로그아웃
-        </Button>
+        <div className="flex items-center gap-1">
+          {isAdmin && (
+            <Link
+              href="/admin"
+              aria-label="관리자"
+              aria-current={pathname?.startsWith("/admin") ? "page" : undefined}
+              className={`px-2 py-1 rounded-md text-lg leading-none hover:bg-muted ${
+                pathname?.startsWith("/admin") ? "bg-muted" : ""
+              }`}
+            >
+              🛡️
+            </Link>
+          )}
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={() => signOut().then(() => router.replace("/"))}
+          >
+            로그아웃
+          </Button>
+        </div>
       </header>
 
       {/* pb-20: 모바일 fixed bottom nav(약 60px) + safe-area 여유. md+에선 사이드바라 0. */}
