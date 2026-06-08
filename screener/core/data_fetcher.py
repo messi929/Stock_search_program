@@ -22,19 +22,137 @@ from screener.config import CACHE_DIR, HISTORY_DAYS
 _HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
 
 
+def _fdr_stock_listing(market: str, retries: int = 3, backoff: float = 3.0) -> pd.DataFrame:
+    """fdr.StockListing 재시도 래퍼.
+
+    KRX marcap CSV 다운로드가 일시적 네트워크 오류로 자주 실패한다.
+    재시도 없이 예외가 전파되면 collect_all 전체가 첫 단계에서 죽으므로,
+    지수 백오프로 N회 재시도한다.
+    """
+    last_err = None
+    for attempt in range(1, retries + 1):
+        try:
+            df = fdr.StockListing(market)
+            if df is not None and len(df) > 0:
+                return df
+            last_err = ValueError(f"빈 결과 (market={market})")
+        except Exception as e:
+            last_err = e
+            logger.warning(
+                f"StockListing 실패 [{market}] ({attempt}/{retries}): "
+                f"{type(e).__name__}: {str(e)[:120]}"
+            )
+        if attempt < retries:
+            time.sleep(backoff * attempt)
+    raise RuntimeError(f"StockListing 재시도 소진 [{market}]: {last_err}")
+
+
 # ──────────────────────────────────────────────
 # 주식 데이터
 # ──────────────────────────────────────────────
 
+def _pykrx_daily_snapshot() -> pd.DataFrame:
+    """fdr.StockListing 실패 시 pykrx 폴백 — KOSPI/KOSDAQ 전종목 스냅샷.
+
+    FDR의 KRX marcap 엔드포인트가 죽어도(과거 404 사례) pykrx로 같은 스키마를 구성.
+    단, KRX 코어 자체가 점검 중이면 pykrx도 실패 — 그 경우는 불가피.
+    반환 스키마는 fetch_daily_snapshot과 동일.
+    """
+    from pykrx import stock as krx
+
+    # 최근 영업일 탐색 (오늘부터 최대 7일 역행)
+    base = None
+    for back in range(0, 8):
+        d = (datetime.now() - timedelta(days=back)).strftime("%Y%m%d")
+        try:
+            test = krx.get_market_ohlcv_by_ticker(d, market="KOSPI")
+            if test is not None and not test.empty and float(test["종가"].sum()) > 0:
+                base = d
+                break
+        except Exception:
+            continue
+    if base is None:
+        logger.warning("pykrx 폴백: 최근 영업일 데이터 없음")
+        return pd.DataFrame()
+
+    frames = []
+    for market in ["KOSPI", "KOSDAQ"]:
+        try:
+            ohlcv = krx.get_market_ohlcv_by_ticker(base, market=market)
+            cap = krx.get_market_cap_by_ticker(base, market=market)
+        except Exception as e:
+            logger.warning(f"pykrx {market} 조회 실패: {e}")
+            continue
+        if ohlcv is None or ohlcv.empty:
+            continue
+        merged = ohlcv.join(cap[["시가총액", "상장주식수"]], how="left")
+        merged = merged.reset_index()
+        tcol = merged.columns[0]  # '티커'
+        tickers = merged[tcol].astype(str).tolist()
+        names = []
+        for t in tickers:
+            try:
+                names.append(krx.get_market_ticker_name(t))
+            except Exception:
+                names.append("")
+        sub = pd.DataFrame({
+            "ticker": tickers,
+            "name": names,
+            "market_type": market,
+            "close": pd.to_numeric(merged.get("종가", 0), errors="coerce").fillna(0).astype(int),
+            "open": pd.to_numeric(merged.get("시가", 0), errors="coerce").fillna(0).astype(int),
+            "high": pd.to_numeric(merged.get("고가", 0), errors="coerce").fillna(0).astype(int),
+            "low": pd.to_numeric(merged.get("저가", 0), errors="coerce").fillna(0).astype(int),
+            "volume": pd.to_numeric(merged.get("거래량", 0), errors="coerce").fillna(0).astype(int),
+            "trading_value": pd.to_numeric(merged.get("거래대금", 0), errors="coerce").fillna(0),
+            "change_pct": pd.to_numeric(merged.get("등락률", 0), errors="coerce").fillna(0),
+            "market_cap_raw": pd.to_numeric(merged.get("시가총액", 0), errors="coerce").fillna(0),
+            "shares": pd.to_numeric(merged.get("상장주식수", 0), errors="coerce").fillna(0).astype(int),
+        })
+        frames.append(sub)
+
+    if not frames:
+        return pd.DataFrame()
+
+    raw = pd.concat(frames, ignore_index=True)
+    result = pd.DataFrame({
+        "ticker": raw["ticker"], "name": raw["name"], "market": raw["market_type"],
+        "close": raw["close"], "open": raw["open"], "high": raw["high"], "low": raw["low"],
+        "volume": raw["volume"], "trading_value": raw["trading_value"],
+        "change_pct": raw["change_pct"], "market_cap_raw": raw["market_cap_raw"],
+        "shares": raw["shares"],
+    })
+    result["market_cap"] = (result["market_cap_raw"] / 1_0000_0000).round(0)
+    result = result[result["close"] > 0].copy()
+    for col in ["per", "pbr", "eps", "div_yield", "roe"]:
+        result[col] = 0.0
+    result["sector"] = ""
+    result["industry"] = ""
+    result["stock_type"] = "stock"
+    logger.info(f"pykrx 폴백 스냅샷 완료: {len(result)}종목 (기준일 {base})")
+    return result
+
+
 def fetch_daily_snapshot() -> pd.DataFrame:
-    """KOSPI + KOSDAQ 전종목 당일 스냅샷."""
+    """KOSPI + KOSDAQ 전종목 당일 스냅샷.
+
+    1차: FinanceDataReader StockListing (재시도 포함).
+    2차(폴백): pykrx — FDR 엔드포인트 회귀 시에도 수집 지속.
+    """
     logger.info("전종목 일일 스냅샷 수집 시작...")
 
     all_data = []
-    for market in ["KOSPI", "KOSDAQ"]:
-        df = fdr.StockListing(market)
-        df["market_type"] = market
-        all_data.append(df)
+    try:
+        for market in ["KOSPI", "KOSDAQ"]:
+            df = _fdr_stock_listing(market)
+            df["market_type"] = market
+            all_data.append(df)
+    except Exception as e:
+        logger.warning(f"FDR StockListing 실패 → pykrx 폴백 시도: {e}")
+        fallback = _pykrx_daily_snapshot()
+        if not fallback.empty:
+            return fallback
+        raise
 
     raw = pd.concat(all_data, ignore_index=True)
 
@@ -280,7 +398,11 @@ def fetch_etf_data() -> pd.DataFrame:
     """ETF 전종목 데이터."""
     logger.info("ETF 데이터 수집 시작...")
 
-    raw = fdr.StockListing("ETF/KR")
+    try:
+        raw = _fdr_stock_listing("ETF/KR")
+    except Exception as e:
+        logger.warning(f"ETF StockListing 실패 — 스킵: {e}")
+        return pd.DataFrame()
     if raw is None or len(raw) == 0:
         logger.warning("ETF 데이터 없음")
         return pd.DataFrame()

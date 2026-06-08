@@ -44,7 +44,7 @@ steps:
           fi
         }
 
-        deploy_job "collector-heavy"    "2Gi" "900" "$${SECRETS}"       "--all"
+        deploy_job "collector-heavy"    "2Gi" "2400" "$${SECRETS}"       "--all"
         deploy_job "collector-light-kr"  "1Gi" "300" "$${SECRETS_LIGHT}" "--kr-snapshot,--etf"
         deploy_job "collector-light-us"  "1Gi" "300" "$${SECRETS_LIGHT}" "--us-snapshot"
 

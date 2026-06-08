@@ -216,7 +216,7 @@ deploy_job() {
     fi
 }
 
-deploy_job "collector-heavy"    "2Gi" "900" "${SECRETS_HEAVY}" "--all"
+deploy_job "collector-heavy"    "2Gi" "2400" "${SECRETS_HEAVY}" "--all"
 deploy_job "collector-light-kr"  "1Gi" "300" "${SECRETS_LIGHT}" "--kr-snapshot,--etf"
 deploy_job "collector-light-us"  "1Gi" "300" "${SECRETS_LIGHT}" "--us-snapshot"
 
@@ -260,11 +260,12 @@ create_schedule() {
     echo "    ${NAME} -> ${CRON}"
 }
 
-# Heavy 스케줄 (4회/일, 평일만)
+# Heavy 스케줄 (2회/일, 평일만) — 아침 08:00(US 마감 후+KR 개장 전) / 저녁 17:30(KR 마감+KRX 안정화 후)
+# history 포함 전체 수집. 장중 시세는 별도 light 스냅샷(아래)이 담당.
 echo ""
-echo "  [Heavy] 전체 수집 — 평일 4회"
-HEAVY_CRONS=("30 6 * * 1-5" "30 9 * * 1-5" "0 16 * * 1-5" "30 22 * * 1-5")
-HEAVY_NAMES=("0630-us-close" "0930-kr-open" "1600-kr-close" "2230-us-open")
+echo "  [Heavy] 전체 수집 — 평일 2회 (08:00, 17:30)"
+HEAVY_CRONS=("0 8 * * 1-5" "30 17 * * 1-5")
+HEAVY_NAMES=("0800-morning" "1730-kr-close")
 for i in "${!HEAVY_CRONS[@]}"; do
     create_schedule "collector-heavy-${HEAVY_NAMES[$i]}" "${HEAVY_CRONS[$i]}" "collector-heavy" "900"
 done

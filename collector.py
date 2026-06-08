@@ -634,21 +634,28 @@ def collect_all():
     logger.info("=" * 60)
     start = time.time()
 
-    # Phase 1: 스냅샷
+    def _safe(label, fn, *args):
+        """단계 격리 실행 — 한 단계 실패가 전체(특히 마지막 history)를 막지 않도록."""
+        try:
+            fn(*args)
+        except Exception as e:
+            logger.error(f"[{label}] 실패 — 계속 진행: {type(e).__name__}: {str(e)[:160]}")
+
+    # Phase 1: 스냅샷 (snapshot은 history의 입력이라 실패 시 재시도로도 못 살리면 중단)
     snapshot = collect_kr_snapshot()
-    collect_etf()
+    _safe("etf", collect_etf)
 
-    # Phase 2: 펀더멘탈 + 테마 + 수급
-    collect_fundamentals(snapshot)
-    collect_us_snapshot()
-    collect_themes()
+    # Phase 2: 펀더멘탈 + 테마 + 수급 (각 단계 격리 — 하나 실패해도 history까지 진행)
+    _safe("fundamentals", collect_fundamentals, snapshot)
+    _safe("us_snapshot", collect_us_snapshot)
+    _safe("themes", collect_themes)
     # 외국인/기관: pykrx 우선, 실패 시 네이버 폴백
-    collect_foreign_inst(snapshot)
-    collect_dividend(snapshot)
+    _safe("foreign_inst", collect_foreign_inst, snapshot)
+    _safe("dividend", collect_dividend, snapshot)
 
-    # Phase 3: 히스토리 + 기술지표
-    collect_kr_history(snapshot)
-    collect_us_history()
+    # Phase 3: 히스토리 + 기술지표 (핵심 — 격리 실행)
+    _safe("kr_history", collect_kr_history, snapshot)
+    _safe("us_history", collect_us_history)
 
     elapsed = time.time() - start
     logger.info("=" * 60)
