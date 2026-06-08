@@ -81,6 +81,10 @@ class ScanResponse(BaseModel):
     last_update: str
     category: str = ""
     message: str = ""
+    # 신선도 가드레일: 카테고리 의존 데이터(기술지표/펀더멘탈)의 실제 갱신시각과 stale 여부.
+    data_updated_at: str = ""
+    data_fresh: bool = True
+    freshness_note: str = ""
     stocks: list[StockItem]
 
 

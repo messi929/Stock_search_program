@@ -404,21 +404,37 @@ def calculate_buy_score(df: pd.DataFrame) -> pd.DataFrame:
     mom_us = (momentum_score / 25 * 30).clip(0, 30)
 
     # ── 3. 수급 (KR only, 20점) / 성장 (US only, 20점) ──
+    # v7: 이진(순매수=고정점)에서 방향+강도+지속성 반영으로 변별력 강화.
     supply_score_kr = pd.Series(0.0, index=df.index)
 
-    # 외국인 순매수 (KR) — 양수=매수, 음수=매도
+    intensity = (
+        pd.to_numeric(df["supply_intensity"], errors="coerce").fillna(0)
+        if "supply_intensity" in df.columns else pd.Series(0.0, index=df.index)
+    )
+    fconsec = (
+        pd.to_numeric(df["foreign_consecutive"], errors="coerce").fillna(0)
+        if "foreign_consecutive" in df.columns else pd.Series(0.0, index=df.index)
+    )
+
+    # 외국인 (최대 9): 방향 3 + 강도(거래대금 대비) 0~3 + 지속(연속순매수) 0~3
     if "foreign_net" in df.columns:
-        fn = df["foreign_net"]
-        supply_score_kr[fn > 0] += 8.0        # 순매수 중
+        fbuy = pd.to_numeric(df["foreign_net"], errors="coerce").fillna(0) > 0
+        supply_score_kr[fbuy] += 3.0
+        supply_score_kr += ((intensity.clip(0, 15) / 15 * 3).where(fbuy, 0.0))
+        persist = np.where(fconsec >= 5, 3.0, np.where(fconsec >= 3, 2.0, np.where(fconsec >= 1, 1.0, 0.0)))
+        supply_score_kr += pd.Series(persist, index=df.index).where(fbuy, 0.0)
 
-    # 기관 순매수 (KR) — 양수=매수, 음수=매도
+    # 기관 (최대 5, 매수 강도 데이터 없어 이진 유지)
     if "inst_net" in df.columns:
-        inst = df["inst_net"]
-        supply_score_kr[inst > 0] += 7.0      # 순매수 중
+        supply_score_kr[pd.to_numeric(df["inst_net"], errors="coerce").fillna(0) > 0] += 5.0
 
-    # 매집 시그널 (KR)
+    # 매집 시그널 (최대 3)
     if "accumulation" in df.columns:
-        supply_score_kr += df["accumulation"] * 5
+        supply_score_kr += df["accumulation"] * 3
+
+    # 외국인+기관 동반 순매수 시너지 (최대 2)
+    if "dual_buy" in df.columns:
+        supply_score_kr += df["dual_buy"].astype(float) * 2.0
 
     supply_score_kr = supply_score_kr.clip(0, 20)
 
@@ -497,7 +513,33 @@ def calculate_buy_score(df: pd.DataFrame) -> pd.DataFrame:
         tu_score[(tu >= 10) & (tu < 20)] = 0.5
         value_score += tu_score
 
-    value_score = value_score.clip(0, 15)
+    # v7: 섹터 상대평가 — 같은 섹터 내에서 저PER/저PBR이면 가산 (구조적 섹터 편향 완화).
+    #     섹터 미상 또는 표본<5면 시장(KR/US) 전체로 폴백.
+    #     절대 가치는 12점으로 캡하고 상대 3점을 더해 총 15점 유지.
+    value_score = value_score.clip(0, 12)
+    rel_score = pd.Series(0.0, index=df.index)
+    if "per" in df.columns and "pbr" in df.columns:
+        sector = (
+            df["sector"].fillna("").astype(str)
+            if "sector" in df.columns else pd.Series("", index=df.index)
+        )
+        market_key = "MKT:" + df["market"].astype(str)
+        group_key = sector.where(sector.str.len() > 0, market_key)
+        counts = group_key.map(group_key.value_counts())
+        group_key = group_key.where(counts >= 5, market_key)  # 소표본 섹터 → 시장
+
+        per = pd.to_numeric(df["per"], errors="coerce")
+        valid_per = per > 0
+        if valid_per.any():
+            per_pct = per[valid_per].groupby(group_key[valid_per]).rank(pct=True)
+            rel_score.loc[valid_per] += (1 - per_pct) * 1.5  # 섹터 내 저PER일수록 가산
+
+        pbr = pd.to_numeric(df["pbr"], errors="coerce")
+        valid_pbr = pbr > 0
+        if valid_pbr.any():
+            pbr_pct = pbr[valid_pbr].groupby(group_key[valid_pbr]).rank(pct=True)
+            rel_score.loc[valid_pbr] += (1 - pbr_pct) * 1.5
+    value_score = (value_score + rel_score.clip(0, 3)).clip(0, 15)
 
     # ── 종합: 한국 vs 미국 분리 합산 ──
     kr_total = tech_kr + mom_kr + supply_score_kr + value_score
@@ -520,14 +562,16 @@ def calculate_buy_score(df: pd.DataFrame) -> pd.DataFrame:
     df.loc[(df["buy_score"] >= 50) & (df["buy_score"] < 70), "buy_grade"] = "준상위"
     df.loc[(df["buy_score"] >= 30) & (df["buy_score"] < 50), "buy_grade"] = "중간"
 
-    # v6 Phase 4: 포지션 사이징
+    # v6 Phase 4: 포지션 사이징 (벡터화 — ATR 2배 손절, 계좌 2% 리스크, 최대 25%)
     df["position_size"] = 0.0
     if "atr_14" in df.columns and "close" in df.columns:
-        for idx, row in df.iterrows():
-            atr = float(row.get("atr_14", 0))
-            close = float(row.get("close", 0))
-            if atr > 0 and close > 0:
-                df.at[idx, "position_size"] = calculate_position_size(atr, close)
+        atr = pd.to_numeric(df["atr_14"], errors="coerce").fillna(0)
+        close = pd.to_numeric(df["close"], errors="coerce").fillna(0)
+        valid = (atr > 0) & (close > 0)
+        # shares = (account*risk_pct)/(atr*2); position_pct = shares*close/account*100
+        # = (risk_pct * close) / (atr*2) * 100  (account 상쇄)
+        pos = (0.02 * close) / (atr.where(valid, 1) * 2) * 100
+        df.loc[valid, "position_size"] = pos[valid].clip(upper=25.0).round(1)
 
     high_count = (df["buy_score"] >= 50).sum()
     logger.info(f"buy_score 계산 완료: 50점 이상 {high_count}종목")
@@ -560,13 +604,12 @@ def calculate_supply_signals(df: pd.DataFrame, supply_history: dict) -> pd.DataF
     if not supply_history:
         return df
 
-    for idx, row in df.iterrows():
-        ticker = str(row.get("ticker", ""))
-        history = supply_history.get(ticker, [])
+    # ── foreign_consecutive: 외국인 연속 순매수/순매도 일수 ──
+    # df 전체(iterrows)가 아니라 history 보유 종목만 순회 → map.
+    fc = {}
+    for ticker, history in supply_history.items():
         if not history:
             continue
-
-        # 연속 매수/매도 일수
         consecutive = 0
         for entry in reversed(history):
             fn = entry.get("foreign_net", 0)
@@ -582,18 +625,19 @@ def calculate_supply_signals(df: pd.DataFrame, supply_history: dict) -> pd.DataF
                     break
             else:
                 break
+        fc[str(ticker)] = consecutive
+    df["foreign_consecutive"] = df["ticker"].astype(str).map(fc).fillna(0).astype(int)
 
-        df.at[idx, "foreign_consecutive"] = consecutive
-
-        # 수급 강도: foreign_net / trading_value * 100
-        trading_val = float(row.get("trading_value", 0))
-        foreign_net = float(row.get("foreign_net", 0))
-        if trading_val > 0:
-            df.at[idx, "supply_intensity"] = round(abs(foreign_net) / trading_val * 100, 2)
-
-        # 동반 매수
-        inst_net = float(row.get("inst_net", 0))
-        df.at[idx, "dual_buy"] = (foreign_net > 0 and inst_net > 0)
+    # ── supply_intensity, dual_buy: 컬럼 벡터 연산 ──
+    if "foreign_net" in df.columns and "trading_value" in df.columns:
+        tv = pd.to_numeric(df["trading_value"], errors="coerce").fillna(0)
+        fn_col = pd.to_numeric(df["foreign_net"], errors="coerce").fillna(0)
+        valid = tv > 0
+        df.loc[valid, "supply_intensity"] = (fn_col[valid].abs() / tv[valid] * 100).round(2)
+    if "foreign_net" in df.columns and "inst_net" in df.columns:
+        df["dual_buy"] = (
+            pd.to_numeric(df["foreign_net"], errors="coerce").fillna(0) > 0
+        ) & (pd.to_numeric(df["inst_net"], errors="coerce").fillna(0) > 0)
 
     # 수급 등급
     df.loc[
@@ -694,44 +738,33 @@ def detect_market_regime(close_series: pd.Series) -> dict:
 # 내부 헬퍼
 # ──────────────────────────────────────────────
 
-def _calc_consecutive_gains(close_pivot: pd.DataFrame) -> pd.Series:
-    """연속 상승일수."""
-    consecutive = pd.Series(0, index=close_pivot.columns)
-    recent = close_pivot.tail(10)
+def _trailing_positive_streak(pivot: pd.DataFrame, window: int) -> pd.Series:
+    """각 컬럼(종목)에 대해 '최근부터 연속으로 양(+)인' 행 수.
+
+    역순 누적곱(bool→int)의 합 = 끝에서부터 이어지는 1의 개수 = 연속 streak.
+    NaN(데이터 결손)은 0(=양수 아님)으로 처리되어 streak을 끊는다 — 기존 루프와 동일.
+    종목별 파이썬 이중 루프를 제거한 벡터화 버전.
+    """
+    streak = pd.Series(0, index=pivot.columns, dtype=int)
+    recent = pivot.tail(window)
     if len(recent) < 2:
-        return consecutive
+        return streak
+    pos = (recent.pct_change().iloc[1:] > 0)  # NaN > 0 → False
+    if pos.empty:
+        return streak
+    rev = pos.iloc[::-1].astype(int)           # 최근 행이 맨 위
+    trailing = rev.cumprod().sum()             # 0이 나오면 이후 전부 0 → 선행 1의 개수
+    return trailing.reindex(pivot.columns).fillna(0).astype(int)
 
-    daily_returns = recent.pct_change().iloc[1:]
-    for ticker in close_pivot.columns:
-        count = 0
-        for val in daily_returns[ticker].iloc[::-1]:
-            if pd.notna(val) and val > 0:
-                count += 1
-            else:
-                break
-        consecutive[ticker] = count
 
-    return consecutive
+def _calc_consecutive_gains(close_pivot: pd.DataFrame) -> pd.Series:
+    """연속 상승일수 (최근 10일 내, 벡터화)."""
+    return _trailing_positive_streak(close_pivot, window=10)
 
 
 def _calc_volume_trend(volume_pivot: pd.DataFrame) -> pd.Series:
-    """최근 5일간 거래량 연속 증가 일수."""
-    trend = pd.Series(0, index=volume_pivot.columns)
-    recent = volume_pivot.tail(6)
-    if len(recent) < 2:
-        return trend
-
-    daily_change = recent.pct_change().iloc[1:]
-    for ticker in volume_pivot.columns:
-        count = 0
-        for val in daily_change[ticker].iloc[::-1]:
-            if pd.notna(val) and val > 0:
-                count += 1
-            else:
-                break
-        trend[ticker] = count
-
-    return trend
+    """최근 5일간 거래량 연속 증가 일수 (벡터화)."""
+    return _trailing_positive_streak(volume_pivot, window=6)
 
 
 def _calc_ma_squeeze(close_pivot: pd.DataFrame, windows: list[int]) -> pd.Series:

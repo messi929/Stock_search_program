@@ -42,6 +42,70 @@ _data_store = {
     "loading_phase": 0,
 }
 
+# ── 신선도 가드레일: sync_metadata 캐시 (Firestore 읽기 비용 절감, 5분 TTL) ──
+_sync_meta_cache: dict = {"data": None, "expires": None}
+
+
+def _get_sync_meta() -> dict:
+    """수집 메타데이터 조회 (5분 캐시). Firestore 1회 읽기를 요청마다 반복하지 않음."""
+    now = datetime.now()
+    c = _sync_meta_cache
+    if c["data"] is not None and c["expires"] and now < c["expires"]:
+        return c["data"]
+    try:
+        from screener.db.repository import get_sync_metadata
+        meta = get_sync_metadata()
+    except Exception:
+        meta = c["data"] or {}
+    c["data"] = meta
+    c["expires"] = now + timedelta(minutes=5)
+    return meta
+
+
+def _parse_iso(s):
+    try:
+        return datetime.fromisoformat(s) if s else None
+    except (ValueError, TypeError):
+        return None
+
+
+def _data_freshness(category: str, market: str) -> dict:
+    """카테고리가 의존하는 데이터(requires_phase 기준)의 신선도.
+
+    snapshot(시세) 대비 지연으로 stale을 판정 — 주말/휴장 갭을 자동 상쇄한다
+    (시세와 기술지표가 같은 갭을 공유하므로 '시세는 오늘인데 기술지표만 며칠 전'을 포착).
+    """
+    out = {"data_updated_at": "", "data_fresh": True, "freshness_note": ""}
+    phase = CATEGORY_PHASE.get(category, 1)
+    if phase <= 1:
+        return out  # 시세 기반 = 항상 최신(스냅샷 자체)
+
+    meta = _get_sync_meta()
+    is_us = (market or "").upper() == "US"
+    ref = _parse_iso(meta.get("stocks_us_updated_at" if is_us else "stocks_kr_updated_at", ""))
+
+    if phase >= 3:
+        dep = _parse_iso(meta.get("us_history_updated_at" if is_us else "history_updated_at", ""))
+        label = "기술지표(RSI·이동평균·52주·돌파)"
+    else:  # phase 2
+        cands = [_parse_iso(meta.get("fundamentals_updated_at", "")),
+                 _parse_iso(meta.get("themes_updated_at", ""))]
+        cands = [d for d in cands if d]
+        dep = min(cands) if cands else None
+        label = "펀더멘탈·테마"
+
+    if dep is None:
+        return out
+    out["data_updated_at"] = dep.isoformat()
+    if ref is not None and (ref - dep) > timedelta(hours=26):
+        lag_days = max(1, (ref - dep).days)
+        out["data_fresh"] = False
+        out["freshness_note"] = (
+            f"{label} 데이터가 시세보다 약 {lag_days}일 지연되어 있습니다. "
+            f"신호가 과거 기준일 수 있으니 참고에 주의하세요."
+        )
+    return out
+
 _ws_clients: list[WebSocket] = []
 
 
@@ -420,10 +484,14 @@ async def scan_stocks(
         if cat_desc and category not in _empty_hints:
             msg += f"\n기준: {cat_desc}"
 
+    fresh = _data_freshness(category, market)
     return ScanResponse(
         total=total, offset=offset, limit=limit,
         last_update=_data_store["last_update"],
         category=category, message=msg, stocks=stocks,
+        data_updated_at=fresh["data_updated_at"],
+        data_fresh=fresh["data_fresh"],
+        freshness_note=fresh["freshness_note"],
     )
 
 

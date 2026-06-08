@@ -23,6 +23,10 @@ interface ScanResponse {
   total: number;
   message?: string;
   last_update?: string;
+  // 신선도 가드레일 (백엔드 /api/scan)
+  data_updated_at?: string;
+  data_fresh?: boolean;
+  freshness_note?: string;
 }
 
 /** market: "" = 전체, "KR" = 국내(KOSPI/KOSDAQ), "US" = 미국(NASDAQ/S&P500). */

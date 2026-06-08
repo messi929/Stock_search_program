@@ -187,6 +187,9 @@ export function ScreenerResultView({ categoryId }: Props) {
   return (
     <div className="space-y-4">
       <Header category={category} total={total} />
+      {scanQuery.data.data_fresh === false && scanQuery.data.freshness_note && (
+        <FreshnessBanner note={scanQuery.data.freshness_note} />
+      )}
       <div className="flex flex-wrap items-center justify-between gap-2">
         {marketTabs}
         <ViewToggle mode={viewMode} onChange={setViewMode} />
@@ -283,6 +286,18 @@ function Header({ category, total }: { category?: SmartListCategory; total?: num
         <p className="text-xs text-muted-foreground">총 {total.toLocaleString("ko-KR")}건</p>
       )}
     </header>
+  );
+}
+
+function FreshnessBanner({ note }: { note: string }) {
+  return (
+    <div
+      role="status"
+      className="flex items-start gap-2 rounded-md border border-amber-300/60 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-500/30 dark:bg-amber-950/30 dark:text-amber-300"
+    >
+      <span aria-hidden>⚠️</span>
+      <span className="whitespace-pre-line">{note}</span>
+    </div>
   );
 }
 
