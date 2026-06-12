@@ -147,7 +147,7 @@ export default async function Image({
             <div style={{ fontSize: "30px", fontWeight: 700 }}>Axis</div>
           </div>
           <div style={{ fontSize: "26px", color: "#94a3b8" }}>
-            {market} · {stock.ticker}
+            {`${market} · ${stock.ticker}`}
           </div>
         </div>
 
@@ -174,8 +174,7 @@ export default async function Image({
                 color: changeColor(stock),
               }}
             >
-              {sign}
-              {stock.change_pct}%
+              {`${sign}${stock.change_pct}%`}
             </span>
           </div>
 
