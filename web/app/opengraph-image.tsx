@@ -1,11 +1,22 @@
 import { ImageResponse } from "next/og";
 
-export const runtime = "edge";
+import { loadKoreanFont } from "@/lib/og-font";
+
 export const alt = "Axis — AI 투자 분석 파트너";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
-export default function Image() {
+export default async function Image() {
+  // satori 기본 폰트엔 한글이 없어 □□□로 깨짐 → 렌더 텍스트 서브셋 폰트 로드.
+  const text =
+    "AxisAI 투자 분석 파트너리스크·성장·가치 — 같은 종목을 3가지 관점으로 분석" +
+    "📌 투자 권유가 아닌 정보 제공 도구입니다axislytics.com";
+  const fontData = await loadKoreanFont(text);
+  const fonts = fontData
+    ? [{ name: "NotoKR", data: fontData, weight: 700 as const, style: "normal" as const }]
+    : undefined;
+  const FONT_FAMILY = "NotoKR, system-ui, sans-serif";
+
   return new ImageResponse(
     (
       <div
@@ -19,7 +30,7 @@ export default function Image() {
           background:
             "linear-gradient(135deg, #0b0f1a 0%, #131a2b 50%, #1a2540 100%)",
           color: "#ffffff",
-          fontFamily: "system-ui, sans-serif",
+          fontFamily: FONT_FAMILY,
         }}
       >
         {/* 상단 — 브랜드 */}
@@ -86,6 +97,6 @@ export default function Image() {
         </div>
       </div>
     ),
-    { ...size }
+    { ...size, fonts }
   );
 }
