@@ -8,6 +8,7 @@ import { useIsAdmin } from "@/hooks/useIsAdmin";
 
 const TABS = [
   { href: "/admin", label: "개요" },
+  { href: "/admin/funnel", label: "퍼널" },
   { href: "/admin/users", label: "사용자" },
   { href: "/admin/usage", label: "사용량" },
   { href: "/admin/revenue", label: "수입" },

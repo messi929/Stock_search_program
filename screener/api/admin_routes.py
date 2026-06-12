@@ -415,6 +415,167 @@ async def admin_stats(request: Request):
 
 
 # ──────────────────────────────────────────────
+# 신규: 가입·전환 퍼널 (2026-06-12)
+# ──────────────────────────────────────────────
+
+_KST = timezone(timedelta(hours=9))
+
+
+def _as_utc(v):
+    """Firestore Timestamp/datetime/None → aware UTC datetime 또는 None."""
+    if v is None:
+        return None
+    if hasattr(v, "timestamp"):
+        try:
+            return datetime.fromtimestamp(v.timestamp(), tz=timezone.utc)
+        except Exception:
+            return None
+    if isinstance(v, datetime):
+        return v if v.tzinfo else v.replace(tzinfo=timezone.utc)
+    return None
+
+
+def _kst_day(dt: datetime) -> str:
+    """UTC datetime → KST 날짜 문자열(YYYY-MM-DD). 창업자가 생각하는 '하루' 기준."""
+    return dt.astimezone(_KST).strftime("%Y-%m-%d")
+
+
+@router.get("/funnel")
+async def admin_funnel(request: Request, days: int = 30):
+    """가입→활성화→체험→결제 퍼널 + 일별 가입 추이.
+
+    어디서 새는지 진단용. 두 번의 전량 스캔(users + collection_group(analysis_history)).
+    현 사용자 규모에선 무리 없음(/usage·/stats와 동일 패턴).
+
+    단계 정의:
+      - 가입(signup): users 문서 존재
+      - 활성화(activated): analysis_history에 kind=analysis 1건 이상(딥다이브 경험)
+      - 체험(trial): trial_started == True
+      - 결제(paid): subscription.status in (active, cancelled)  # cancelled=기간말까지 유료
+    """
+    if not _is_admin(request):
+        return _forbid()
+
+    from screener.db.firebase_client import get_db
+
+    db = get_db()
+    days = max(1, min(days, 365))
+    now = datetime.now(timezone.utc)
+    since = now - timedelta(days=days)
+
+    # 1) analysis_history 전량 스캔 → 활성화된 uid 집합 + uid별 최초 분석 시각
+    activated_first: dict[str, datetime] = {}      # kind=analysis 최초 시각
+    engaged_uids: set[str] = set()                 # 모든 활동(분석/검증/발견)
+    try:
+        for doc in db.collection_group("analysis_history").stream():
+            parent = doc.reference.parent.parent
+            uid = parent.id if parent is not None else ""
+            if not uid:
+                continue
+            engaged_uids.add(uid)
+            dd = doc.to_dict() or {}
+            if dd.get("kind", "analysis") != "analysis":
+                continue
+            ca = _as_utc(dd.get("created_at"))
+            if ca is None:
+                continue
+            prev = activated_first.get(uid)
+            if prev is None or ca < prev:
+                activated_first[uid] = ca
+    except Exception as e:
+        logger.warning(f"funnel: analysis_history 스캔 실패: {e}")
+
+    activated_uids = set(activated_first.keys())
+
+    # 2) users 전량 스캔 → 일별 가입 + 코호트 퍼널 + 전체 활성화율
+    signups_by_day: dict[str, int] = {}
+    # 코호트 = 기간 내 신규 가입자
+    cohort = {"signups": 0, "activated": 0, "trial": 0, "paid": 0}
+    # 전체(all-time)
+    overall = {"total": 0, "activated": 0, "trial": 0, "paid": 0}
+    ttf_hours: list[float] = []   # 가입→첫분석 소요시간(코호트, 시간)
+
+    # 차트용 날짜 버킷 미리 0으로 채움(빈 날도 보이게)
+    for i in range(days):
+        d_kst = (since + timedelta(days=i)).astimezone(_KST).strftime("%Y-%m-%d")
+        signups_by_day.setdefault(d_kst, 0)
+    signups_by_day.setdefault(_kst_day(now), 0)
+
+    try:
+        for d in _users_ref().stream():
+            dd = d.to_dict() or {}
+            uid = d.id
+            # 관리자 계정은 퍼널에서 제외(자기 자신 노이즈)
+            if dd.get("is_admin_role"):
+                continue
+            created = _as_utc(dd.get("created_at"))
+            sub = dd.get("subscription") or {}
+            status = sub.get("status", "")
+            is_paid = status in ("active", "cancelled")
+            is_trial = bool(dd.get("trial_started"))
+            is_activated = uid in activated_uids
+
+            overall["total"] += 1
+            if is_activated:
+                overall["activated"] += 1
+            if is_trial:
+                overall["trial"] += 1
+            if is_paid:
+                overall["paid"] += 1
+
+            if created is not None:
+                signups_by_day[_kst_day(created)] = signups_by_day.get(_kst_day(created), 0) + 1
+                if created >= since:
+                    cohort["signups"] += 1
+                    if is_activated:
+                        cohort["activated"] += 1
+                        fa = activated_first.get(uid)
+                        if fa is not None and fa >= created:
+                            ttf_hours.append((fa - created).total_seconds() / 3600.0)
+                    if is_trial:
+                        cohort["trial"] += 1
+                    if is_paid:
+                        cohort["paid"] += 1
+    except Exception as e:
+        logger.warning(f"funnel: users 스캔 실패: {e}")
+
+    # 일별 추이 정렬(오름차순) — 기간 내 + 가입 있던 날만
+    trend = [
+        {"date": k, "signups": v}
+        for k, v in sorted(signups_by_day.items())
+        if k >= _kst_day(since)
+    ]
+
+    def _rate(num: int, den: int) -> float:
+        return round(num / den * 100, 1) if den else 0.0
+
+    ttf_median = 0.0
+    if ttf_hours:
+        s = sorted(ttf_hours)
+        mid = len(s) // 2
+        ttf_median = round(s[mid] if len(s) % 2 else (s[mid - 1] + s[mid]) / 2, 1)
+
+    return {
+        "period_days": days,
+        "cohort": {
+            **cohort,
+            "activation_rate": _rate(cohort["activated"], cohort["signups"]),
+            "trial_rate": _rate(cohort["trial"], cohort["signups"]),
+            "paid_rate": _rate(cohort["paid"], cohort["signups"]),
+            # 활성화한 사람 중 결제 전환 — 첫경험이 결제로 이어지나
+            "activated_to_paid_rate": _rate(cohort["paid"], cohort["activated"]),
+            "median_hours_to_activate": ttf_median,
+        },
+        "overall": {
+            **overall,
+            "activation_rate": _rate(overall["activated"], overall["total"]),
+        },
+        "trend": trend,
+        "engaged_total": len(engaged_uids),
+    }
+
+
+# ──────────────────────────────────────────────
 # 신규: 수입 / 사용량 / 에러 모니터링 (2026-06-07)
 # ──────────────────────────────────────────────
 

@@ -34,6 +34,7 @@ function Stat({
 
 export default function AdminOverviewPage() {
   const stats = useQuery({ queryKey: ["admin", "stats"], queryFn: adminApi.stats });
+  const funnel = useQuery({ queryKey: ["admin", "funnel", 30], queryFn: () => adminApi.funnel(30) });
   const revenue = useQuery({ queryKey: ["admin", "revenue"], queryFn: adminApi.revenue });
   const usage = useQuery({ queryKey: ["admin", "usage", "current"], queryFn: () => adminApi.usage() });
   const errors = useQuery({
@@ -58,6 +59,37 @@ export default function AdminOverviewPage() {
             value={(stats.data?.trial_active ?? "—").toString()}
             sub={`의심 ${stats.data?.suspicious ?? 0} · 정지 ${stats.data?.suspended ?? 0}`}
             href="/admin/users?filter=trial"
+          />
+        </div>
+      </section>
+
+      {/* 퍼널 (최근 30일) */}
+      <section>
+        <h2 className="text-sm font-semibold text-muted-foreground mb-2">
+          가입·전환 퍼널 <span className="font-normal">(최근 30일)</span>
+        </h2>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <Stat
+            label="신규 가입"
+            value={(funnel.data?.cohort.signups ?? "—").toString()}
+            href="/admin/funnel"
+          />
+          <Stat
+            label="활성화율"
+            value={funnel.data ? `${funnel.data.cohort.activation_rate}%` : "—"}
+            sub={`분석 1회+ ${funnel.data?.cohort.activated ?? 0}명`}
+            href="/admin/funnel"
+          />
+          <Stat
+            label="체험 전환"
+            value={funnel.data ? `${funnel.data.cohort.trial_rate}%` : "—"}
+            href="/admin/funnel"
+          />
+          <Stat
+            label="결제 전환"
+            value={funnel.data ? `${funnel.data.cohort.paid_rate}%` : "—"}
+            sub={`결제 ${funnel.data?.cohort.paid ?? 0}명`}
+            href="/admin/funnel"
           />
         </div>
       </section>
@@ -114,7 +146,7 @@ export default function AdminOverviewPage() {
         </div>
       </section>
 
-      {(stats.isError || revenue.isError || usage.isError || errors.isError) && (
+      {(stats.isError || funnel.isError || revenue.isError || usage.isError || errors.isError) && (
         <p className="text-sm text-red-500">
           일부 데이터를 불러오지 못했습니다. 새로고침하거나 권한을 확인하세요.
         </p>

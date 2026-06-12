@@ -58,6 +58,33 @@ export interface AdminUsage {
   by_user: UsageUserRow[];
 }
 
+// ── 퍼널 (가입→활성화→체험→결제) ──
+export interface FunnelCohort {
+  signups: number;
+  activated: number;
+  trial: number;
+  paid: number;
+  activation_rate: number;
+  trial_rate: number;
+  paid_rate: number;
+  activated_to_paid_rate: number;
+  median_hours_to_activate: number;
+}
+export interface FunnelOverall {
+  total: number;
+  activated: number;
+  trial: number;
+  paid: number;
+  activation_rate: number;
+}
+export interface AdminFunnel {
+  period_days: number;
+  cohort: FunnelCohort;
+  overall: FunnelOverall;
+  trend: { date: string; signups: number }[];
+  engaged_total: number;
+}
+
 // ── 사용자 ──
 export interface AdminUser {
   uid: string;
@@ -122,6 +149,7 @@ export interface AdminErrorsSummary {
 // ── 페처 ──
 export const adminApi = {
   stats: () => apiCall<AdminStats>("/api/admin/stats"),
+  funnel: (days = 30) => apiCall<AdminFunnel>(`/api/admin/funnel?days=${days}`),
   revenue: () => apiCall<AdminRevenue>("/api/admin/revenue"),
   usage: (month?: string) =>
     apiCall<AdminUsage>(`/api/admin/usage${month ? `?month=${month}` : ""}`),
