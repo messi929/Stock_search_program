@@ -60,6 +60,7 @@ MAX_ACTIVE_SESSIONS = int(os.environ.get("MAX_ACTIVE_SESSIONS", "2"))  # 동시 
 UNIQUE_IP_WARN = int(os.environ.get("UNIQUE_IP_WARN", "4"))   # 월 unique IP 경고선
 UNIQUE_IP_FLAG = int(os.environ.get("UNIQUE_IP_FLAG", "5"))   # 월 unique IP 플래그선 (의심)
 SESSION_STALE_MIN = 15  # 분. heartbeat 끊긴 세션 자동 정리
+REFERRAL_REWARD_CAP = int(os.environ.get("REFERRAL_REWARD_CAP", "5"))  # 추천인 보상 지급 상한 (누적 성공 추천)
 
 
 def _users_ref():
@@ -178,6 +179,97 @@ def record_trial_grant(uid: str, email: str, ip: str) -> None:
         })
     except Exception as e:
         logger.debug(f"trial_ips 기록 실패: {e}")
+
+
+def _referral_grants_ref():
+    """리퍼럴 보상 지급 이력 (IP·정규화 이메일 기반 어뷰징 추적)."""
+    from screener.db.firebase_client import get_db
+    return get_db().collection("referral_grants")
+
+
+def _user_ip_hashes(uid: str, days: int = 90) -> set:
+    """해당 uid가 최근 days일 로그인한 IP 해시 집합 (self-referral 감지용)."""
+    out: set = set()
+    if not uid:
+        return out
+    try:
+        since = datetime.now(timezone.utc) - timedelta(days=days)
+        hist = (
+            _users_ref().document(uid).collection("login_history")
+            .where("timestamp", ">=", since).stream()
+        )
+        for d in hist:
+            h = (d.to_dict() or {}).get("ip_hash")
+            if h:
+                out.add(h)
+    except Exception as e:
+        logger.debug(f"login_history IP 조회 실패 uid={uid}: {e}")
+    return out
+
+
+def check_referral_abuse(
+    referee_uid: str,
+    referee_email: str,
+    referee_ip: str,
+    referee_email_verified: bool,
+    referrer_uid: str,
+) -> dict:
+    """리퍼럴 적용 전 어뷰징 체크 — trial 방어와 동일 신호 + self-referral 차단.
+
+    Returns:
+        {"allow": bool, "reward_referrer": bool, "reason": str}
+        - allow=False면 전체 거부(피추천인도 혜택 없음)
+        - allow=True·reward_referrer=False면 피추천인만 혜택, 추천인 보상 상한 도달
+        - reason: ok | email_unverified | disposable_email | duplicate_email
+                  | self_referral_ip | referrer_cap
+    """
+    # 1. 피추천인 이메일 인증 필수 (미인증 throwaway 계정 차단)
+    if not referee_email_verified:
+        return {"allow": False, "reward_referrer": False, "reason": "email_unverified"}
+
+    # 2. 일회용 도메인
+    if is_disposable_email(referee_email):
+        return {"allow": False, "reward_referrer": False, "reason": "disposable_email"}
+
+    # 3. 같은 정규화 이메일이 이미 리퍼럴 보상을 받음 (계정 churn 차단)
+    norm = normalize_email(referee_email)
+    try:
+        prior = _referral_grants_ref().where("referee_norm_email", "==", norm).limit(2).stream()
+        if [d for d in prior if (d.to_dict() or {}).get("referee_uid") != referee_uid]:
+            return {"allow": False, "reward_referrer": False, "reason": "duplicate_email"}
+    except Exception as e:
+        logger.debug(f"referral_grants 이메일 조회 실패: {e}")
+
+    # 4. self-referral — 추천인과 피추천인이 같은 IP를 공유(동일인 의심)
+    if referee_ip and _hash_ip(referee_ip) in _user_ip_hashes(referrer_uid):
+        return {"allow": False, "reward_referrer": False, "reason": "self_referral_ip"}
+
+    # 5. 추천인 보상 상한 — 도달 시 피추천인 혜택은 주되 추천인 연장은 중단
+    try:
+        ref_doc = _users_ref().document(referrer_uid).get()
+        cnt = int((ref_doc.to_dict() or {}).get("referral_count", 0) or 0) if ref_doc.exists else 0
+        if cnt >= REFERRAL_REWARD_CAP:
+            return {"allow": True, "reward_referrer": False, "reason": "referrer_cap"}
+    except Exception as e:
+        logger.debug(f"referrer cap 조회 실패: {e}")
+
+    return {"allow": True, "reward_referrer": True, "reason": "ok"}
+
+
+def record_referral_grant(
+    referee_uid: str, referee_email: str, referee_ip: str, referrer_uid: str
+) -> None:
+    """리퍼럴 보상 지급 기록 — 정규화 이메일·IP 해시·추천인 저장(재발 추적용)."""
+    try:
+        _referral_grants_ref().add({
+            "referee_uid": referee_uid,
+            "referee_norm_email": normalize_email(referee_email),
+            "referee_ip_hash": _hash_ip(referee_ip) if referee_ip else "",
+            "referrer_uid": referrer_uid,
+            "created_at": datetime.now(timezone.utc),
+        })
+    except Exception as e:
+        logger.debug(f"referral_grants 기록 실패: {e}")
 
 
 def record_login(uid: str, ip: str, user_agent: str) -> None:

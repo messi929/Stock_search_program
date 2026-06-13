@@ -6,10 +6,12 @@ from fastapi import APIRouter, Request
 from starlette.responses import JSONResponse
 
 from screener.services.security import (
+    check_referral_abuse,
     end_session,
     get_client_ip,
     heartbeat_session,
     record_login,
+    record_referral_grant,
     register_session,
 )
 from screener.services.subscription import (
@@ -389,6 +391,23 @@ async def apply_referral(request: Request):
     if referrer_uid == uid:
         return JSONResponse(status_code=400, content={"detail": "본인 코드는 사용 불가"})
 
+    # 어뷰징 방어 — 일회용/미인증 메일·정규화 이메일 중복·self-referral(동일 IP)·추천인 상한
+    referee_email = user.get("email", "")
+    referee_ip = get_client_ip(request)
+    referee_verified = bool(user.get("email_verified", False))
+    abuse = check_referral_abuse(uid, referee_email, referee_ip, referee_verified, referrer_uid)
+    if not abuse["allow"]:
+        msgs = {
+            "email_unverified": "이메일 인증 후 리퍼럴 코드를 사용할 수 있습니다.",
+            "disposable_email": "일회용 이메일로는 리퍼럴을 사용할 수 없습니다.",
+            "duplicate_email": "이미 리퍼럴 혜택을 받은 계정입니다.",
+            "self_referral_ip": "추천인과 동일한 환경에서는 사용할 수 없습니다.",
+        }
+        return JSONResponse(
+            status_code=400,
+            content={"detail": msgs.get(abuse["reason"], "리퍼럴을 사용할 수 없습니다."), "reason": abuse["reason"]},
+        )
+
     now = datetime.now(timezone.utc)
 
     # 피추천인: 체험 14일 추가
@@ -410,30 +429,35 @@ async def apply_referral(request: Request):
     except Exception:
         pass
 
-    # 추천인: 체험 30일 추가 + 카운트
-    ref_data = referrer_doc.to_dict()
-    ref_end = ref_data.get("trial_ends_at")
-    if hasattr(ref_end, "timestamp"):
-        ref_end = datetime.fromtimestamp(ref_end.timestamp(), tz=timezone.utc)
-    if not ref_end or ref_end < now:
-        ref_end = now
-    new_ref_end = ref_end + timedelta(days=30)
-    _users_ref().document(referrer_uid).set({
-        "tier": "pro",
-        "trial_started": True,
-        "trial_ends_at": new_ref_end,
-        "referral_count": int(ref_data.get("referral_count", 0) or 0) + 1,
-    }, merge=True)
-    try:
-        auth.set_custom_user_claims(referrer_uid, {"tier": "pro", "trial": True})
-    except Exception:
-        pass
+    # 추천인: 체험 30일 추가 + 카운트 (보상 상한 미도달 시에만)
+    if abuse["reward_referrer"]:
+        ref_data = referrer_doc.to_dict()
+        ref_end = ref_data.get("trial_ends_at")
+        if hasattr(ref_end, "timestamp"):
+            ref_end = datetime.fromtimestamp(ref_end.timestamp(), tz=timezone.utc)
+        if not ref_end or ref_end < now:
+            ref_end = now
+        new_ref_end = ref_end + timedelta(days=30)
+        _users_ref().document(referrer_uid).set({
+            "tier": "pro",
+            "trial_started": True,
+            "trial_ends_at": new_ref_end,
+            "referral_count": int(ref_data.get("referral_count", 0) or 0) + 1,
+        }, merge=True)
+        try:
+            auth.set_custom_user_claims(referrer_uid, {"tier": "pro", "trial": True})
+        except Exception:
+            pass
+
+    # 어뷰징 추적용 지급 이력 (정규화 이메일·IP 해시·추천인)
+    record_referral_grant(uid, referee_email, referee_ip, referrer_uid)
 
     return {
         "ok": True,
         "you_days_added": 14,
         "you_trial_ends_at": new_me_end.isoformat(),
         "referrer_uid": referrer_uid,
+        "referrer_rewarded": abuse["reward_referrer"],
     }
 
 
