@@ -1,18 +1,23 @@
-"""진입선 도달 알림 발송 Job (이메일 / Mailgun).
+"""알림 발송 Job (이메일 / Mailgun) — 진입선 도달 알림 + 일일 시황 브리핑.
 
-장중 30분 주기 실행. opt-in 사용자의 관심종목 진입선(관찰 구간 tier_1/2/3)과
-현재가(stocks.close)를 비교해 **새로 도달한 구간만** 이메일로 발송한다.
-중복 발송은 users/{uid}/notify_state/entry_points 의 armed 맵으로 방지하고,
-가격이 구간 위로 충분히(REARM_PCT) 회복하면 재무장해 다음 하락 시 다시 알린다.
+--mode entry (기본, 장중 30분 주기):
+  opt-in 사용자의 관심종목 진입선(관찰 구간 tier_1/2/3)과 현재가(stocks.close)를
+  비교해 **새로 도달한 구간만** 발송. 중복은 notify_state/entry_points armed 맵으로
+  방지하고, 구간 위로 +REARM_PCT 회복 시 재무장해 다음 하락에 다시 알린다.
+
+--mode briefing (아침 1회):
+  당일 시황 브리핑(axis_briefing_cache 캐시, 없으면 ResearchAgent로 생성)을
+  opt-in 사용자에게 발송. notify_state/briefing.last_sent_date로 하루 1회 보장.
 
 LEGAL: "추천"·"매수가"·"목표가"·"매수/매도 신호" 금지.
-       진입선은 사용자가 저장한 '관찰 구간'이며, 본 알림은 도달 사실의 정보 제공일 뿐.
+       진입선은 사용자가 저장한 '관찰 구간', 본 알림은 도달 사실의 정보 제공일 뿐.
        모든 메일 하단에 면책 문구(agents.base.DISCLAIMER) 포함.
 
 실행 예:
-  python -m jobs.notify_send                 # 실제 발송
-  python -m jobs.notify_send --dry-run       # 발송·상태쓰기 skip (판정만)
-  python -m jobs.notify_send --limit 50      # 처리 사용자 수 제한(테스트)
+  python -m jobs.notify_send                       # 진입선 알림 실제 발송
+  python -m jobs.notify_send --mode briefing       # 일일 브리핑 발송
+  python -m jobs.notify_send --dry-run             # 발송·상태쓰기 skip (판정만)
+  python -m jobs.notify_send --limit 50            # 처리 사용자 수 제한(테스트)
 
 Cloud Run Job 등록은 deploy-notify-job.sh 참고.
 """
@@ -61,6 +66,13 @@ def _pro_only() -> bool:
     import os
 
     return os.environ.get("ENTRY_ALERT_PRO_ONLY", "false").lower() == "true"
+
+
+def _kst_today() -> str:
+    """Cloud Run(UTC) → +9h KST 날짜(YYYY-MM-DD). ai.py와 동일 규칙."""
+    from datetime import datetime, timedelta, timezone
+
+    return (datetime.now(timezone.utc) + timedelta(hours=9)).strftime("%Y-%m-%d")
 
 
 # ──────────────────────────────────────────────
@@ -287,6 +299,231 @@ def render_email(triggers: list[dict]) -> tuple[str, str, str]:
 
 
 # ──────────────────────────────────────────────
+# 일일 시황 브리핑
+# ──────────────────────────────────────────────
+
+_BRIEFING_COLLECTION = "axis_briefing_cache"
+_SENTIMENT_COLOR = {"낙관적": "#16a34a", "신중": "#d97706", "비관적": "#dc2626"}
+
+
+def ensure_briefing(db: Any, date_str: str) -> Optional[dict]:
+    """당일 브리핑 payload 확보 — 캐시 우선, 없으면 ResearchAgent로 생성·캐시.
+
+    ai.py /briefing 과 동일한 캐시 doc(axis_briefing_cache/{date})·payload 구조 재사용.
+    생성은 Haiku(~5원). 생성 실패 시 None.
+    """
+    try:
+        doc = db.collection(_BRIEFING_COLLECTION).document(date_str).get()
+        if doc.exists:
+            payload = (doc.to_dict() or {}).get("payload")
+            if payload:
+                logger.info(f"브리핑 캐시 사용 ({date_str})")
+                return payload
+    except Exception as e:
+        logger.warning(f"브리핑 캐시 조회 실패 ({date_str}): {e}")
+
+    # 캐시 없음 → 생성 (ANTHROPIC_API_KEY 필요)
+    try:
+        import asyncio
+
+        from agents.base import DISCLAIMER
+        from agents.research import ResearchAgent, ResearchInput
+
+        logger.info(f"브리핑 생성 시작 ({date_str}) — ResearchAgent")
+        t0 = time.time()
+        result = asyncio.run(
+            ResearchAgent().run(
+                ResearchInput(
+                    query="오늘 한국 증시 전체 시황을 뉴스·매크로·섹터·외국인/기관 수급 관점에서 종합 분석",
+                    timeframe_days=7,
+                )
+            )
+        )
+        payload = {
+            "date": date_str,
+            "research": result.model_dump(),
+            "disclaimer": DISCLAIMER,
+            "elapsed": round(time.time() - t0, 2),
+        }
+        try:
+            from firebase_admin import firestore
+
+            db.collection(_BRIEFING_COLLECTION).document(date_str).set(
+                {"payload": payload, "created_at": firestore.SERVER_TIMESTAMP}
+            )
+        except Exception as e:
+            logger.warning(f"브리핑 캐시 저장 실패: {e}")
+        logger.info(f"브리핑 생성 완료 ({date_str}, {payload['elapsed']}s)")
+        return payload
+    except Exception as e:
+        logger.error(f"브리핑 생성 실패: {type(e).__name__}: {e}")
+        return None
+
+
+def iter_briefing_users(db: Any, limit: Optional[int] = None):
+    """일일 브리핑 opt-in 사용자 순회 (인덱스 equality 쿼리)."""
+    from google.cloud.firestore_v1.base_query import FieldFilter
+
+    q = db.collection("users").where(
+        filter=FieldFilter("notification_preferences.daily_briefing_enabled", "==", True)
+    )
+    n = 0
+    for doc in q.stream():
+        yield doc
+        n += 1
+        if limit and n >= limit:
+            break
+
+
+def render_briefing_email(payload: dict) -> tuple[str, str, str]:
+    """브리핑 payload → (subject, html, text). LEGAL: 면책 포함, 추천 금지."""
+    research = payload.get("research") or {}
+    date_str = payload.get("date", _kst_today())
+    sentiment = research.get("market_sentiment") or "신중"
+    summary = (research.get("summary") or "").strip()
+    news = research.get("relevant_news") or []
+    macro = research.get("macro_context") or {}
+    sectors = research.get("sector_status") or []
+    base = _app_base_url()
+
+    color = _SENTIMENT_COLOR.get(sentiment, "#6b7280")
+    subject = f"[Axis] {date_str} 오늘의 시장 브리핑 — {sentiment}"
+
+    # 뉴스 상위 5 (relevance 내림차순)
+    news_sorted = sorted(news, key=lambda x: x.get("relevance_score", 0) or 0, reverse=True)[:5]
+    news_html = "".join(
+        f"<li style='margin:4px 0;color:#374151;'>{n.get('headline','')} "
+        f"<span style='color:#9ca3af;font-size:12px;'>({n.get('source','')})</span></li>"
+        for n in news_sorted
+    )
+    risks = (macro.get("key_risks") or [])[:4]
+    opps = (macro.get("key_opportunities") or [])[:4]
+    sectors_html = "".join(
+        f"<li style='margin:3px 0;color:#374151;'><b>{s.get('name','')}</b> "
+        f"<span style='color:#6b7280;'>{s.get('status','')}</span></li>"
+        for s in sectors[:5]
+    )
+
+    def _section(title: str, body: str) -> str:
+        if not body:
+            return ""
+        return (
+            f"<div style='margin:14px 0;'>"
+            f"<div style='font-size:14px;font-weight:700;color:#111827;margin-bottom:4px;'>{title}</div>"
+            f"{body}</div>"
+        )
+
+    risks_html = "".join(f"<li style='color:#374151;margin:2px 0;'>{r}</li>" for r in risks)
+    opps_html = "".join(f"<li style='color:#374151;margin:2px 0;'>{o}</li>" for o in opps)
+
+    disclaimer = payload.get("disclaimer") or _disclaimer()
+    html = (
+        f"<div style='font-family:-apple-system,BlinkMacSystemFont,\"Segoe UI\",sans-serif;"
+        f"max-width:560px;margin:0 auto;padding:8px;'>"
+        f"<div style='font-size:13px;color:#9ca3af;'>{date_str} 시장 브리핑</div>"
+        f"<h2 style='font-size:18px;color:#111827;margin:4px 0 10px;'>오늘의 시장 심리 "
+        f"<span style='color:{color};'>{sentiment}</span></h2>"
+        + (f"<p style='font-size:14px;color:#374151;line-height:1.7;'>{summary}</p>" if summary else "")
+        + _section("주요 뉴스", f"<ul style='margin:0;padding-left:18px;font-size:13px;'>{news_html}</ul>" if news_html else "")
+        + _section("관찰 리스크", f"<ul style='margin:0;padding-left:18px;font-size:13px;'>{risks_html}</ul>" if risks_html else "")
+        + _section("관찰 기회", f"<ul style='margin:0;padding-left:18px;font-size:13px;'>{opps_html}</ul>" if opps_html else "")
+        + _section("섹터 동향", f"<ul style='margin:0;padding-left:18px;font-size:13px;'>{sectors_html}</ul>" if sectors_html else "")
+        + f"<a href='{base}' style='display:inline-block;margin-top:12px;font-size:13px;"
+        f"color:#2563eb;text-decoration:none;'>Axis에서 더 보기 →</a>"
+        f"<p style='font-size:12px;color:#9ca3af;line-height:1.6;"
+        f"border-top:1px solid #f3f4f6;margin-top:16px;padding-top:12px;'>📌 {disclaimer}</p>"
+        f"<p style='font-size:11px;color:#cbd5e1;margin-top:8px;'>"
+        f"알림 설정은 Axis 앱 → 알림 설정에서 변경할 수 있습니다.</p>"
+        f"</div>"
+    )
+
+    text_parts = [f"{date_str} 시장 브리핑 — 시장 심리: {sentiment}", ""]
+    if summary:
+        text_parts.append(summary)
+    if news_sorted:
+        text_parts.append("\n[주요 뉴스]")
+        text_parts += [f"- {n.get('headline','')} ({n.get('source','')})" for n in news_sorted]
+    if risks:
+        text_parts.append("\n[관찰 리스크]")
+        text_parts += [f"- {r}" for r in risks]
+    text_parts.append(f"\n📌 {disclaimer}")
+    text = "\n".join(text_parts)
+    return subject, html, text
+
+
+def run_briefing(dry_run: bool = False, limit: Optional[int] = None) -> dict[str, Any]:
+    """일일 시황 브리핑 발송 실행 (하루 1회, 중복 발송 방지)."""
+    t0 = time.time()
+    from screener.db.firebase_client import get_db
+    from screener.services import mailer
+
+    configured = mailer.is_configured()
+    if not configured and not dry_run:
+        logger.warning("Mailgun 미설정 — 브리핑 발송 조기 종료")
+        return {"users": 0, "emails_sent": 0, "skipped": "mailgun_unconfigured",
+                "elapsed_sec": round(time.time() - t0, 1)}
+
+    db = get_db()
+    date_str = _kst_today()
+    payload = ensure_briefing(db, date_str)
+    if not payload:
+        logger.warning("브리핑 payload 확보 실패 — 종료")
+        return {"users": 0, "emails_sent": 0, "skipped": "no_briefing",
+                "elapsed_sec": round(time.time() - t0, 1)}
+
+    subject, html, text = render_briefing_email(payload)
+    users_n = sent_n = 0
+
+    for udoc in iter_briefing_users(db, limit=limit):
+        uid = udoc.id
+        udata = udoc.to_dict() or {}
+        users_n += 1
+
+        # 하루 1회 — 이미 오늘 발송했으면 skip (재실행·재시도 대비)
+        state_ref = db.collection("users").document(uid).collection("notify_state").document("briefing")
+        try:
+            sdoc = state_ref.get()
+            if sdoc.exists and (sdoc.to_dict() or {}).get("last_sent_date") == date_str:
+                continue
+        except Exception:
+            pass
+
+        email = recipient_email(db, uid, udata)
+        ok = False
+        if dry_run:
+            ok = True
+            logger.info(f"[브리핑·dry] uid={uid} 수신={email or '(없음)'}")
+        elif email:
+            ok = mailer.send_email(email, subject, html, text)
+        else:
+            logger.warning(f"수신 이메일 없음 uid={uid} — 브리핑 skip")
+
+        if ok:
+            sent_n += 1
+            if not dry_run:
+                try:
+                    state_ref.set({"last_sent_date": date_str, "updated_at": time.time()})
+                except Exception as e:
+                    logger.warning(f"브리핑 state 저장 실패 uid={uid}: {e}")
+
+    summary = {
+        "mode": "briefing",
+        "date": date_str,
+        "users": users_n,
+        "emails_sent": sent_n,
+        "dry_run": dry_run,
+        "mailgun_configured": configured,
+        "elapsed_sec": round(time.time() - t0, 1),
+    }
+    logger.info("=" * 56)
+    logger.info("일일 브리핑 발송 완료")
+    for k, v in summary.items():
+        logger.info(f"  {k}: {v}")
+    logger.info("=" * 56)
+    return summary
+
+
+# ──────────────────────────────────────────────
 # 메인 실행
 # ──────────────────────────────────────────────
 
@@ -395,12 +632,19 @@ def main(argv: list[str] | None = None) -> int:
     except Exception:
         pass
 
-    parser = argparse.ArgumentParser(description="진입선 도달 알림 발송 (이메일/Mailgun)")
+    parser = argparse.ArgumentParser(description="알림 발송 (이메일/Mailgun)")
+    parser.add_argument(
+        "--mode", choices=["entry", "briefing"], default="entry",
+        help="entry=진입선 도달 알림(장중 30분), briefing=일일 시황 브리핑(아침 1회)",
+    )
     parser.add_argument("--dry-run", action="store_true", help="발송·상태쓰기 skip (판정만)")
     parser.add_argument("--limit", type=int, default=None, help="처리 사용자 수 제한(테스트)")
     args = parser.parse_args(argv)
 
-    run_notify(dry_run=args.dry_run, limit=args.limit)
+    if args.mode == "briefing":
+        run_briefing(dry_run=args.dry_run, limit=args.limit)
+    else:
+        run_notify(dry_run=args.dry_run, limit=args.limit)
     return 0
 
 
