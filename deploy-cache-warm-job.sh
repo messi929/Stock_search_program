@@ -73,13 +73,13 @@ NAME="axis-cache-warm"
 echo ""; echo "  Job 배포: ${NAME}"
 if gcloud run jobs describe "${NAME}" --region="${REGION}" --project="${PROJECT_ID}" --quiet >/dev/null 2>&1; then
     gcloud run jobs update "${NAME}" --image="${IMAGE}" --region="${REGION}" --project="${PROJECT_ID}" \
-        --memory=2Gi --cpu=1 --task-timeout=1800 --max-retries=0 \
+        --memory=2Gi --cpu=1 --task-timeout=3000 --max-retries=0 \
         --set-secrets="${SECRETS}" \
         --command="python" --args="-m,jobs.cache_warm" --quiet
     echo "    -> updated"
 else
     gcloud run jobs create "${NAME}" --image="${IMAGE}" --region="${REGION}" --project="${PROJECT_ID}" \
-        --memory=2Gi --cpu=1 --task-timeout=1800 --max-retries=0 \
+        --memory=2Gi --cpu=1 --task-timeout=3000 --max-retries=0 \
         --set-secrets="${SECRETS}" \
         --command="python" --args="-m,jobs.cache_warm" --quiet
     echo "    -> created"

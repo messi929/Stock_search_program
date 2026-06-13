@@ -58,6 +58,9 @@ WARM_TICKER_COUNT = _env_int("WARM_TICKER_COUNT", 12)
 WARM_PERSONA = os.environ.get("WARM_PERSONA", "blackrock").strip() or "blackrock"
 WARM_MARKET = (os.environ.get("WARM_MARKET", "kr").strip() or "kr").lower()
 WARM_HISTORY_DAYS = _env_int("WARM_HISTORY_DAYS", 14)
+# 콜드 딥다이브가 실측 ~150s(thinking+검증재시도)라 순차 12종목은 Job 타임아웃 초과.
+# bounded 동시성으로 wall-clock 단축. Claude rate limit 보호 위해 보수적 기본 3.
+WARM_CONCURRENCY = max(1, _env_int("WARM_CONCURRENCY", 3))
 
 # 워밍 비용은 익명 버킷(ai_usage_anonymous)에 기록 — 실사용자/관리자 스캔과 분리.
 WARM_UID = ""
@@ -230,9 +233,15 @@ async def run_warm(
     if dry_run:
         return {"selected": tickers, "dry_run": True, "elapsed_sec": round(time.time() - t0, 1)}
 
-    results: list[dict[str, Any]] = []
-    for tk in tickers:  # 순차 — Claude rate limit + Cloud Run max=1 보호
-        results.append(await warm_one(tk, pers))
+    # bounded 동시성 — 콜드 1건 ~150s라 순차는 타임아웃 위험. Semaphore로 rate limit 보호.
+    sem = asyncio.Semaphore(WARM_CONCURRENCY)
+
+    async def _guarded(tk: str) -> dict[str, Any]:
+        async with sem:
+            return await warm_one(tk, pers)
+
+    logger.info(f"[warm] 동시성={WARM_CONCURRENCY}")
+    results: list[dict[str, Any]] = await asyncio.gather(*[_guarded(tk) for tk in tickers])
 
     cold = sum(1 for r in results if r.get("ok") and not r.get("likely_cached"))
     hit = sum(1 for r in results if r.get("ok") and r.get("likely_cached"))
