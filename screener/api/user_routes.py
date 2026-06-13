@@ -33,8 +33,21 @@ async def delete_account(request: Request):
     if not uid:
         return JSONResponse(status_code=401, content={"detail": "로그인 필요"})
     try:
-        # 1) Firestore users/{uid} 문서 삭제 (axis_profile·watchlist·tier 등 모두 포함)
-        _users_ref().document(uid).delete()
+        # 1) Firestore users/{uid} 문서 + 모든 서브컬렉션 재귀 삭제.
+        #    Firestore는 상위 문서를 지워도 서브컬렉션이 자동 삭제되지 않으므로
+        #    analysis_history·ai_usage·watchlist_meta·custom_screeners·login_history·
+        #    active_sessions 등 개인정보/이력을 recursive_delete로 모두 제거한다
+        #    (개인정보보호법·GDPR 삭제권 충족).
+        from screener.db.firebase_client import get_db
+        doc_ref = _users_ref().document(uid)
+        try:
+            get_db().recursive_delete(doc_ref)
+        except AttributeError:
+            # recursive_delete 미지원 클라이언트 폴백 — 서브컬렉션 수동 삭제 후 문서 삭제
+            for sub in doc_ref.collections():
+                for child in sub.stream():
+                    child.reference.delete()
+            doc_ref.delete()
         # 2) Firebase Auth 계정 삭제 (Google OAuth 연결 끊김)
         from firebase_admin import auth as fb_auth
         fb_auth.delete_user(uid)

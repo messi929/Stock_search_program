@@ -165,7 +165,7 @@ def _count_month_usage(uid: str) -> dict[str, int]:
 def _enforce_quota(uid: str, tier: str, kind: str) -> None:
     """월 한도 초과 시 429. uid 없으면(비로그인) 통과 — 인증 미들웨어가 선처리.
 
-    kind: 'analyses' | 'discoveries' (validations는 분석 선행 필수라 간접 제한).
+    kind: 'analyses' | 'validations' | 'discoveries'.
     호출 전 시점의 누적으로 체크하므로 동시요청 시 소폭 초과 가능(허용 범위).
     """
     if not uid:
@@ -723,9 +723,13 @@ async def validate(ticker: str, req: ValidateRequest, request: Request):
 
     user = getattr(request.state, "user", None) or {}
     uid = user.get("uid", "")
+    tier = user.get("tier", "free")
 
     if not ticker or len(ticker) > 10:
         raise HTTPException(400, {"code": "INVALID_TICKER", "message": "유효한 종목 코드 필요"})
+
+    # 월 검증 한도 (적자 방지 — docs/axis/UNIT_ECONOMICS.md). 비로그인은 미들웨어가 선차단.
+    _enforce_quota(uid, tier, "validations")
 
     # 클라이언트 dict → Pydantic 복원
     research_obj = ResearchResult.model_validate(req.research_output) if req.research_output else None

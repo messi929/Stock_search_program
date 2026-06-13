@@ -42,6 +42,11 @@ PRO_ENDPOINTS = {"/api/export", "/api/portfolio", "/api/portfolio/risk", "/api/s
 # 로그인 필수 (Free/Pro 공통 — 비로그인만 차단). 백테스트는 Pro 아니지만 로그인 필요.
 LOGIN_REQUIRED_ENDPOINTS = {"/api/backtest"}
 
+# 로그인 필수 prefix — 비용 발생 호출은 비로그인 전면 차단.
+# /api/ai/* 는 Claude API 비용이 직접 발생하므로 비로그인 호출 자체를 막는다.
+# (briefing은 위 PUBLIC_PATHS에서 먼저 빠지므로 외부 발행 연동에 영향 없음)
+LOGIN_REQUIRED_PREFIXES = ("/api/ai/",)
+
 # 무료 티어 결과 제한
 FREE_RESULT_LIMIT = 20
 
@@ -126,7 +131,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
         tier = user["tier"]
 
         # 로그인 필수 (비로그인만 차단)
-        if path in LOGIN_REQUIRED_ENDPOINTS and not user.get("uid"):
+        if (path in LOGIN_REQUIRED_ENDPOINTS or path.startswith(LOGIN_REQUIRED_PREFIXES)) and not user.get("uid"):
             return JSONResponse(
                 status_code=401,
                 content={"detail": "로그인 후 이용 가능합니다.", "login_required": True},
