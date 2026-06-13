@@ -56,6 +56,26 @@ export interface DataDrivenStatus {
   korean: AgentStatus;
 }
 
+/** 빠른 요약 스냅샷 — 본 분석 전 즉시 표시(스크리너 캐시, 비용 0). */
+export interface InstantSnapshot {
+  ticker: string;
+  name: string;
+  market: string;
+  is_kr: boolean;
+  price: number | null;
+  change_pct: number | null;
+  rsi: number | null;
+  buy_score: number | null;
+  buy_grade: string;
+  per: number | null;
+  pbr: number | null;
+  roe: number | null;
+  sector: string;
+  vs_high_52w: number | null;
+  foreign_consecutive: number;
+  volume_ratio: number | null;
+}
+
 export interface AnalysisRun {
   ticker: string;
   persona: PersonaId;
@@ -65,6 +85,9 @@ export interface AnalysisRun {
   strategistStatus: StrategistStatus;
   dataDriven: DataDriven;
   dataDrivenStatus: DataDrivenStatus;
+  /** 빠른 요약 — 즉시 스냅샷(비용 0) + Haiku 1줄 요약(~2s). 본 분석 도착 전 노출. */
+  instantSnapshot: InstantSnapshot | null;
+  instantSummary: string | null;
   elapsed: number | null;
   likelyCached: boolean;
   error: string | null;
@@ -136,6 +159,8 @@ export const useAnalysisStore = create<AnalysisStore>()(
         macro: persona === "macro" ? "running" : "pending",
         korean: persona === "korean" ? "running" : "pending",
       },
+      instantSnapshot: null,
+      instantSummary: null,
       elapsed: null,
       likelyCached: false,
       error: null,
@@ -166,10 +191,20 @@ export const useAnalysisStore = create<AnalysisStore>()(
           total_elapsed?: number;
           likely_cached?: boolean;
           message?: string;
+          snapshot?: InstantSnapshot;
+          summary?: string;
         };
 
         switch (event) {
           case "start":
+            break;
+
+          // 빠른 요약 — 본 분석 전 즉시 노출
+          case "instant_snapshot":
+            patch((r) => ({ ...r, instantSnapshot: payload.snapshot ?? r.instantSnapshot }));
+            break;
+          case "instant_summary":
+            patch((r) => ({ ...r, instantSummary: payload.summary ?? r.instantSummary }));
             break;
 
           // Strategist 흐름

@@ -546,6 +546,66 @@ def _sse(event: str, data: dict) -> str:
     return f"event: {event}\ndata: {json.dumps(cleaned, ensure_ascii=False, default=str)}\n\n"
 
 
+def _chunk_to_events(chunk: dict, t0: float, final_state: dict) -> list[str]:
+    """LangGraph astream chunk → SSE 이벤트 문자열 목록. final_state를 누적 갱신.
+
+    chunk: {node_name: state_diff}. 각 에이전트 산출이 보이면 `{agent}_complete` emit.
+    """
+    out: list[str] = []
+    for _node_name, state_diff in chunk.items():
+        if not isinstance(state_diff, dict):
+            continue
+        final_state.update(state_diff)
+
+        # ── Strategist 흐름 4 에이전트 결과 ──
+        if state_diff.get("research_output"):
+            out.append(_sse("research_complete", {
+                "agent": "research",
+                "result": state_diff["research_output"].model_dump(),
+                "elapsed": round(time.time() - t0, 2),
+            }))
+        if state_diff.get("analyst_output"):
+            out.append(_sse("analyst_complete", {
+                "agent": "analyst",
+                "result": state_diff["analyst_output"].model_dump(),
+                "elapsed": round(time.time() - t0, 2),
+            }))
+        if state_diff.get("validator_output"):
+            out.append(_sse("validator_complete", {
+                "agent": "validator",
+                "result": state_diff["validator_output"].model_dump(),
+                "elapsed": round(time.time() - t0, 2),
+                "retry_count": final_state.get("retry_count", 0),
+            }))
+        if state_diff.get("strategist_output"):
+            out.append(_sse("strategist_complete", {
+                "agent": "strategist",
+                "result": state_diff["strategist_output"].model_dump(),
+                "elapsed": round(time.time() - t0, 2),
+            }))
+
+        # ── 데이터 페르소나 단일 노드 결과 ──
+        if state_diff.get("event_output"):
+            out.append(_sse("event_complete", {
+                "agent": "event_analyst",
+                "result": state_diff["event_output"].model_dump(),
+                "elapsed": round(time.time() - t0, 2),
+            }))
+        if state_diff.get("macro_output"):
+            out.append(_sse("macro_complete", {
+                "agent": "macro_pm",
+                "result": state_diff["macro_output"].model_dump(),
+                "elapsed": round(time.time() - t0, 2),
+            }))
+        if state_diff.get("korean_output"):
+            out.append(_sse("korean_complete", {
+                "agent": "korean_specialist",
+                "result": state_diff["korean_output"].model_dump(),
+                "elapsed": round(time.time() - t0, 2),
+            }))
+    return out
+
+
 async def _stream_analysis(
     *,
     ticker: str,
@@ -562,6 +622,10 @@ async def _stream_analysis(
 
     Strategist 흐름: 4 노드 완료 시 `{node}_complete` 이벤트.
     데이터 페르소나(event/macro/korean): 단일 노드라 시작/완료만 emit.
+
+    빠른 요약(체감속도): Strategist 흐름에서 무거운 파이프라인과 **동시에** 스크리너
+    스냅샷(instant_snapshot, 즉시·비용 0)과 Haiku 1줄 요약(instant_summary, ~2s·~5원)을
+    먼저 송출 → 첫 ~12s의 빈 화면을 해소한다. asyncio.Queue로 두 소스를 머지.
     """
     from agents.graph import create_analysis_graph
 
@@ -581,7 +645,18 @@ async def _stream_analysis(
     }
 
     is_data_driven = persona in _DATA_DRIVEN_PERSONAS
+    is_strategist = not is_data_driven
     estimated_sec = 20 if is_data_driven else 12
+
+    # 빠른 요약 — Strategist 흐름에서만. 스냅샷이 있어야 quick-take도 의미 있음.
+    snapshot = None
+    if is_strategist:
+        try:
+            from agents.instant import build_instant_snapshot
+
+            snapshot = build_instant_snapshot(ticker)
+        except Exception as e:
+            logger.debug(f"[instant] snapshot 빌드 실패: {e}")
 
     yield _sse(
         "start",
@@ -594,89 +669,61 @@ async def _stream_analysis(
         },
     )
 
+    # 즉시 스냅샷(LLM 비호출) — 사용자는 본 분석 전에 종목 맥락을 본다.
+    if snapshot:
+        yield _sse("instant_snapshot", {
+            "snapshot": snapshot,
+            "elapsed": round(time.time() - t0, 2),
+        })
+
     final_state: dict = {}
+    queue: asyncio.Queue = asyncio.Queue()
+
+    async def _drive_graph():
+        try:
+            async for chunk in graph.astream(initial):
+                await queue.put(("chunk", chunk))
+        except Exception as exc:  # noqa: BLE001 — 큐로 전달해 본 루프에서 처리
+            await queue.put(("error", exc))
+        finally:
+            await queue.put(("done", None))
+
+    async def _drive_quick_take():
+        try:
+            from agents.instant import instant_quick_take
+
+            text = await instant_quick_take(snapshot, uid=user_uid)
+            if text:
+                await queue.put(("instant", text))
+        except Exception as exc:  # noqa: BLE001 — 빠른요약 실패는 본 분석에 영향 X
+            logger.debug(f"[instant] quick-take 태스크 실패: {exc}")
+
+    graph_task = asyncio.create_task(_drive_graph())
+    qt_task = (
+        asyncio.create_task(_drive_quick_take()) if (is_strategist and snapshot) else None
+    )
+
     try:
-        async for chunk in graph.astream(initial):
-            # chunk: {node_name: state_diff}
-            for node_name, state_diff in chunk.items():
-                if not isinstance(state_diff, dict):
-                    continue
-                final_state.update(state_diff)
-
-                # ── Strategist 흐름 4 에이전트 결과 ──
-                if "research_output" in state_diff and state_diff["research_output"]:
-                    yield _sse(
-                        "research_complete",
-                        {
-                            "agent": "research",
-                            "result": state_diff["research_output"].model_dump(),
-                            "elapsed": round(time.time() - t0, 2),
-                        },
-                    )
-                if "analyst_output" in state_diff and state_diff["analyst_output"]:
-                    yield _sse(
-                        "analyst_complete",
-                        {
-                            "agent": "analyst",
-                            "result": state_diff["analyst_output"].model_dump(),
-                            "elapsed": round(time.time() - t0, 2),
-                        },
-                    )
-                if "validator_output" in state_diff and state_diff["validator_output"]:
-                    yield _sse(
-                        "validator_complete",
-                        {
-                            "agent": "validator",
-                            "result": state_diff["validator_output"].model_dump(),
-                            "elapsed": round(time.time() - t0, 2),
-                            "retry_count": final_state.get("retry_count", 0),
-                        },
-                    )
-                if "strategist_output" in state_diff and state_diff["strategist_output"]:
-                    yield _sse(
-                        "strategist_complete",
-                        {
-                            "agent": "strategist",
-                            "result": state_diff["strategist_output"].model_dump(),
-                            "elapsed": round(time.time() - t0, 2),
-                        },
-                    )
-
-                # ── 데이터 페르소나 단일 노드 결과 ──
-                if "event_output" in state_diff and state_diff["event_output"]:
-                    yield _sse(
-                        "event_complete",
-                        {
-                            "agent": "event_analyst",
-                            "result": state_diff["event_output"].model_dump(),
-                            "elapsed": round(time.time() - t0, 2),
-                        },
-                    )
-                if "macro_output" in state_diff and state_diff["macro_output"]:
-                    yield _sse(
-                        "macro_complete",
-                        {
-                            "agent": "macro_pm",
-                            "result": state_diff["macro_output"].model_dump(),
-                            "elapsed": round(time.time() - t0, 2),
-                        },
-                    )
-                if "korean_output" in state_diff and state_diff["korean_output"]:
-                    yield _sse(
-                        "korean_complete",
-                        {
-                            "agent": "korean_specialist",
-                            "result": state_diff["korean_output"].model_dump(),
-                            "elapsed": round(time.time() - t0, 2),
-                        },
-                    )
+        done = False
+        while not done:
+            kind, payload = await queue.get()
+            if kind == "chunk":
+                for ev in _chunk_to_events(payload, t0, final_state):
+                    yield ev
+            elif kind == "instant":
+                yield _sse("instant_summary", {
+                    "summary": payload,
+                    "elapsed": round(time.time() - t0, 2),
+                })
+            elif kind == "error":
+                raise payload
+            elif kind == "done":
+                done = True
     except Exception as e:
         logger.exception(f"[ai/analyze stream] 실행 실패: {e}")
         try:
-            import asyncio as _asyncio
-
             from screener.services.error_log import log_error
-            await _asyncio.to_thread(
+            await asyncio.to_thread(
                 log_error, "ai_error", f"{type(e).__name__}: {e}",
                 uid=user_uid, ticker=ticker, agent="analyze_stream",
                 context={"persona": persona},
@@ -685,6 +732,12 @@ async def _stream_analysis(
             pass
         yield _sse("error", {"code": "AI_ERROR", "message": str(e)})
         return
+    finally:
+        # 늦게 끝난 quick-take는 무의미 → 취소. graph_task는 done 센티넬로 이미 종료.
+        if qt_task is not None and not qt_task.done():
+            qt_task.cancel()
+        if not graph_task.done():
+            graph_task.cancel()
 
     # 캐시 응답 추정 — Strategist 흐름 평균 ~12s, 데이터 페르소나 ~20s.
     # 5초 미만이면 거의 확실히 ResponseCache hit (Claude API 미호출).

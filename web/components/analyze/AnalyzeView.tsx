@@ -19,6 +19,7 @@ import { toast } from "sonner";
 import { AddToWatchlistButton } from "@/components/analyze/AddToWatchlistButton";
 import { AnalystCard } from "@/components/analyze/AnalystCard";
 import { EventAnalystCard } from "@/components/analyze/EventAnalystCard";
+import { InstantCard } from "@/components/analyze/InstantCard";
 import { KisCandleChart } from "@/components/analyze/KisCandleChart";
 import { KisInvestorFlow } from "@/components/analyze/KisInvestorFlow";
 import { KisOrderbook } from "@/components/analyze/KisOrderbook";
@@ -353,6 +354,13 @@ export function AnalyzeView({ ticker }: { ticker: string }) {
           {/* 페르소나 그룹별 카드 분기 */}
           {isStrategist ? (
             <>
+              {/* 빠른 참고 — 정밀 종합(Strategist) 도착 전까지만 노출 */}
+              {run?.instantSnapshot && strategistStatus.strategist !== "done" && (
+                <InstantCard
+                  snapshot={run.instantSnapshot}
+                  summary={run.instantSummary}
+                />
+              )}
               <StrategistCard
                 data={strategistFlow.strategist}
                 status={strategistStatus.strategist}
