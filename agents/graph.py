@@ -1,18 +1,20 @@
-"""LangGraph 오케스트레이션 — 6 페르소나 분기.
+"""LangGraph 오케스트레이션 — 시간축 관점(horizon) 1차 축 + 데이터 노드.
 
-페르소나 그룹:
-  - **Strategist 흐름** (blackrock/ark/graham): 기존 4노드 파이프라인.
-        research + analyst → validator → strategist → END
-  - **Event Analyst** (event): 단일 노드, Week C 데이터 인프라 호출
-  - **Macro PM** (macro): 단일 노드, FRED+ECOS+regime_detector 결과 주입
-  - **Korean Specialist** (korean): 단일 노드, Week A 6 모듈 호출
+진입 축은 **horizon**(short/short_mid/mid/long)이다. 어떤 관점이든 통합
+4노드 파이프라인(strategist 흐름)을 타고, strategist가 관점 emphasis를 적용한다.
 
-라우팅 (START 직후):
-  blackrock | ark | graham → fanout(research+analyst)
+  - **Strategist 흐름** (모든 horizon): research + analyst → validator → strategist → END
+  - **Event Analyst** (event): 단일 노드 — 내부 데이터 제공자(UI 미노출, API/레거시 경로용)
+  - **Macro PM** (macro): 단일 노드 — 내부 데이터 제공자(중기/장기 그라운딩은 build_macro_context_block로 별도 주입)
+  - **Korean Specialist** (korean): 단일 노드 — 내부 데이터 제공자
+
+라우팅 (START 직후, route_by_horizon):
+  horizon 지정(또는 미상 persona) → fanout(research+analyst) → strategist
   event   → event_analyst → END
   macro   → macro_pm → END
   korean  → korean_specialist → END
 
+페르소나(블랙록/ARK/그레이엄)는 2026-06-22 horizon으로 전면 대체됨.
 ⚠️ 데이터 부족 시 graceful — 각 에이전트가 자체 처리 (Week C/D 보정 로직).
 비용 추적은 Claude API 호출 시 자동 (utils.cost_tracker.log_usage).
 """
@@ -57,16 +59,11 @@ from agents.validator import ValidatorAgent, ValidatorInput, ValidatorResult
 
 
 # ──────────────────────────────────────────────
-# 페르소나 그룹 분류
+# 데이터 노드 분류 (내부 데이터 제공자 — UI 미노출, API/레거시 경로용)
 # ──────────────────────────────────────────────
 
-STRATEGIST_PERSONAS = {"blackrock", "ark", "graham"}
 DATA_DRIVEN_PERSONAS = {"event", "macro", "korean"}
-ALL_PERSONAS = STRATEGIST_PERSONAS | DATA_DRIVEN_PERSONAS
-
-
-def is_strategist_persona(persona: str) -> bool:
-    return persona in STRATEGIST_PERSONAS
+ALL_PERSONAS = DATA_DRIVEN_PERSONAS
 
 
 def is_data_driven_persona(persona: str) -> bool:
@@ -182,8 +179,9 @@ async def validator_node(state: AnalysisState) -> dict:
 
 async def strategist_node(state: AnalysisState) -> dict:
     agent = StrategistAgent()
-    persona = state.get("persona", "blackrock")
-    horizon = state.get("horizon", "") or ""
+    # 시간축 관점(horizon)이 1차 축. 미지정이면 기본 'mid'로 통합 흐름을 탄다.
+    horizon = (state.get("horizon") or "") or "mid"
+    persona = state.get("persona", "")  # (레거시 캐리어) 더 이상 프롬프트에 영향 없음
 
     # Phase 1b — 중기/장기 관점은 결정론적 매크로 사이클/실측 데이터를 strategist에
     # 주입해 매크로 서술을 그라운딩(추가 LLM 비용 0). 단기/단중기는 기술·수급 중심이라 제외.
@@ -460,20 +458,17 @@ def route_after_validator(state: AnalysisState) -> str:
     return "finalize"
 
 
-def route_by_persona(state: AnalysisState) -> str:
+def route_by_horizon(state: AnalysisState) -> str:
     """START 직후 분기.
 
     - horizon 지정(short|short_mid|mid|long) → 'strategist_flow' (통합 파이프라인, 우선)
-    - blackrock/ark/graham → 'strategist_flow' (레거시 4노드)
-    - event   → 'event'
-    - macro   → 'macro'
-    - korean  → 'korean'
-    - 미상/기본 → 'strategist_flow' (블랙록 기본)
+    - event/macro/korean (내부 데이터 노드, horizon 미지정 시에만) → 각 단일 노드
+    - 그 외/미상 → 'strategist_flow' (기본 mid 관점)
     """
-    # 신규 1차 축 — horizon이 지정되면 데이터 페르소나 분기보다 우선해 통합 흐름으로.
+    # 1차 축 — horizon이 지정되면 데이터 노드 분기보다 우선해 통합 흐름으로.
     if state.get("horizon"):
         return "strategist_flow"
-    persona = state.get("persona", "blackrock")
+    persona = state.get("persona", "")
     if persona == "event":
         return "event"
     if persona == "macro":
@@ -488,7 +483,7 @@ def route_by_persona(state: AnalysisState) -> str:
 # ──────────────────────────────────────────────
 
 def create_analysis_graph():
-    """LangGraph StateGraph 컴파일 — 6 페르소나 분기 통합.
+    """LangGraph StateGraph 컴파일 — horizon 통합 흐름 + 데이터 노드.
 
     Returns:
         compiled graph — `await graph.ainvoke(state)` 또는 `graph.astream(state)` 호출 가능.
@@ -497,22 +492,22 @@ def create_analysis_graph():
 
     builder = StateGraph(AnalysisState)
 
-    # 기존 4 노드 (Strategist 흐름)
+    # 통합 4 노드 (Strategist 흐름 — 모든 horizon)
     builder.add_node("fanout", fanout_node)
     builder.add_node("research", research_node)
     builder.add_node("analyst", analyst_node)
     builder.add_node("validator", validator_node)
     builder.add_node("strategist", strategist_node)
 
-    # 신규 3 페르소나 (단일 노드 → END)
+    # 데이터 노드 (단일 노드 → END, 내부 제공자)
     builder.add_node("event_analyst", event_analyst_node)
     builder.add_node("macro_pm", macro_pm_node)
     builder.add_node("korean_specialist", korean_specialist_node)
 
-    # START → 페르소나 분기
+    # START → horizon 분기
     builder.add_conditional_edges(
         START,
-        route_by_persona,
+        route_by_horizon,
         {
             "strategist_flow": "fanout",
             "event": "event_analyst",
@@ -548,7 +543,7 @@ def create_analysis_graph():
 async def run_analysis(
     ticker: str,
     query: str = "",
-    persona: str = "blackrock",
+    persona: str = "",
     user_profile: Optional[UserProfile] = None,
     user_uid: str = "",
     *,
@@ -560,19 +555,19 @@ async def run_analysis(
     """그래프 1회 실행 후 최종 state 반환.
 
     Args:
-        ticker, query, persona, user_profile, user_uid: 공통.
-        horizon: 시간축 관점(short|short_mid|mid|long). 지정 시 통합 파이프라인 사용
-            (persona 무시). 빈 값이면 레거시 persona 경로.
+        ticker, query, user_profile, user_uid: 공통.
+        horizon: 시간축 관점(short|short_mid|mid|long). 1차 축 — 통합 파이프라인 사용.
+        persona: (레거시 데이터 노드 경로) horizon 미지정 시에만 event/macro/korean 분기.
         event_type, event_target, primary_ticker: persona='event' 전용 옵션.
     """
     from agents.strategist import VALID_HORIZONS
 
     if horizon and horizon not in VALID_HORIZONS:
-        logger.warning(f"[graph] 알 수 없는 horizon='{horizon}' → 무시(persona 경로)")
+        logger.warning(f"[graph] 알 수 없는 horizon='{horizon}' → 무시")
         horizon = ""
-    if not horizon and persona not in ALL_PERSONAS:
-        logger.warning(f"[graph] 알 수 없는 persona='{persona}' → 'blackrock'으로 fallback")
-        persona = "blackrock"
+    # horizon도 없고 데이터 노드 persona도 아니면 기본 통합 흐름(mid)로.
+    if not horizon and persona not in DATA_DRIVEN_PERSONAS:
+        horizon = "mid"
 
     graph = create_analysis_graph()
     initial: AnalysisState = {

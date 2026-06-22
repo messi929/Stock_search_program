@@ -24,7 +24,8 @@ import { auth } from "@/lib/firebase";
 
 export type InvestingExperience = "beginner" | "1-5y" | "5y+";
 export type HoldingPeriod = "1m" | "6m" | "1-2y" | "3y+";
-export type PersonaId = "blackrock" | "ark" | "graham";
+// 1차 축 — 선호 시간축 관점(types/persona.ts HorizonId와 일치).
+export type PreferredHorizon = "short" | "short_mid" | "mid" | "long";
 
 export interface AxisProfile {
   investing_experience?: InvestingExperience;
@@ -32,7 +33,7 @@ export interface AxisProfile {
   volatility_tolerance?: "10" | "20" | "30";
   interested_sectors?: string[];
   investment_principles?: string[];
-  preferred_persona?: PersonaId;
+  preferred_horizon?: PreferredHorizon;
   onboarded_at?: { _seconds?: number } | string | null;
 }
 

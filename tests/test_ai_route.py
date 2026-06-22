@@ -23,7 +23,10 @@ load_dotenv()
 
 
 def test_personas_route() -> None:
-    """GET /api/ai/personas — 6 페르소나 반환 (3 strategist + 3 데이터)."""
+    """GET /api/ai/personas — 1차 축 horizon 4종 + 내부 데이터 노드 3종 반환.
+
+    블랙록/ARK/그레이엄 페르소나는 2026-06-22 horizon으로 폐지.
+    """
     from fastapi.testclient import TestClient
     from screener.main import app
 
@@ -32,29 +35,27 @@ def test_personas_route() -> None:
     assert res.status_code == 200, f"status={res.status_code}, body={res.text}"
 
     data = res.json()
+
+    # 1차 축 — 4 horizon
+    assert "horizons" in data, f"응답에 horizons 누락: {data}"
+    hz_ids = [h["id"] for h in data["horizons"]]
+    assert set(hz_ids) == {"short", "short_mid", "mid", "long"}
+    assert data["user_default_horizon"] == "mid"
+
+    # 데이터 노드 — event/macro/korean만 (폐지된 페르소나 없음)
     assert "personas" in data, f"응답에 personas 누락: {data}"
-    assert len(data["personas"]) == 6, f"페르소나 6개여야 함: {len(data['personas'])}"
-
     ids = [p["id"] for p in data["personas"]]
-    assert set(ids) == {"blackrock", "ark", "graham", "event", "macro", "korean"}
-
-    # Free 접근: blackrock만
-    blackrock = next(p for p in data["personas"] if p["id"] == "blackrock")
-    assert blackrock["available_to_free"] is True
-
-    # Pro 전용: 나머지 5개
-    for pid in ("ark", "graham", "event", "macro", "korean"):
-        p = next(x for x in data["personas"] if x["id"] == pid)
-        assert p["available_to_free"] is False, f"{pid} 는 Pro 전용이어야 함"
+    assert set(ids) == {"event", "macro", "korean"}
+    for pid in ("blackrock", "ark", "graham"):
+        assert pid not in ids, f"{pid} 페르소나는 폐지되어야 함"
 
     assert data["user_plan"] in ("free", "pro")
-    assert data["user_default_persona"] == "blackrock"
+    assert data["user_default_persona"] == ""
 
-    print(f"[personas_route] 6 페르소나 반환 OK")
-    for p in data["personas"]:
-        free_mark = "🆓" if p["available_to_free"] else "💎"
-        print(f"  {free_mark} {p['icon']} {p['name']} ({p['id']})")
-    print(f"  user_plan: {data['user_plan']}, default: {data['user_default_persona']}")
+    print(f"[personas_route] horizon 4 + 데이터 노드 3 반환 OK")
+    for h in data["horizons"]:
+        free_mark = "🆓" if h["available_to_free"] else "💎"
+        print(f"  {free_mark} {h['icon']} {h['name']} ({h['id']})")
 
 
 def test_analyze_invalid_ticker() -> None:
@@ -72,7 +73,7 @@ def test_analyze_invalid_ticker() -> None:
 
 
 def test_analyze_locked_persona() -> None:
-    """POST /api/ai/analyze — Free에서 ARK 페르소나 → 402.
+    """POST /api/ai/analyze — Free에서 Pro 전용 데이터 노드(macro) → 402.
 
     AUTH_ENABLED=false 환경에서는 middleware가 tier='pro'로 통과시켜 검증 어려움.
     이 테스트는 AUTH_ENABLED=true 운영 환경에서만 의미 있음. 여기서는 skip.
@@ -89,10 +90,10 @@ def test_analyze_locked_persona() -> None:
     client = TestClient(app)
     res = client.post(
         "/api/ai/analyze",
-        json={"ticker": "207940", "persona": "ark", "stream": False},
+        json={"ticker": "207940", "persona": "macro", "stream": False},
     )
-    assert res.status_code == 402, f"Free 사용자가 ARK 호출 → 402 기대, got {res.status_code}"
-    print(f"[analyze_locked] Free + ARK → 402 OK")
+    assert res.status_code == 402, f"Free 사용자가 macro 호출 → 402 기대, got {res.status_code}"
+    print(f"[analyze_locked] Free + macro → 402 OK")
 
 
 def test_smart_lists_route() -> None:

@@ -40,7 +40,7 @@ PLAN_LIMITS: dict[str, dict[str, int]] = {
 }
 
 # analyses(딥다이브)로 카운트되는 에이전트 — 파이프라인 종착점 호출 1회 = 분석 1회.
-# strategist 흐름(blackrock/ark/graham)은 strategist, 데이터 페르소나는 각 단일 노드.
+# horizon 통합 흐름은 strategist, 데이터 노드는 각 단일 노드.
 _ANALYSIS_AGENTS = ("strategist", "event_analyst", "macro_pm", "korean_specialist")
 
 
@@ -201,13 +201,13 @@ class AnalyzeRequest(BaseModel):
     ticker: str = Field(..., description="6자리 종목 코드 (KR) 또는 알파벳 (US)")
     query: str = Field("", description="자연어 쿼리 (옵션)")
     persona: str = Field(
-        "blackrock",
-        description="(레거시) blackrock | ark | graham | event | macro | korean",
+        "",
+        description="(레거시 데이터 노드) event | macro | korean. horizon 미지정 시에만 사용.",
     )
     horizon: str = Field(
         "",
-        description="시간축 관점(신규 1차 축): short | short_mid | mid | long. "
-        "지정 시 persona 대신 통합 파이프라인 + 관점 emphasis 사용.",
+        description="시간축 관점(1차 축): short | short_mid | mid | long. "
+        "통합 파이프라인 + 관점 emphasis 적용. 미지정 시 mid 기본.",
     )
     stream: bool = Field(True, description="SSE 스트리밍 여부")
     user_profile: Optional[dict] = Field(None, description="UserProfile dict (옵션)")
@@ -242,30 +242,9 @@ class Persona(BaseModel):
 # 페르소나 목록
 # ──────────────────────────────────────────────
 
+# 데이터 노드 — 내부 데이터 제공자(UI 미노출). horizon 미지정 레거시/직접 API 경로에서만
+# 분기. 사용자 노출 1차 축은 아래 _HORIZONS. (블랙록/ARK/그레이엄은 2026-06-22 폐지)
 _PERSONAS: list[Persona] = [
-    # Strategist 흐름 (research + analyst + validator + strategist)
-    Persona(
-        id="blackrock",
-        name="BlackRock 애널리스트",
-        description="리스크 우선, 장기 가치 중심 분석",
-        icon="🏛",
-        available_to_free=True,
-    ),
-    Persona(
-        id="ark",
-        name="ARK 혁신 분석가",
-        description="파괴적 혁신, 5년 시계 분석",
-        icon="🚀",
-        available_to_free=False,
-    ),
-    Persona(
-        id="graham",
-        name="Benjamin Graham 가치투자",
-        description="안전마진, 저평가 발굴",
-        icon="📚",
-        available_to_free=False,
-    ),
-    # 데이터 페르소나 (Week C/D 신규 — 단일 노드)
     Persona(
         id="event",
         name="Event Analyst",
@@ -290,8 +269,7 @@ _PERSONAS: list[Persona] = [
 ]
 
 
-# 페르소나 그룹 분류 (graph 라우팅과 일치 — agents/graph.py의 *_PERSONAS와 동일)
-_STRATEGIST_PERSONAS = {"blackrock", "ark", "graham"}
+# 데이터 노드 분류 (graph 라우팅과 일치 — agents/graph.DATA_DRIVEN_PERSONAS와 동일)
 _DATA_DRIVEN_PERSONAS = {"event", "macro", "korean"}
 
 
@@ -339,12 +317,12 @@ async def list_personas(request: Request) -> dict:
     """페르소나 목록 + 사용자 플랜에 따른 접근 권한."""
     user = getattr(request.state, "user", None) or {}
     user_plan = user.get("tier", "free")
-    user_default = "blackrock"
     return {
         "personas": [p.model_dump() for p in _PERSONAS],
         "horizons": [h.model_dump() for h in _HORIZONS],
         "user_plan": user_plan,
-        "user_default_persona": user_default,
+        # (레거시 호환) 페르소나 폐지 — 1차 축은 horizon.
+        "user_default_persona": "",
         "user_default_horizon": "mid",
     }
 
@@ -433,16 +411,19 @@ async def market_briefing(request: Request):
 async def analyze(req: AnalyzeRequest, request: Request):
     """LangGraph 4 에이전트 종목 분석. stream=True면 SSE.
 
-    인증/티어 체크는 screener.middleware.AuthMiddleware가 처리. 여기선 페르소나 권한만 추가 검사.
+    인증/티어 체크는 screener.middleware.AuthMiddleware가 처리. 여기선 관점/노드 권한만 추가 검사.
     """
-    # 페르소나 권한 (Free는 blackrock만)
     user = getattr(request.state, "user", None) or {}
     tier = user.get("tier", "free")
     uid = user.get("uid", "")
 
     horizon = (req.horizon or "").strip()
+    # horizon도 없고 데이터 노드(event/macro/korean)도 아니면 기본 'mid' 관점으로.
+    if not horizon and req.persona not in _DATA_DRIVEN_PERSONAS:
+        horizon = "mid"
+
     if horizon:
-        # 신규 1차 축 — 관점(horizon) 경로. persona 권한 검사 대체.
+        # 1차 축 — 관점(horizon) 경로.
         if horizon not in _HORIZON_IDS:
             raise HTTPException(400, f"Unknown horizon: {horizon}")
         hz_obj = next(h for h in _HORIZONS if h.id == horizon)
@@ -456,7 +437,7 @@ async def analyze(req: AnalyzeRequest, request: Request):
                 },
             )
     else:
-        # 레거시 페르소나 경로
+        # 레거시 데이터 노드 경로 (event/macro/korean)
         persona_obj = next((p for p in _PERSONAS if p.id == req.persona), None)
         if persona_obj is None:
             raise HTTPException(400, f"Unknown persona: {req.persona}")
@@ -465,7 +446,7 @@ async def analyze(req: AnalyzeRequest, request: Request):
                 402,
                 {
                     "code": "PERSONA_LOCKED",
-                    "message": f"'{persona_obj.name}'는 Pro 페르소나입니다.",
+                    "message": f"'{persona_obj.name}'는 Pro 기능입니다.",
                     "upgrade_url": "/pricing",
                 },
             )
@@ -1282,7 +1263,10 @@ class AxisProfileBody(BaseModel):
     volatility_tolerance: Optional[str] = None  # "10" | "20" | "30"
     interested_sectors: list[str] = Field(default_factory=list)
     investment_principles: list[str] = Field(default_factory=list)
-    preferred_persona: Optional[str] = None  # blackrock|ark|graham|event|macro|korean
+    # 1차 축 — 선호 시간축 관점. short|short_mid|mid|long.
+    preferred_horizon: Optional[str] = None
+    # (레거시) 페르소나 — 폐지. 구버전 클라이언트 호환을 위해 수용만 하고 무시.
+    preferred_persona: Optional[str] = None
 
 
 @router.get("/profile")
@@ -1321,7 +1305,7 @@ async def save_axis_profile(payload: AxisProfileBody, request: Request):
     valid_experience = {"beginner", "1-5y", "5y+", None}
     valid_period = {"1m", "6m", "1-2y", "3y+", None}
     valid_volatility = {"10", "20", "30", None}
-    valid_persona = {"blackrock", "ark", "graham", "event", "macro", "korean", None}
+    valid_horizon = {"short", "short_mid", "mid", "long", None}
 
     if payload.investing_experience not in valid_experience:
         raise HTTPException(400, {"code": "INVALID_EXPERIENCE", "message": "investing_experience 값 오류"})
@@ -1329,8 +1313,8 @@ async def save_axis_profile(payload: AxisProfileBody, request: Request):
         raise HTTPException(400, {"code": "INVALID_PERIOD", "message": "holding_period 값 오류"})
     if payload.volatility_tolerance not in valid_volatility:
         raise HTTPException(400, {"code": "INVALID_VOLATILITY", "message": "volatility_tolerance 값 오류"})
-    if payload.preferred_persona not in valid_persona:
-        raise HTTPException(400, {"code": "INVALID_PERSONA", "message": "preferred_persona 값 오류"})
+    if payload.preferred_horizon not in valid_horizon:
+        raise HTTPException(400, {"code": "INVALID_HORIZON", "message": "preferred_horizon 값 오류"})
 
     # 길이 제한 (DOS 방지)
     sectors = [str(s)[:40] for s in payload.interested_sectors[:20]]
@@ -1349,7 +1333,7 @@ async def save_axis_profile(payload: AxisProfileBody, request: Request):
                     "volatility_tolerance": payload.volatility_tolerance,
                     "interested_sectors": sectors,
                     "investment_principles": principles,
-                    "preferred_persona": payload.preferred_persona,
+                    "preferred_horizon": payload.preferred_horizon,
                     "onboarded_at": fb_firestore.SERVER_TIMESTAMP,
                 }
             },

@@ -13,7 +13,7 @@ import {
   type AxisProfile,
   type HoldingPeriod,
   type InvestingExperience,
-  type PersonaId,
+  type PreferredHorizon,
 } from "@/hooks/useUserProfile";
 
 const EXPERIENCE_OPTIONS: { id: InvestingExperience; label: string; tag?: string }[] = [
@@ -41,10 +41,11 @@ const HOLDING_PERIOD_OPTIONS: { id: HoldingPeriod; label: string }[] = [
   { id: "3y+", label: "3년 이상" },
 ];
 
-const PERSONA_OPTIONS: { id: PersonaId; icon: string; name: string; tagline: string }[] = [
-  { id: "blackrock", icon: "🏛", name: "안정·리스크관리", tagline: "리스크 우선, 장기 가치" },
-  { id: "ark", icon: "🚀", name: "고성장·혁신", tagline: "파괴적 혁신, 5년 시계" },
-  { id: "graham", icon: "📚", name: "가치·저평가", tagline: "안전마진, 저평가" },
+const HORIZON_OPTIONS: { id: PreferredHorizon; icon: string; name: string; tagline: string }[] = [
+  { id: "short", icon: "⚡", name: "단기", tagline: "수일~1개월 · 추세·거래량·수급" },
+  { id: "short_mid", icon: "📈", name: "단중기", tagline: "1~3개월 · 분기 실적 모멘텀 + 기술" },
+  { id: "mid", icon: "⚖️", name: "중기", tagline: "3개월~1년 · 밸류·성장 균형" },
+  { id: "long", icon: "🏔", name: "장기", tagline: "1년+ · 펀더멘털·해자·매크로 사이클" },
 ];
 
 export default function OnboardingPage() {
@@ -57,7 +58,7 @@ export default function OnboardingPage() {
   const [sectors, setSectors] = useState<string[]>([]);
   const [principleInput, setPrincipleInput] = useState("");
   const [principles, setPrinciples] = useState<string[]>([]);
-  const [persona, setPersona] = useState<PersonaId>("blackrock");
+  const [horizon, setHorizon] = useState<PreferredHorizon>("mid");
   const [holdingPeriod, setHoldingPeriod] = useState<HoldingPeriod>("1-2y");
   const [busy, setBusy] = useState(false);
 
@@ -80,7 +81,7 @@ export default function OnboardingPage() {
     if (profile.holding_period) setHoldingPeriod(profile.holding_period);
     if (profile.interested_sectors) setSectors(profile.interested_sectors);
     if (profile.investment_principles) setPrinciples(profile.investment_principles);
-    if (profile.preferred_persona) setPersona(profile.preferred_persona);
+    if (profile.preferred_horizon) setHorizon(profile.preferred_horizon);
   }, [profile]);
 
   const toggleSector = (s: string) =>
@@ -108,7 +109,7 @@ export default function OnboardingPage() {
         holding_period: holdingPeriod,
         interested_sectors: sectors,
         investment_principles: principles,
-        preferred_persona: persona,
+        preferred_horizon: horizon,
       };
       await save(next);
       toast.success("온보딩 완료. 환영합니다!");
@@ -262,27 +263,27 @@ export default function OnboardingPage() {
 
         {step === 4 && (
           <div className="space-y-4">
-            <h2 className="font-semibold">선호 페르소나를 골라주세요</h2>
+            <h2 className="font-semibold">주로 어느 기간 관점으로 보시나요?</h2>
             <p className="text-sm text-muted-foreground">
-              나중에 분석 화면에서 자유롭게 전환할 수 있습니다.
+              기본 시계일 뿐, 분석 화면에서 종목마다 자유롭게 바꿀 수 있습니다.
             </p>
             <div className="space-y-2">
-              {PERSONA_OPTIONS.map((p) => (
+              {HORIZON_OPTIONS.map((h) => (
                 <button
-                  key={p.id}
+                  key={h.id}
                   type="button"
-                  onClick={() => setPersona(p.id)}
+                  onClick={() => setHorizon(h.id)}
                   className={`w-full text-left p-4 rounded-md border transition ${
-                    persona === p.id
+                    horizon === h.id
                       ? "border-amber-500 bg-amber-500/10"
                       : "border-border hover:bg-muted"
                   }`}
                 >
                   <div className="flex items-center gap-3">
-                    <span className="text-2xl">{p.icon}</span>
+                    <span className="text-2xl">{h.icon}</span>
                     <div>
-                      <div className="font-semibold">{p.name}</div>
-                      <div className="text-xs text-muted-foreground">{p.tagline}</div>
+                      <div className="font-semibold">{h.name}</div>
+                      <div className="text-xs text-muted-foreground">{h.tagline}</div>
                     </div>
                   </div>
                 </button>

@@ -1,6 +1,7 @@
-"""페르소나 시스템 프롬프트 — Week 2 Day 5 작성 예정.
+"""시스템 프롬프트 모음.
 
-  - blackrock.md  리스크 프레임 중심, 장기 가치
-  - ark.md        파괴적 혁신 서사, 고성장
-  - graham.md     안전마진, 저평가
+  - horizons/{short,short_mid,mid,long}.md  시간축 관점 emphasis (1차 축, strategist)
+  - event.md / macro.md / korean.md          내부 데이터 노드 프롬프트
+
+(블랙록/ARK/그레이엄 페르소나는 2026-06-22 horizon으로 폐지)
 """

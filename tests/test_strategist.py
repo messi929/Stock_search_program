@@ -60,8 +60,8 @@ async def _build_pipeline_inputs(ticker: str = "207940") -> tuple[ResearchResult
     return research_result, analyst_result, validator_result
 
 
-async def test_three_personas_differ() -> None:
-    """3 페르소나 — 같은 입력 → 명확히 다른 persona_perspective."""
+async def test_horizons_differ() -> None:
+    """관점(시간축) — 같은 입력 → 명확히 다른 persona_perspective."""
     research, analyst, validator = await _build_pipeline_inputs("207940")
 
     user = UserProfile(
@@ -75,23 +75,27 @@ async def test_three_personas_differ() -> None:
     agent = StrategistAgent()
     results: dict[str, StrategistResult] = {}
 
-    for persona in ["blackrock", "ark", "graham"]:
+    for horizon in ["short", "mid", "long"]:
         result = await agent.run(
             StrategistInput(
                 research_output=research,
                 analyst_output=analyst,
                 validator_output=validator,
                 user_profile=user,
-                persona=persona,
+                horizon=horizon,
                 query="삼성바이오 어때?",
             )
         )
-        results[persona] = result
-        assert result.persona_used == persona
-        assert result.summary, f"{persona} summary 비어 있음"
-        assert result.persona_perspective, f"{persona} persona_perspective 비어 있음"
+        results[horizon] = result
+        assert result.persona_used == horizon
+        assert result.summary, f"{horizon} summary 비어 있음"
+        assert result.persona_perspective, f"{horizon} persona_perspective 비어 있음"
         assert result.disclaimer, "disclaimer 누락"
-        print(f"\n[{persona}] perspective: {result.persona_perspective[:140]}...")
+        # LEGAL: 실무자 실명이 출력에 노출되면 안 됨 (출력 마스킹)
+        blob = result.model_dump_json()
+        for name in ("그레이엄", "버핏", "오닐", "린치", "미너비니"):
+            assert name not in blob, f"[{horizon}] 실무자 실명 '{name}' 노출됨"
+        print(f"\n[{horizon}] perspective: {result.persona_perspective[:140]}...")
         print(f"  summary: {result.summary[:100]}...")
         if result.entry_points:
             print(
@@ -100,13 +104,12 @@ async def test_three_personas_differ() -> None:
             )
         print(f"  follow-ups: {len(result.follow_up_questions)}개")
 
-    # 페르소나 차별화 검증 — perspective/summary가 동일하면 안 됨
-    assert results["blackrock"].persona_perspective != results["ark"].persona_perspective
-    assert results["ark"].persona_perspective != results["graham"].persona_perspective
-    assert results["blackrock"].summary != results["graham"].summary
-    print("\n[differentiation] 3 페르소나 perspective/summary 모두 다름 (PASS)")
+    # 관점 차별화 검증 — perspective/summary가 동일하면 안 됨
+    assert results["short"].persona_perspective != results["long"].persona_perspective
+    assert results["short"].summary != results["long"].summary
+    print("\n[differentiation] 관점별 perspective/summary 다름 (PASS)")
 
-    # forbidden_words 필터 검증 — 3 페르소나 모두 (LEGAL: 필터 후 클린)
+    # forbidden_words 필터 검증 — 모든 관점 (LEGAL: 필터 후 클린)
     total_found = 0
     for persona, r in results.items():
         serialized = r.model_dump_json()
@@ -117,7 +120,7 @@ async def test_three_personas_differ() -> None:
         if found:
             print(f"  [{persona}] 원본 {len(found)}개 → 필터 후 0개: {found}")
     if total_found == 0:
-        print("[forbidden_check] 3 페르소나 모두 원본부터 클린 (PASS)")
+        print("[forbidden_check] 모든 관점 원본부터 클린 (PASS)")
     else:
         print(f"[forbidden_check] 총 {total_found}개 발견 → 모두 필터링 (PASS)")
 
@@ -143,7 +146,7 @@ async def test_user_principles_alignment() -> None:
             analyst_output=analyst,
             validator_output=validator,
             user_profile=user,
-            persona="blackrock",
+            horizon="mid",
             query="삼성바이오 어때?",
         )
     )
@@ -163,7 +166,7 @@ async def main() -> None:
     print("Strategist Agent 테스트 시작 (Opus 호출 3~4회)")
     print("=" * 60)
 
-    await test_three_personas_differ()
+    await test_horizons_differ()
     print()
     await test_user_principles_alignment()
 

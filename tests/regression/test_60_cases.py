@@ -40,7 +40,11 @@ import pytest
 # ──────────────────────────────────────────────
 
 
-PERSONAS = ("blackrock", "ark", "graham", "event", "macro", "korean")
+# 분석 모드 = 4 시간축 관점(horizon, 사용자 노출) + 3 데이터 노드(내부 제공자).
+# (블랙록/ARK/그레이엄 페르소나는 2026-06-22 horizon으로 폐지)
+HORIZONS = ("short", "short_mid", "mid", "long")
+DATA_NODES = ("event", "macro", "korean")
+MODES = HORIZONS + DATA_NODES
 
 # 다양성: 한국 5 + 미국 4 + ETF 1
 TICKERS_KR = (
@@ -67,43 +71,39 @@ ALL_TICKERS = TICKERS_KR + TICKERS_US
 # ──────────────────────────────────────────────
 
 
-def test_matrix_size_is_60():
-    """6 페르소나 × 10 종목 = 60건."""
-    assert len(PERSONAS) == 6
+def test_matrix_size_is_70():
+    """7 모드(4 관점 + 3 데이터 노드) × 10 종목 = 70건."""
+    assert len(MODES) == 7
     assert len(ALL_TICKERS) == 10
-    assert len(PERSONAS) * len(ALL_TICKERS) == 60
+    assert len(MODES) * len(ALL_TICKERS) == 70
 
 
-def test_persona_coverage():
-    """6 페르소나 모두 포함 — 그래프 ALL_PERSONAS와 일치."""
+def test_data_node_coverage():
+    """데이터 노드 3종이 그래프 ALL_PERSONAS와 일치."""
     from agents.graph import ALL_PERSONAS as graph_all
 
-    assert set(PERSONAS) == graph_all
+    assert set(DATA_NODES) == graph_all
 
 
-@pytest.mark.parametrize("persona", PERSONAS)
+@pytest.mark.parametrize("mode", MODES)
 @pytest.mark.parametrize(
     "ticker,name,desc",
     ALL_TICKERS,
     ids=[f"{t[0]}-{t[2][:10]}" for t in ALL_TICKERS],
 )
-def test_routing_dispatch(persona, ticker, name, desc):
-    """60건 모두 graph.route_by_persona가 정상 분기되는지.
+def test_routing_dispatch(mode, ticker, name, desc):
+    """70건 모두 graph.route_by_horizon이 정상 분기되는지.
 
-    이 테스트는 매트릭스 모든 조합을 pytest로 발생시켜 60건 보장.
+    관점(horizon)은 통합 strategist_flow로, 데이터 노드는 각 단일 노드로.
     """
-    from agents.graph import route_by_persona
+    from agents.graph import route_by_horizon
 
-    state = {"persona": persona, "ticker": ticker}
-    result = route_by_persona(state)
-    if persona in {"blackrock", "ark", "graham"}:
-        assert result == "strategist_flow"
-    elif persona == "event":
-        assert result == "event"
-    elif persona == "macro":
-        assert result == "macro"
-    elif persona == "korean":
-        assert result == "korean"
+    if mode in HORIZONS:
+        state = {"horizon": mode, "ticker": ticker}
+        assert route_by_horizon(state) == "strategist_flow"
+    else:
+        state = {"persona": mode, "ticker": ticker}
+        assert route_by_horizon(state) == mode
 
 
 # ──────────────────────────────────────────────
@@ -111,39 +111,39 @@ def test_routing_dispatch(persona, ticker, name, desc):
 # ──────────────────────────────────────────────
 
 
-def test_resolve_matrix_default_is_full_60():
-    """필터 미지정 → 6 페르소나 × 10 종목 = 60건."""
+def test_resolve_matrix_default_is_full_70():
+    """필터 미지정 → 7 모드 × 10 종목 = 70건."""
     from tests.regression.test_60_cases import resolve_matrix
 
-    personas, tickers = resolve_matrix()
-    assert len(personas) == 6
+    modes, tickers = resolve_matrix()
+    assert len(modes) == 7
     assert len(tickers) == 10
-    assert len(personas) * len(tickers) == 60
+    assert len(modes) * len(tickers) == 70
 
 
-def test_resolve_matrix_persona_filter():
+def test_resolve_matrix_mode_filter():
     from tests.regression.test_60_cases import resolve_matrix
 
-    personas, tickers = resolve_matrix(persona_filter="event,macro")
-    assert personas == ["event", "macro"]
+    modes, tickers = resolve_matrix(mode_filter="event,macro")
+    assert modes == ["event", "macro"]
     assert len(tickers) == 10  # 종목은 전체
 
 
 def test_resolve_matrix_ticker_filter_case_insensitive():
     from tests.regression.test_60_cases import resolve_matrix
 
-    personas, tickers = resolve_matrix(ticker_filter="aapl,005930")
+    modes, tickers = resolve_matrix(ticker_filter="aapl,005930")
     assert {t[0] for t in tickers} == {"AAPL", "005930"}
-    assert len(personas) == 6  # 페르소나는 전체
+    assert len(modes) == 7  # 모드는 전체
 
 
 def test_resolve_matrix_combined_filter():
     from tests.regression.test_60_cases import resolve_matrix
 
-    personas, tickers = resolve_matrix(
-        persona_filter="korean", ticker_filter="005930"
+    modes, tickers = resolve_matrix(
+        mode_filter="korean", ticker_filter="005930"
     )
-    assert personas == ["korean"]
+    assert modes == ["korean"]
     assert [t[0] for t in tickers] == ["005930"]
 
 
@@ -161,17 +161,17 @@ def test_resolve_matrix_smoke_with_filter_takes_first():
     from tests.regression.test_60_cases import resolve_matrix
 
     personas, tickers = resolve_matrix(
-        persona_filter="macro,korean", ticker_filter="AAPL,005930", smoke=True
+        mode_filter="macro,korean", ticker_filter="AAPL,005930", smoke=True
     )
     assert personas == ["macro"]
     assert [t[0] for t in tickers] == ["AAPL"]  # 입력 순서 보존 → 첫 항목 AAPL
 
 
-def test_resolve_matrix_invalid_persona_raises():
+def test_resolve_matrix_invalid_mode_raises():
     from tests.regression.test_60_cases import resolve_matrix
 
-    with pytest.raises(ValueError, match="알 수 없는 페르소나"):
-        resolve_matrix(persona_filter="event,bogus")
+    with pytest.raises(ValueError, match="알 수 없는 모드"):
+        resolve_matrix(mode_filter="event,bogus")
 
 
 def test_resolve_matrix_invalid_ticker_raises():
@@ -291,26 +291,26 @@ def test_time_horizon_matrix():
 # ──────────────────────────────────────────────
 
 
-async def _run_one_real_case(persona: str, ticker: str, name: str) -> dict[str, Any]:
-    """1건 실 분석 — Claude/Firestore 호출 발생."""
+async def _run_one_real_case(mode: str, ticker: str, name: str) -> dict[str, Any]:
+    """1건 실 분석 — Claude/Firestore 호출 발생. mode = horizon 또는 데이터 노드."""
     from agents.graph import run_analysis
 
     started = datetime.now()
     try:
-        final = await run_analysis(ticker=ticker, query=f"{name} 분석", persona=persona)
+        if mode in HORIZONS:
+            final = await run_analysis(ticker=ticker, query=f"{name} 분석", horizon=mode)
+            out_key = "strategist_output"
+        else:
+            final = await run_analysis(ticker=ticker, query=f"{name} 분석", persona=mode)
+            out_key = {
+                "event": "event_output",
+                "macro": "macro_output",
+                "korean": "korean_output",
+            }[mode]
         elapsed = (datetime.now() - started).total_seconds()
-        # 페르소나별 출력 필드 확인
-        out_key = {
-            "blackrock": "strategist_output",
-            "ark": "strategist_output",
-            "graham": "strategist_output",
-            "event": "event_output",
-            "macro": "macro_output",
-            "korean": "korean_output",
-        }[persona]
         out = final.get(out_key)
         return {
-            "persona": persona,
+            "persona": mode,
             "ticker": ticker,
             "name": name,
             "ok": out is not None,
@@ -327,7 +327,7 @@ async def _run_one_real_case(persona: str, ticker: str, name: str) -> dict[str, 
         }
     except Exception as e:
         return {
-            "persona": persona,
+            "persona": mode,
             "ticker": ticker,
             "name": name,
             "ok": False,
@@ -336,27 +336,27 @@ async def _run_one_real_case(persona: str, ticker: str, name: str) -> dict[str, 
 
 
 def resolve_matrix(
-    persona_filter: str | None = None,
+    mode_filter: str | None = None,
     ticker_filter: str | None = None,
     smoke: bool = False,
 ) -> tuple[list[str], list[tuple[str, str, str]]]:
-    """필터를 적용해 실행할 (personas, tickers) 매트릭스를 산출.
+    """필터를 적용해 실행할 (modes, tickers) 매트릭스를 산출.
 
     BETA_READINESS §5 Stage 1/2 단계 검증을 위한 부분 실행 지원.
     잘못된 페르소나/종목명은 ValueError로 즉시 차단 (오타로 빈 매트릭스 방지).
 
-    - persona_filter: "event,macro" 형태 콤마 구분. None이면 6 페르소나 전체.
+    - mode_filter: "event,macro" 또는 "short,long" 형태 콤마 구분. None이면 7 모드 전체.
     - ticker_filter: "AAPL,005930" 형태. 대소문자 무관. None이면 10 종목 전체.
     - smoke: True면 1건만. 필터 미지정 시 event × RKLB (가장 복잡한 이벤트 케이스),
              필터 지정 시 필터 결과의 첫 항목.
     """
-    personas = list(PERSONAS)
-    if persona_filter:
-        requested = [p.strip() for p in persona_filter.split(",") if p.strip()]
-        invalid = [p for p in requested if p not in PERSONAS]
+    personas = list(MODES)
+    if mode_filter:
+        requested = [p.strip() for p in mode_filter.split(",") if p.strip()]
+        invalid = [p for p in requested if p not in MODES]
         if invalid:
             raise ValueError(
-                f"알 수 없는 페르소나: {invalid} (가능: {list(PERSONAS)})"
+                f"알 수 없는 모드: {invalid} (가능: {list(MODES)})"
             )
         personas = requested
 
@@ -376,7 +376,7 @@ def resolve_matrix(
         tickers = [by_symbol[t] for t in requested_t]
 
     if smoke:
-        personas = personas[:1] if persona_filter else ["event"]
+        personas = personas[:1] if mode_filter else ["event"]
         if ticker_filter:
             tickers = tickers[:1]
         else:
@@ -425,9 +425,9 @@ def main(argv: list[str] | None = None) -> int:
         help="Stage 1 — 1건만 실행 (event × RKLB, ~₩200).",
     )
     parser.add_argument(
-        "--persona-filter",
+        "--mode-filter",
         default=None,
-        help="실행할 페르소나 콤마 구분 (예: event,macro). 미지정 시 6 전체.",
+        help="실행할 모드 콤마 구분 (예: short,long 또는 event,macro). 미지정 시 7 전체.",
     )
     parser.add_argument(
         "--ticker-filter",
@@ -446,7 +446,7 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         personas, tickers = resolve_matrix(
-            persona_filter=args.persona_filter,
+            mode_filter=args.mode_filter,
             ticker_filter=args.ticker_filter,
             smoke=args.smoke,
         )
@@ -458,9 +458,9 @@ def main(argv: list[str] | None = None) -> int:
     est_cost = case_count * 200
     print(
         f"🔥 실 분석 모드 — {case_count}건 "
-        f"({len(personas)} 페르소나 × {len(tickers)} 종목)"
+        f"({len(personas)} 모드 × {len(tickers)} 종목)"
     )
-    print(f"   페르소나: {personas}")
+    print(f"   모드: {personas}")
     print(f"   종목: {[t[0] for t in tickers]}")
     print(f"⚠️  비용 발생 — 약 ₩{est_cost:,} 예상\n")
 

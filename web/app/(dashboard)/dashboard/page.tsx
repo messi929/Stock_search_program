@@ -15,10 +15,11 @@ import { Card, CardContent } from "@/components/ui/card";
 import { useAuth } from "@/hooks/useAuth";
 import { useUserProfile } from "@/hooks/useUserProfile";
 
-const PERSONA_LABEL: Record<string, string> = {
-  blackrock: "🏛 안정·리스크관리",
-  ark: "🚀 고성장·혁신",
-  graham: "📚 가치·저평가",
+const HORIZON_LABEL: Record<string, string> = {
+  short: "⚡ 단기",
+  short_mid: "📈 단중기",
+  mid: "⚖️ 중기",
+  long: "🏔 장기",
 };
 
 export default function DashboardHome() {
@@ -82,9 +83,9 @@ export default function DashboardHome() {
           </div>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
             <div>
-              <p className="text-muted-foreground">선호 페르소나</p>
+              <p className="text-muted-foreground">선호 시계</p>
               <p className="font-medium">
-                {PERSONA_LABEL[profile?.preferred_persona ?? "blackrock"]}
+                {HORIZON_LABEL[profile?.preferred_horizon ?? "mid"]}
               </p>
             </div>
             <div>

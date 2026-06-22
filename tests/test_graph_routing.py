@@ -1,4 +1,4 @@
-"""LangGraph 6 페르소나 라우팅 단위 테스트 (mock 기반).
+"""LangGraph 라우팅 단위 테스트 (mock 기반) — horizon 1차 축 + 데이터 노드.
 
 실제 Claude/Firestore 호출 없이 분기 + state 흐름만 검증.
 """
@@ -15,31 +15,21 @@ from agents.graph import (
     ALL_PERSONAS,
     AnalysisState,
     DATA_DRIVEN_PERSONAS,
-    STRATEGIST_PERSONAS,
     is_data_driven_persona,
-    is_strategist_persona,
-    route_by_persona,
+    route_by_horizon,
     run_analysis,
 )
 
 
 # ──────────────────────────────────────────────
-# 1. 페르소나 그룹 분류
+# 1. 데이터 노드 분류
 # ──────────────────────────────────────────────
 
 
-def test_persona_groups_complete():
-    assert STRATEGIST_PERSONAS == {"blackrock", "ark", "graham"}
+def test_data_node_groups():
     assert DATA_DRIVEN_PERSONAS == {"event", "macro", "korean"}
-    assert ALL_PERSONAS == STRATEGIST_PERSONAS | DATA_DRIVEN_PERSONAS
-    assert len(ALL_PERSONAS) == 6
-
-
-def test_is_strategist_persona():
-    for p in ("blackrock", "ark", "graham"):
-        assert is_strategist_persona(p)
-    for p in ("event", "macro", "korean", "unknown"):
-        assert not is_strategist_persona(p)
+    assert ALL_PERSONAS == DATA_DRIVEN_PERSONAS
+    assert len(ALL_PERSONAS) == 3
 
 
 def test_is_data_driven_persona():
@@ -50,26 +40,38 @@ def test_is_data_driven_persona():
 
 
 # ──────────────────────────────────────────────
-# 2. route_by_persona — START 분기 결정
+# 2. route_by_horizon — START 분기 결정
 # ──────────────────────────────────────────────
+
+
+@pytest.mark.parametrize(
+    "horizon,expected",
+    [
+        ("short", "strategist_flow"),
+        ("short_mid", "strategist_flow"),
+        ("mid", "strategist_flow"),
+        ("long", "strategist_flow"),
+    ],
+)
+def test_route_by_horizon_to_strategist(horizon, expected):
+    state: AnalysisState = {"horizon": horizon, "ticker": "AAPL"}
+    assert route_by_horizon(state) == expected
 
 
 @pytest.mark.parametrize(
     "persona,expected",
     [
-        ("blackrock", "strategist_flow"),
-        ("ark", "strategist_flow"),
-        ("graham", "strategist_flow"),
         ("event", "event"),
         ("macro", "macro"),
         ("korean", "korean"),
-        ("unknown", "strategist_flow"),  # fallback
+        ("unknown", "strategist_flow"),  # 미상 persona(+horizon 없음) → 기본 통합 흐름
         ("", "strategist_flow"),
     ],
 )
-def test_route_by_persona(persona, expected):
+def test_route_by_horizon_data_nodes(persona, expected):
+    """horizon 미지정 시 데이터 노드 persona로 분기, 그 외는 strategist_flow."""
     state: AnalysisState = {"persona": persona, "ticker": "AAPL"}
-    assert route_by_persona(state) == expected
+    assert route_by_horizon(state) == expected
 
 
 # ──────────────────────────────────────────────
@@ -260,14 +262,7 @@ def test_korean_node_handles_exception_with_fallback():
 # ──────────────────────────────────────────────
 
 
-def test_unknown_persona_falls_back_to_strategist_flow_and_warns(caplog):
-    """알 수 없는 페르소나는 'blackrock'으로 fallback (경고 후 strategist 흐름)."""
-    # 실제 에이전트 호출 없이 route만 검증 — Strategist 흐름은 mock
-    fake_research = MagicMock()
-    fake_research.run = AsyncMock(side_effect=RuntimeError("skip"))
-    fake_analyst = MagicMock()
-    fake_analyst.run = AsyncMock(side_effect=RuntimeError("skip"))
-
-    # graph 구성을 직접 호출 — strategist_flow로 분기되는지만 확인
+def test_unknown_persona_falls_back_to_strategist_flow():
+    """알 수 없는 persona(+horizon 없음)는 기본 통합 흐름(strategist_flow)으로 분기."""
     state: AnalysisState = {"persona": "WRONG", "ticker": "AAPL"}
-    assert route_by_persona(state) == "strategist_flow"
+    assert route_by_horizon(state) == "strategist_flow"

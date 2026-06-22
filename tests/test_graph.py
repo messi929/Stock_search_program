@@ -47,7 +47,7 @@ async def test_full_pipeline() -> None:
     final = await run_analysis(
         ticker="207940",
         query="삼성바이오 어때?",
-        persona="blackrock",
+        horizon="mid",
         user_profile=user_profile,
     )
 
