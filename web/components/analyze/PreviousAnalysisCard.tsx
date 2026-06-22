@@ -8,7 +8,7 @@
  * 직전 strategist 분석이 없으면 아무것도 렌더하지 않음(첫 분석 화면을 깔끔히 유지).
  */
 import { usePreviousAnalysis } from "@/hooks/usePreviousAnalysis";
-import { PERSONA_BY_ID, type PersonaId } from "@/types/persona";
+import { HORIZON_BY_ID, type HorizonId } from "@/types/persona";
 
 function fmtPrice(v: number | null | undefined, isKR: boolean): string {
   if (v == null) return "-";
@@ -45,8 +45,9 @@ export function PreviousAnalysisCard({
   const ep = prev.entry_points;
   const xp = prev.exit_points;
   const then = prev.price ?? null;
-  const personaName =
-    PERSONA_BY_ID[prev.persona as PersonaId]?.name ?? prev.persona ?? "분석";
+  // prev.persona에는 시간축 관점 id(short/mid 등)가 담긴다. 페르소나 시대의 옛 분석은
+  // blackrock 등 → 매핑 미스 → 배지 미표시(폐지된 페르소나명 노출 방지).
+  const horizonName = HORIZON_BY_ID[prev.persona as HorizonId]?.name;
   const dateLabel = prev.at
     ? new Date(prev.at).toLocaleDateString("ko-KR", {
         year: "numeric",
@@ -67,9 +68,11 @@ export function PreviousAnalysisCard({
       <div className="flex items-center justify-between gap-2 flex-wrap">
         <div className="flex items-center gap-2">
           <span className="text-sm font-semibold">📌 이전 분석</span>
-          <span className="text-xs px-2 py-0.5 rounded-full bg-muted text-muted-foreground">
-            {personaName}
-          </span>
+          {horizonName && (
+            <span className="text-xs px-2 py-0.5 rounded-full bg-muted text-muted-foreground">
+              {horizonName} 관점
+            </span>
+          )}
         </div>
         {dateLabel && (
           <span className="text-xs text-muted-foreground">{dateLabel}</span>

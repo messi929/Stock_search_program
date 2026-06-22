@@ -8,7 +8,7 @@ import Link from "next/link";
 
 import { Card, CardContent } from "@/components/ui/card";
 import { useAnalysisStore } from "@/store/analysisStore";
-import { HORIZON_BY_ID, PERSONA_BY_ID } from "@/types/persona";
+import { HORIZON_BY_ID } from "@/types/persona";
 
 function timeAgo(at: number): string {
   const s = Math.floor((Date.now() - at) / 1000);
@@ -39,11 +39,10 @@ export function RecentAnalyses() {
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
         {recents.map((r) => {
-          // 시계 기반 분석이면 시계 메타로 라벨/아이콘 표시, 아니면 페르소나(레거시).
+          // 시계 기반 분석이면 시계 메타로 라벨/아이콘. 페르소나 시대 옛 항목은 중립 라벨.
           const horizon = r.horizon ? HORIZON_BY_ID[r.horizon] : undefined;
-          const persona = PERSONA_BY_ID[r.persona];
-          const label = horizon?.name ?? persona?.name ?? r.persona;
-          const icon = horizon?.icon ?? persona?.icon ?? "📊";
+          const label = horizon?.name ?? "분석";
+          const icon = horizon?.icon ?? "📊";
           const isRunning = runs[r.ticker]?.running;
           return (
             <Link
