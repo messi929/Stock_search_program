@@ -202,7 +202,10 @@ class MacroPmAgent(BaseAgent):
         result, _raw = await self.call_claude_json(
             user_message=user_message,
             schema=MacroPmResult,
-            max_tokens=3000,
+            # 4096 — MacroPmResult는 regime+4사이클+transition_signals 리스트로 큰데,
+            # 실측 지표 주입 후 신호 서술이 풍부해져 3000에선 마지막 필드(summary_neutral)가
+            # 잘려 빈 카드로 graceful 반환되던 문제(2026-06 history has_summary=False) 해소.
+            max_tokens=4096,
             uid=uid,
             completeness_check=check_macro_completeness,
             # 구조화 출력(강제 tool use) — 텍스트 파싱 flaky 제거(2026-06-07 근본 안정화).
