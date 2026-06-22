@@ -285,8 +285,8 @@ class Horizon(BaseModel):
     available_to_free: bool
 
 
-# ⚠️ available_to_free는 현재 전부 True(월 분석 쿼터로만 비용 가드). 관점별 Pro 게이팅은
-#   페르소나 폐지 후 신규 수익모델 결정에 따라 조정 (제품 결정 대기 — JEON).
+# Pro 게이팅(2026-06-23 JEON 결정): 단기만 Free, 단중기·중기·장기는 Pro 전용.
+#   Free는 "저점→고점 추세가 단기적으로 어디까지"를 맛보기, 더 긴 시계는 Pro에서.
 _HORIZONS: list[Horizon] = [
     Horizon(
         id="short", name="단기", icon="⚡",
@@ -296,17 +296,17 @@ _HORIZONS: list[Horizon] = [
     Horizon(
         id="short_mid", name="단중기", icon="📈",
         description="1~3개월 · 분기 실적 모멘텀 + 기술적 강세 (어닝 모멘텀)",
-        available_to_free=True,
+        available_to_free=False,
     ),
     Horizon(
         id="mid", name="중기", icon="🧭",
         description="3개월~1년 · 밸류·성장 균형, 섹터·정책 국면 (GARP)",
-        available_to_free=True,
+        available_to_free=False,
     ),
     Horizon(
         id="long", name="장기", icon="🏔",
         description="1년+ · 펀더멘털·해자·재무건전성·매크로 사이클 (가치·해자)",
-        available_to_free=True,
+        available_to_free=False,
     ),
 ]
 _HORIZON_IDS = {h.id for h in _HORIZONS}

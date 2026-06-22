@@ -35,8 +35,8 @@ const FEATURES = [
   },
   {
     icon: "🕰️",
-    title: "투자 시계 전환 (4종)",
-    desc: "단기 / 단중기 / 중기 / 장기 — 같은 종목을 보는 기간에 따라 4가지 시간축 관점으로",
+    title: "저점~고점 관찰 범위 (시간축 4종)",
+    desc: "이 종목이 어디까지? 단기/단중기/중기/장기 시계별로 저점 관찰 구간과 고점 참고선을 함께 제시 (예측 아닌 관찰).",
   },
   {
     icon: "🔔",
@@ -190,10 +190,11 @@ export default function Home() {
       {/* Horizons */}
       <section className="px-6 py-12 max-w-5xl mx-auto">
         <h2 className="text-2xl font-semibold text-center mb-2">
-          같은 종목, 4가지 시간축 관점
+          저점은 어디, 고점은 어디까지 — 4가지 시간축 관점
         </h2>
         <p className="text-sm text-muted-foreground text-center mb-8">
-          보는 기간(단기·단중기·중기·장기)에 따라 분석 초점이 달라집니다
+          보는 기간(단기·단중기·중기·장기)에 따라 추세의 관찰 범위(저점 구간 ~ 고점 참고선)가
+          달라집니다. 예측이 아닌, 어디까지 볼지에 대한 데이터 기반 관찰.
         </p>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           {HORIZONS.map((h) => (

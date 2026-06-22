@@ -68,6 +68,43 @@ export function StrategistCard({
         ) : null
       ) : (
         <div className="space-y-4">
+          {/* 추세 관찰 범위 — "이 종목, 어디까지?"에 대한 한눈 답(저점~고점) */}
+          {data.entry_points && data.exit_points && (
+            <section className="rounded-lg border border-primary/30 bg-primary/[0.05] p-3">
+              <div className="text-xs font-semibold mb-2">
+                📐 {HORIZON_NAME[data.persona_used] ?? "이"} 관점 — 어디까지? (저점 ~ 고점 관찰 범위)
+              </div>
+              <div className="flex items-center justify-between gap-2">
+                <div className="text-center flex-1">
+                  <div className="text-[10px] text-blue-600">저점 관찰 구간</div>
+                  <div className="font-mono font-semibold text-sm text-blue-600">
+                    {data.entry_points.tier_1.toLocaleString()}{cur}
+                  </div>
+                  <div className="text-[10px] text-blue-600/80">
+                    {pctFromCurrent(data.entry_points.tier_1, currentPrice)}
+                  </div>
+                </div>
+                <div className="text-muted-foreground text-xs shrink-0">
+                  현재 {currentPrice != null ? currentPrice.toLocaleString() : "-"}{cur}
+                  <div className="text-center">↔</div>
+                </div>
+                <div className="text-center flex-1">
+                  <div className="text-[10px] text-red-600">고점 참고 범위</div>
+                  <div className="font-mono font-semibold text-sm text-red-600">
+                    {data.exit_points.take_profit_final.toLocaleString()}{cur}
+                  </div>
+                  <div className="text-[10px] text-red-600/80">
+                    {pctFromCurrent(data.exit_points.take_profit_final, currentPrice)}
+                  </div>
+                </div>
+              </div>
+              <p className="text-[10px] text-muted-foreground mt-2 leading-relaxed">
+                저점은 분할 관찰 구간, 고점은 회복·차익 참고선입니다. 미래 가격 예측이
+                아니라, 이 시계에서 추세가 움직일 수 있는 <strong>관찰 범위</strong>입니다.
+              </p>
+            </section>
+          )}
+
           {/* Perspective */}
           <section>
             <h4 className="text-xs font-medium text-muted-foreground mb-1">

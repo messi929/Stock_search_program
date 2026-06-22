@@ -165,6 +165,14 @@ def load_stocks(source: Optional[str] = None) -> pd.DataFrame:
         return pd.DataFrame()
 
     df = pd.DataFrame(rows)
+    # 수집기 인코딩 손상으로 일부 문자열 필드(관측: sector)에 U+FFFD(복원 불가 mojibake)가
+    # 섞여 Firestore에 적재된 경우가 있다. 서빙 단에서 손상 문자열은 빈 값으로 정화해
+    # 사용자에게 한글 깨짐이 노출되지 않게 한다. (근본 복원은 collector 재수집 소관.)
+    for c in df.columns:
+        if df[c].dtype == object:
+            df[c] = df[c].map(
+                lambda v: "" if isinstance(v, str) and "�" in v else v
+            )
     logger.info(f"Firestore stocks 로드: {len(df)}건 (source={source or 'all'})")
     return df
 

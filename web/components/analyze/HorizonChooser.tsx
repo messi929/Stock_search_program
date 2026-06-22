@@ -12,13 +12,12 @@
  * 잠금: Free 플랜에서 Pro 전용 시계는 🔒 Pro 배지 + /pricing 안내.
  */
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
 import { usePersonas } from "@/hooks/usePersonas";
 import {
   ALL_HORIZONS,
-  DEFAULT_HORIZON,
   HORIZON_BY_ID,
   HORIZON_META,
   type HorizonId,
@@ -41,9 +40,19 @@ export function HorizonChooser({
   );
   const isProLocked = (id: HorizonId): boolean => {
     if (!isFree) return false;
-    const free = freeMap.get(id) ?? id === DEFAULT_HORIZON;
+    const free = freeMap.get(id) ?? id === "short";
     return !free;
   };
+
+  // Free 사용자가 잠긴 기본 시계(예: 중기)에 막히지 않도록, 플랜 정보 로드 후
+  // 선택이 Pro 잠금이면 무료로 열린 첫 시계(단기)로 자동 보정.
+  useEffect(() => {
+    if (isProLocked(selected)) {
+      const firstFree = ALL_HORIZONS.find((id) => !isProLocked(id));
+      if (firstFree) setSelected(firstFree);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [personasData]);
 
   const selectedProLocked = isProLocked(selected);
 
@@ -160,6 +169,9 @@ export function HorizonSwitch({
     onSelect(id);
   };
 
+  // 무료 기본 가용 시계는 단기.
+  const freeFallback = "short";
+
   return (
     <div
       className="flex gap-1 border rounded-md p-1 bg-muted/30 overflow-x-auto scrollbar-thin snap-x snap-mandatory"
@@ -168,7 +180,7 @@ export function HorizonSwitch({
     >
       {ALL_HORIZONS.map((id) => {
         const meta = HORIZON_BY_ID[id];
-        const availableForFree = availability.get(id) ?? id === DEFAULT_HORIZON;
+        const availableForFree = availability.get(id) ?? id === freeFallback;
         const locked = isFree && !availableForFree;
         const isActive = current === id;
         return (
