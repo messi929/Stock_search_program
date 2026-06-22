@@ -242,11 +242,24 @@ class KisClient:
             self.stats.failed_calls += 1
             # EGW00133 (1분 내 재발급)는 body에 명시됨
             body_text = mask_kis_secrets_in_str(e.response.text)[:240]
+            # 발급 1분 락(EGW00133) 등 실패 시 기존 토큰이 있으면 재사용. KIS 토큰은
+            # ~24h 유효한데 우리 갱신 마진이 보수적이라 '마진만 지난' 토큰은 대개 살아있음.
+            # 정말 만료됐다면 downstream 호출이 401→라우트 degrade로 처리됨.
+            if self._access_token:
+                logger.warning(
+                    f"KIS token 발급 실패(HTTP {e.response.status_code}) → 기존 토큰 재사용: {body_text}"
+                )
+                return self._access_token
             raise RuntimeError(
                 f"KIS token 발급 실패 (HTTP {e.response.status_code}): {body_text}"
             ) from None
         except Exception as e:
             self.stats.failed_calls += 1
+            if self._access_token:
+                logger.warning(
+                    f"KIS token 발급 실패({type(e).__name__}) → 기존 토큰 재사용"
+                )
+                return self._access_token
             raise RuntimeError(
                 f"KIS token 발급 실패: {type(e).__name__}: "
                 f"{mask_kis_secrets_in_str(str(e))[:240]}"

@@ -69,12 +69,34 @@ def _cached_or_fetch(key: str, ttl: float, fetcher) -> Any:
 
 
 async def _async_cached(key: str, ttl: float, fetcher) -> Any:
-    """비동기 wrap. fetcher는 sync."""
+    """비동기 wrap. fetcher는 sync.
+
+    KIS 장애(특히 토큰 발급 1분 락 EGW00133)가 분석 페이지 전체를 unhandled 500으로
+    죽이던 문제를 차단: fetch 실패 시 ① 만료된 캐시라도 있으면 그것을 반환(stale-on-error)
+    ② 없으면 503(일시 불가)로 degrade — 시세 위젯만 비고 분석 본문은 진행되도록.
+    """
     now = time.time()
     entry = _cache.get(key)
     if entry and now - entry[0] < ttl:
         return entry[1]
-    value = await run_in_threadpool(fetcher)
+    try:
+        value = await run_in_threadpool(fetcher)
+    except HTTPException:
+        raise
+    except Exception as e:
+        if entry is not None:
+            logger.warning(
+                f"[kis] {key} fetch 실패 → stale 캐시 반환: {type(e).__name__}: {str(e)[:140]}"
+            )
+            return entry[1]
+        logger.warning(
+            f"[kis] {key} fetch 실패(캐시 없음) → 503 degrade: "
+            f"{type(e).__name__}: {str(e)[:140]}"
+        )
+        raise HTTPException(
+            status_code=503,
+            detail={"code": "KIS_UNAVAILABLE", "message": "시세를 일시적으로 가져올 수 없습니다 (잠시 후 재시도)"},
+        )
     _cache[key] = (now, value)
     return value
 
