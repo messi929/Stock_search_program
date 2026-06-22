@@ -1,17 +1,18 @@
 "use client";
 
 /**
- * 분석 페이지 클라이언트 컨테이너 — 6 페르소나 SSE 스트리밍 오케스트레이션.
+ * 분석 페이지 클라이언트 컨테이너 — 투자 시계 기반 SSE 스트리밍 오케스트레이션.
  *
- * UX 흐름 (2단 구조):
- *  1. 종목 진입 → PersonaChooser로 "분석 방식 + 관점"을 의도적으로 선택 (자동 실행 X)
- *  2. "분석 시작" → 선택한 페르소나로 1회 실행 (불필요한 과금 방지)
- *  3. 결과 후 PersonaSwitch로 다른 관점 재실행 가능
+ * UX 흐름:
+ *  1. 종목 진입 → HorizonChooser로 투자 시계(단기/단중기/중기/장기)를 선택 (자동 실행 X)
+ *  2. "분석 시작" → 선택한 시계로 1회 실행 (불필요한 과금 방지)
+ *  3. 결과 후 HorizonSwitch로 다른 시계 재실행 가능
  *
- * 페르소나 그룹별 흐름:
- *  - Strategist (blackrock/ark/graham):
- *      start → research/analyst → validator → strategist → complete
- *  - 데이터 페르소나 (event/macro/korean): start → {persona}_complete → complete
+ * 시계 기반 분석은 항상 strategist 흐름(4노드):
+ *   start → research/analyst → validator → strategist → complete
+ *
+ * 레거시 페르소나 경로(blackrock/ark/graham/event/macro/korean)는 PersonaSwitch
+ * 재실행에서만 유지(하위호환). 데이터 페르소나는 start → {persona}_complete → complete.
  */
 import Link from "next/link";
 import { toast } from "sonner";
@@ -26,7 +27,7 @@ import { KisOrderbook } from "@/components/analyze/KisOrderbook";
 import { UsCandleChart } from "@/components/analyze/UsCandleChart";
 import { KoreanSpecialistCard } from "@/components/analyze/KoreanSpecialistCard";
 import { MacroPmCard } from "@/components/analyze/MacroPmCard";
-import { PersonaChooser } from "@/components/analyze/PersonaChooser";
+import { HorizonChooser, HorizonSwitch } from "@/components/analyze/HorizonChooser";
 import { PreviousAnalysisCard } from "@/components/analyze/PreviousAnalysisCard";
 import { ResearchCard } from "@/components/analyze/ResearchCard";
 import { SaveEntryPointsButton } from "@/components/analyze/SaveEntryPointsButton";
@@ -47,8 +48,18 @@ import {
   type StrategistFlow,
   type StrategistStatus,
 } from "@/store/analysisStore";
+import { useHorizonStore } from "@/store/horizonStore";
 import { usePersonaStore } from "@/store/personaStore";
-import { PERSONA_BY_ID, type PersonaId } from "@/types/persona";
+import {
+  HORIZON_BY_ID,
+  PERSONA_BY_ID,
+  type HorizonId,
+  type PersonaId,
+} from "@/types/persona";
+
+// 시계 기반 분석은 페르소나와 무관하게 strategist 흐름으로 실행된다.
+// run.persona는 형식상 필요하므로 중립적인 strategist 페르소나를 캐리어로 둔다.
+const HORIZON_CARRIER_PERSONA: PersonaId = "blackrock";
 
 const EMPTY_FLOW: StrategistFlow = {
   research: null,
@@ -70,7 +81,8 @@ const PENDING_DATA: DataDrivenStatus = {
 };
 
 export function AnalyzeView({ ticker }: { ticker: string }) {
-  const storePersona = usePersonaStore((s) => s.current);
+  const storeHorizon = useHorizonStore((s) => s.current);
+  const setStoreHorizon = useHorizonStore((s) => s.setHorizon);
   const setStorePersona = usePersonaStore((s) => s.setPersona);
   const { profile } = useUserProfile();
 
@@ -113,10 +125,9 @@ export function AnalyzeView({ ticker }: { ticker: string }) {
   // 한도/잠금 에러 시 업그레이드 CTA 링크 (백엔드 upgrade_url; Pro 공정사용 한도는 null)
   const runUpgradeUrl = run?.upgradeUrl ?? null;
 
-  // 분석 시작(chooser → 의도적 1회) — store가 SSE를 백그라운드로 실행. 확인 없음.
-  const startAnalysis = (id: PersonaId) => {
-    setStorePersona(id);
-    const userProfile = profile
+  // 사용자 프로필 페이로드 — 분석 요청 본문에 동봉(시계/페르소나 공통).
+  const userProfilePayload = () =>
+    profile
       ? {
           investing_experience: profile.investing_experience,
           holding_period: profile.holding_period,
@@ -125,7 +136,23 @@ export function AnalyzeView({ ticker }: { ticker: string }) {
           investment_principles: profile.investment_principles,
         }
       : null;
-    startRun(ticker, id, userProfile, earlyName ?? "");
+
+  // 시계 기반 분석 시작(chooser → 의도적 1회) — store가 SSE를 백그라운드로 실행.
+  const startHorizon = (horizon: HorizonId) => {
+    setStoreHorizon(horizon);
+    startRun(
+      ticker,
+      HORIZON_CARRIER_PERSONA,
+      userProfilePayload(),
+      earlyName ?? "",
+      horizon,
+    );
+  };
+
+  // 레거시 페르소나 경로(하위호환) — PersonaSwitch 재실행에서만 사용.
+  const startAnalysis = (id: PersonaId) => {
+    setStorePersona(id);
+    startRun(ticker, id, userProfilePayload(), earlyName ?? "");
   };
 
   // 분석 결과 공유 — 현재 URL 클립보드 복사 + 토스트.
@@ -136,6 +163,17 @@ export function AnalyzeView({ ticker }: { ticker: string }) {
     } catch {
       toast.error("링크 복사 실패");
     }
+  };
+
+  // HorizonSwitch 클릭(결과 후 다른 시계로 재실행) — 비용 발생 인지 강제.
+  // 같은 시계는 no-op. 사용자 지갑 보호용 confirm.
+  const switchHorizon = (horizon: HorizonId) => {
+    if (horizon === run?.horizon) return;
+    const meta = HORIZON_BY_ID[horizon];
+    const ok = window.confirm(
+      `'${meta.name}' 시계로 다시 분석합니다.\n새 분석 1회 비용이 발생합니다. 진행하시겠어요?`,
+    );
+    if (ok) startHorizon(horizon);
   };
 
   // PersonaSwitch 클릭(이미 결과가 있는 상태에서 관점 전환) — 비용 발생 인지 강제.
@@ -231,13 +269,16 @@ export function AnalyzeView({ ticker }: { ticker: string }) {
               </p>
             ) : null}
           </div>
-          {/* 결과 단계에서만 관점 전환 노출(재실행). 선택 단계에선 chooser가 담당. */}
-          {runPersona && (
+          {/* 결과 단계에서만 관점 전환 노출(재실행). 선택 단계에선 chooser가 담당.
+              시계 기반 분석은 HorizonSwitch, 레거시 페르소나 분석은 PersonaSwitch. */}
+          {run?.horizon ? (
+            <HorizonSwitch current={run.horizon} onSelect={switchHorizon} />
+          ) : runPersona ? (
             <div className="flex items-center gap-2">
               <PersonaSwitch current={runPersona} onSelect={switchPersona} />
               <PersonaGuideModal />
             </div>
-          )}
+          ) : null}
         </div>
 
         {/* Action buttons — 결과 단계 + Strategist 흐름에서만 */}
@@ -305,14 +346,13 @@ export function AnalyzeView({ ticker }: { ticker: string }) {
         isKR={isKR}
       />
 
-      {/* 선택 단계 — 분석 방식/관점 선택 (자동 실행 없음) */}
+      {/* 선택 단계 — 투자 시계 선택 (자동 실행 없음) */}
       {!runPersona ? (
         <Card>
           <CardContent className="p-5">
-            <PersonaChooser
-              ticker={ticker}
-              defaultPersona={storePersona}
-              onStart={startAnalysis}
+            <HorizonChooser
+              defaultHorizon={storeHorizon}
+              onStart={startHorizon}
             />
           </CardContent>
         </Card>

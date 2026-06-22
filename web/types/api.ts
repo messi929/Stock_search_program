@@ -133,7 +133,7 @@ export type AlertCondition = {
   action: string;
 };
 
-import type { PersonaId } from "./persona";
+import type { HorizonId, PersonaId } from "./persona";
 
 export type StrategistResult = {
   persona_used: PersonaId | string;
@@ -365,10 +365,23 @@ export type Persona = {
   available_to_free: boolean;
 };
 
+/** 시간 시계(Horizon) — 신규 1차 축. 페르소나와 같은 구조. */
+export type Horizon = {
+  id: HorizonId;
+  name: string;
+  description: string;
+  icon: string;
+  available_to_free: boolean;
+};
+
 export type PersonasResponse = {
   personas: Persona[];
   user_plan: "free" | "pro" | "premium";
   user_default_persona: string;
+  /** 4개 시간 시계 (단기/단중기/중기/장기). */
+  horizons: Horizon[];
+  /** 기본 시계 — 보통 "mid". */
+  user_default_horizon: string;
 };
 
 // ─── /api/ai/discover 응답 ─────────────────

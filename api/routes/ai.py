@@ -202,7 +202,12 @@ class AnalyzeRequest(BaseModel):
     query: str = Field("", description="자연어 쿼리 (옵션)")
     persona: str = Field(
         "blackrock",
-        description="blackrock | ark | graham (strategist 흐름) | event | macro | korean (데이터 페르소나)",
+        description="(레거시) blackrock | ark | graham | event | macro | korean",
+    )
+    horizon: str = Field(
+        "",
+        description="시간축 관점(신규 1차 축): short | short_mid | mid | long. "
+        "지정 시 persona 대신 통합 파이프라인 + 관점 emphasis 사용.",
     )
     stream: bool = Field(True, description="SSE 스트리밍 여부")
     user_profile: Optional[dict] = Field(None, description="UserProfile dict (옵션)")
@@ -290,6 +295,45 @@ _STRATEGIST_PERSONAS = {"blackrock", "ark", "graham"}
 _DATA_DRIVEN_PERSONAS = {"event", "macro", "korean"}
 
 
+# ──────────────────────────────────────────────
+# 시간축 관점(Horizon) — 신규 1차 축 (페르소나 대체 예정, docs/axis/HORIZONS.md)
+# ──────────────────────────────────────────────
+
+class Horizon(BaseModel):
+    id: str
+    name: str
+    description: str
+    icon: str
+    available_to_free: bool
+
+
+# ⚠️ available_to_free는 현재 전부 True(월 분석 쿼터로만 비용 가드). 관점별 Pro 게이팅은
+#   페르소나 폐지 후 신규 수익모델 결정에 따라 조정 (제품 결정 대기 — JEON).
+_HORIZONS: list[Horizon] = [
+    Horizon(
+        id="short", name="단기", icon="⚡",
+        description="수일~1개월 · 가격 추세·거래량·수급·임박 이벤트 (모멘텀·추세)",
+        available_to_free=True,
+    ),
+    Horizon(
+        id="short_mid", name="단중기", icon="📈",
+        description="1~3개월 · 분기 실적 모멘텀 + 기술적 강세 (어닝 모멘텀)",
+        available_to_free=True,
+    ),
+    Horizon(
+        id="mid", name="중기", icon="🧭",
+        description="3개월~1년 · 밸류·성장 균형, 섹터·정책 국면 (GARP)",
+        available_to_free=True,
+    ),
+    Horizon(
+        id="long", name="장기", icon="🏔",
+        description="1년+ · 펀더멘털·해자·재무건전성·매크로 사이클 (가치·해자)",
+        available_to_free=True,
+    ),
+]
+_HORIZON_IDS = {h.id for h in _HORIZONS}
+
+
 @router.get("/personas")
 async def list_personas(request: Request) -> dict:
     """페르소나 목록 + 사용자 플랜에 따른 접근 권한."""
@@ -298,8 +342,10 @@ async def list_personas(request: Request) -> dict:
     user_default = "blackrock"
     return {
         "personas": [p.model_dump() for p in _PERSONAS],
+        "horizons": [h.model_dump() for h in _HORIZONS],
         "user_plan": user_plan,
         "user_default_persona": user_default,
+        "user_default_horizon": "mid",
     }
 
 
@@ -394,18 +440,35 @@ async def analyze(req: AnalyzeRequest, request: Request):
     tier = user.get("tier", "free")
     uid = user.get("uid", "")
 
-    persona_obj = next((p for p in _PERSONAS if p.id == req.persona), None)
-    if persona_obj is None:
-        raise HTTPException(400, f"Unknown persona: {req.persona}")
-    if not persona_obj.available_to_free and tier == "free":
-        raise HTTPException(
-            402,
-            {
-                "code": "PERSONA_LOCKED",
-                "message": f"'{persona_obj.name}'는 Pro 페르소나입니다.",
-                "upgrade_url": "/pricing",
-            },
-        )
+    horizon = (req.horizon or "").strip()
+    if horizon:
+        # 신규 1차 축 — 관점(horizon) 경로. persona 권한 검사 대체.
+        if horizon not in _HORIZON_IDS:
+            raise HTTPException(400, f"Unknown horizon: {horizon}")
+        hz_obj = next(h for h in _HORIZONS if h.id == horizon)
+        if not hz_obj.available_to_free and tier == "free":
+            raise HTTPException(
+                402,
+                {
+                    "code": "HORIZON_LOCKED",
+                    "message": f"'{hz_obj.name}' 관점은 Pro 기능입니다.",
+                    "upgrade_url": "/pricing",
+                },
+            )
+    else:
+        # 레거시 페르소나 경로
+        persona_obj = next((p for p in _PERSONAS if p.id == req.persona), None)
+        if persona_obj is None:
+            raise HTTPException(400, f"Unknown persona: {req.persona}")
+        if not persona_obj.available_to_free and tier == "free":
+            raise HTTPException(
+                402,
+                {
+                    "code": "PERSONA_LOCKED",
+                    "message": f"'{persona_obj.name}'는 Pro 페르소나입니다.",
+                    "upgrade_url": "/pricing",
+                },
+            )
 
     # 월 분석 한도 (적자 방지 — docs/axis/UNIT_ECONOMICS.md)
     _enforce_quota(uid, tier, "analyses")
@@ -415,7 +478,10 @@ async def analyze(req: AnalyzeRequest, request: Request):
         raise HTTPException(400, {"code": "INVALID_TICKER", "message": "유효한 종목 코드 필요"})
 
     # 분석 이력 기록 (사용량 항목별 종목·일자 표시용). 완료 후 결과 요약을 같은 doc에 추가.
-    hist_id = _record_history(uid, "analysis", ticker=req.ticker, persona=req.persona)
+    # persona 필드엔 관점 지정 시 horizon을 저장(이력 화면에서 어떤 관점인지 표시).
+    hist_id = _record_history(
+        uid, "analysis", ticker=req.ticker, persona=horizon or req.persona
+    )
 
     # UserProfile 변환
     from agents.strategist import UserProfile
@@ -431,6 +497,7 @@ async def analyze(req: AnalyzeRequest, request: Request):
                 ticker=req.ticker,
                 query=req.query,
                 persona=req.persona,
+                horizon=horizon,
                 user_profile=user_profile,
                 user_uid=uid,
                 event_type=req.event_type,
@@ -453,6 +520,7 @@ async def analyze(req: AnalyzeRequest, request: Request):
         ticker=req.ticker,
         query=req.query,
         persona=req.persona,
+        horizon=horizon,
         user_profile=user_profile,
         user_uid=uid,
         event_type=req.event_type,
@@ -611,6 +679,7 @@ async def _stream_analysis(
     ticker: str,
     query: str,
     persona: str,
+    horizon: str = "",
     user_profile,
     user_uid: str,
     event_type: Optional[str] = None,
@@ -636,6 +705,7 @@ async def _stream_analysis(
         "ticker": ticker,
         "query": query,
         "persona": persona,
+        "horizon": horizon,
         "user_uid": user_uid,
         "user_profile": user_profile,
         "retry_count": 0,
@@ -644,7 +714,8 @@ async def _stream_analysis(
         "primary_ticker": primary_ticker,
     }
 
-    is_data_driven = persona in _DATA_DRIVEN_PERSONAS
+    # 관점(horizon) 지정 시 통합 파이프라인(strategist_flow) → 항상 strategist 흐름.
+    is_data_driven = (not horizon) and (persona in _DATA_DRIVEN_PERSONAS)
     is_strategist = not is_data_driven
     estimated_sec = 20 if is_data_driven else 12
 
@@ -663,6 +734,7 @@ async def _stream_analysis(
         {
             "ticker": ticker,
             "persona": persona,
+            "horizon": horizon,
             "persona_group": "data_driven" if is_data_driven else "strategist",
             "estimated_seconds": estimated_sec,
             "started_at": datetime.now(timezone.utc).isoformat(),

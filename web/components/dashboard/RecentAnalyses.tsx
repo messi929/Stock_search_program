@@ -8,7 +8,7 @@ import Link from "next/link";
 
 import { Card, CardContent } from "@/components/ui/card";
 import { useAnalysisStore } from "@/store/analysisStore";
-import { PERSONA_BY_ID } from "@/types/persona";
+import { HORIZON_BY_ID, PERSONA_BY_ID } from "@/types/persona";
 
 function timeAgo(at: number): string {
   const s = Math.floor((Date.now() - at) / 1000);
@@ -39,7 +39,11 @@ export function RecentAnalyses() {
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
         {recents.map((r) => {
+          // 시계 기반 분석이면 시계 메타로 라벨/아이콘 표시, 아니면 페르소나(레거시).
+          const horizon = r.horizon ? HORIZON_BY_ID[r.horizon] : undefined;
           const persona = PERSONA_BY_ID[r.persona];
+          const label = horizon?.name ?? persona?.name ?? r.persona;
+          const icon = horizon?.icon ?? persona?.icon ?? "📊";
           const isRunning = runs[r.ticker]?.running;
           return (
             <Link
@@ -49,7 +53,7 @@ export function RecentAnalyses() {
             >
               <Card className="hover:bg-muted transition">
                 <CardContent className="p-3 flex items-center gap-3">
-                  <span className="text-lg shrink-0">{persona?.icon ?? "📊"}</span>
+                  <span className="text-lg shrink-0">{icon}</span>
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-1.5 min-w-0">
                       {r.name ? (
@@ -65,7 +69,7 @@ export function RecentAnalyses() {
                       )}
                     </div>
                     <p className="text-xs text-muted-foreground truncate">
-                      {persona?.name ?? r.persona} · {timeAgo(r.at)}
+                      {label} · {timeAgo(r.at)}
                     </p>
                   </div>
                   <span className="text-muted-foreground text-sm shrink-0">→</span>

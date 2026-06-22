@@ -26,7 +26,11 @@ import type {
   StrategistResult,
   ValidatorResult,
 } from "@/types/api";
-import { isStrategistPersona, type PersonaId } from "@/types/persona";
+import {
+  isStrategistPersona,
+  type HorizonId,
+  type PersonaId,
+} from "@/types/persona";
 
 export type AgentStatus = "pending" | "running" | "done" | "error";
 
@@ -79,6 +83,8 @@ export interface InstantSnapshot {
 export interface AnalysisRun {
   ticker: string;
   persona: PersonaId;
+  /** 선택된 투자 시계. 지정 시 페르소나와 무관하게 strategist 흐름으로 실행. */
+  horizon?: HorizonId;
   isStrategist: boolean;
   running: boolean;
   strategistFlow: StrategistFlow;
@@ -113,6 +119,8 @@ export interface RecentAnalysis {
   ticker: string;
   name?: string; // 종목명 (분석 시작 시점에 알면 저장)
   persona: PersonaId;
+  /** 시계 기반 분석이면 저장(있으면 카드 라벨을 시계명으로 표시). */
+  horizon?: HorizonId;
   at: number; // epoch ms
 }
 
@@ -120,8 +128,18 @@ interface AnalysisStore {
   runs: Record<string, AnalysisRun>;
   /** 최근 분석한 종목(최신순, 최대 8). 새로고침 후에도 유지(persist). */
   recents: RecentAnalysis[];
-  /** 분석 시작(또는 페르소나 전환 재실행). 컴포넌트 언마운트와 무관하게 진행. */
-  start: (ticker: string, persona: PersonaId, userProfile: unknown, name?: string) => void;
+  /**
+   * 분석 시작(또는 관점/시계 전환 재실행). 컴포넌트 언마운트와 무관하게 진행.
+   * horizon 지정 시: 페르소나와 무관하게 strategist 흐름으로 실행하고, 요청 본문에
+   * horizon을 포함한다. horizon이 없으면 기존 페르소나 경로 그대로 동작.
+   */
+  start: (
+    ticker: string,
+    persona: PersonaId,
+    userProfile: unknown,
+    name?: string,
+    horizon?: HorizonId,
+  ) => void;
   /** ValidateButton 단독 재검증 결과를 run에 반영. */
   setValidator: (ticker: string, validator: ValidatorResult) => void;
 }
@@ -135,18 +153,20 @@ export const useAnalysisStore = create<AnalysisStore>()(
   runs: {},
   recents: [],
 
-  start: (ticker, persona, userProfile, name = "") => {
+  start: (ticker, persona, userProfile, name = "", horizon) => {
     const key = ticker.toUpperCase();
-    // 같은 종목의 진행 중 스트림이 있으면 중단(페르소나 전환 등).
+    // 같은 종목의 진행 중 스트림이 있으면 중단(페르소나/시계 전환 등).
     controllers.get(key)?.abort();
     const ac = new AbortController();
     controllers.set(key, ac);
 
-    const runStrategist = isStrategistPersona(persona);
+    // 시계가 지정되면 항상 strategist 흐름(4노드). 없으면 페르소나로 판별.
+    const runStrategist = horizon ? true : isStrategistPersona(persona);
 
     const initialRun: AnalysisRun = {
       ticker: key,
       persona,
+      horizon,
       isStrategist: runStrategist,
       running: true,
       strategistFlow: { ...EMPTY_STRATEGIST_FLOW },
@@ -170,7 +190,7 @@ export const useAnalysisStore = create<AnalysisStore>()(
       runs: { ...s.runs, [key]: initialRun },
       // 최근 분석 이력 갱신(같은 종목은 최신으로 끌어올림, 최대 8).
       recents: [
-        { ticker: key, name: name || undefined, persona, at: Date.now() },
+        { ticker: key, name: name || undefined, persona, horizon, at: Date.now() },
         ...s.recents.filter((r) => r.ticker !== key),
       ].slice(0, 8),
     }));
@@ -184,7 +204,15 @@ export const useAnalysisStore = create<AnalysisStore>()(
 
     apiStream(
       "/api/ai/analyze",
-      { ticker, query: `${ticker} 분석`, persona, stream: true, user_profile: userProfile },
+      {
+        ticker,
+        query: `${ticker} 분석`,
+        persona,
+        // 시계 기반 분석이면 horizon을 포함(백엔드는 horizon 우선, persona 무시).
+        ...(horizon ? { horizon } : {}),
+        stream: true,
+        user_profile: userProfile,
+      },
       (event, data) => {
         const payload = data as {
           result?: unknown;

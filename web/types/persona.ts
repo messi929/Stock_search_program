@@ -106,3 +106,66 @@ export function isDataDrivenPersona(id: string): id is PersonaId {
 export function isValidPersonaId(id: string): id is PersonaId {
   return (ALL_PERSONAS as string[]).includes(id);
 }
+
+/* ────────────────────────────────────────────────────────────────────────
+ * 시간 시계(Horizon) — 신규 1차 축.
+ *
+ * 6 페르소나를 대체하는 4개 "투자 시계"다. 시계가 지정되면 백엔드는 페르소나와
+ * 무관하게 통합 strategist 파이프라인(research→analyst→validator→strategist)을
+ * 항상 실행한다. 페르소나 타입은 하위호환을 위해 그대로 둔다(별도 정리 단계).
+ * ──────────────────────────────────────────────────────────────────────── */
+
+export type HorizonId = "short" | "short_mid" | "mid" | "long";
+
+export type HorizonMeta = {
+  id: HorizonId;
+  icon: string;
+  name: string;
+  tagline: string;
+  /** Tailwind color tag (text-{color}-600 / bg-{color}-50 등) */
+  accent: "slate" | "violet" | "emerald" | "amber" | "sky" | "rose";
+};
+
+export const HORIZON_META: readonly HorizonMeta[] = [
+  {
+    id: "short",
+    icon: "⚡",
+    name: "단기",
+    tagline: "수일~1개월 · 추세·거래량·수급 (모멘텀)",
+    accent: "amber",
+  },
+  {
+    id: "short_mid",
+    icon: "📈",
+    name: "단중기",
+    tagline: "1~3개월 · 분기 실적 모멘텀 + 기술 강세 (어닝)",
+    accent: "sky",
+  },
+  {
+    id: "mid",
+    icon: "⚖️",
+    name: "중기",
+    tagline: "3개월~1년 · 밸류·성장 균형 (GARP)",
+    accent: "violet",
+  },
+  {
+    id: "long",
+    icon: "🏔",
+    name: "장기",
+    tagline: "1년+ · 펀더멘털·해자·매크로 사이클 (가치·해자)",
+    accent: "emerald",
+  },
+] as const;
+
+export const HORIZON_BY_ID: Record<HorizonId, HorizonMeta> = Object.fromEntries(
+  HORIZON_META.map((h) => [h.id, h]),
+) as Record<HorizonId, HorizonMeta>;
+
+export const ALL_HORIZONS: HorizonId[] = HORIZON_META.map((h) => h.id);
+
+/** 기본 시계 — 백엔드 user_default_horizon과 동일. */
+export const DEFAULT_HORIZON: HorizonId = "mid";
+
+export function isValidHorizonId(id: string): id is HorizonId {
+  return (ALL_HORIZONS as string[]).includes(id);
+}

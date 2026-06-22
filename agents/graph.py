@@ -82,6 +82,9 @@ class AnalysisState(TypedDict, total=False):
     ticker: str
     query: str
     persona: str
+    # 시간축 관점 — 신규 1차 축("short"|"short_mid"|"mid"|"long"). 지정 시 통합
+    # 파이프라인(strategist_flow)을 타고 strategist가 horizon emphasis를 적용한다.
+    horizon: str
     user_uid: str
     user_profile: UserProfile
     # Event Analyst 전용 (옵션)
@@ -180,6 +183,7 @@ async def validator_node(state: AnalysisState) -> dict:
 async def strategist_node(state: AnalysisState) -> dict:
     agent = StrategistAgent()
     persona = state.get("persona", "blackrock")
+    horizon = state.get("horizon", "") or ""
     try:
         result = await agent.run(
             StrategistInput(
@@ -188,6 +192,7 @@ async def strategist_node(state: AnalysisState) -> dict:
                 validator_output=state["validator_output"],
                 user_profile=state.get("user_profile") or UserProfile(),
                 persona=persona,
+                horizon=horizon,
                 query=state.get("query", ""),
             ),
             uid=state.get("user_uid", ""),
@@ -203,7 +208,7 @@ async def strategist_node(state: AnalysisState) -> dict:
         )
         from agents.strategist import StrategistResult
         result = StrategistResult(
-            persona_used=persona,
+            persona_used=horizon or persona,
             persona_perspective="",
             summary=f"종합 분석 중 오류가 발생했습니다. 사유: {_friendly_error_msg(e)}",
             entry_points=None,
@@ -441,14 +446,18 @@ def route_after_validator(state: AnalysisState) -> str:
 
 
 def route_by_persona(state: AnalysisState) -> str:
-    """START 직후 페르소나 그룹별 분기.
+    """START 직후 분기.
 
-    - blackrock/ark/graham → 'strategist_flow' (기존 4노드)
+    - horizon 지정(short|short_mid|mid|long) → 'strategist_flow' (통합 파이프라인, 우선)
+    - blackrock/ark/graham → 'strategist_flow' (레거시 4노드)
     - event   → 'event'
     - macro   → 'macro'
     - korean  → 'korean'
     - 미상/기본 → 'strategist_flow' (블랙록 기본)
     """
+    # 신규 1차 축 — horizon이 지정되면 데이터 페르소나 분기보다 우선해 통합 흐름으로.
+    if state.get("horizon"):
+        return "strategist_flow"
     persona = state.get("persona", "blackrock")
     if persona == "event":
         return "event"
@@ -528,6 +537,7 @@ async def run_analysis(
     user_profile: Optional[UserProfile] = None,
     user_uid: str = "",
     *,
+    horizon: str = "",
     event_type: Optional[str] = None,
     event_target: Optional[str] = None,
     primary_ticker: Optional[str] = None,
@@ -536,9 +546,16 @@ async def run_analysis(
 
     Args:
         ticker, query, persona, user_profile, user_uid: 공통.
+        horizon: 시간축 관점(short|short_mid|mid|long). 지정 시 통합 파이프라인 사용
+            (persona 무시). 빈 값이면 레거시 persona 경로.
         event_type, event_target, primary_ticker: persona='event' 전용 옵션.
     """
-    if persona not in ALL_PERSONAS:
+    from agents.strategist import VALID_HORIZONS
+
+    if horizon and horizon not in VALID_HORIZONS:
+        logger.warning(f"[graph] 알 수 없는 horizon='{horizon}' → 무시(persona 경로)")
+        horizon = ""
+    if not horizon and persona not in ALL_PERSONAS:
         logger.warning(f"[graph] 알 수 없는 persona='{persona}' → 'blackrock'으로 fallback")
         persona = "blackrock"
 
@@ -547,6 +564,7 @@ async def run_analysis(
         "ticker": ticker,
         "query": query,
         "persona": persona,
+        "horizon": horizon,
         "user_uid": user_uid,
         "user_profile": user_profile or UserProfile(),
         "retry_count": 0,
