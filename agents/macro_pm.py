@@ -184,12 +184,19 @@ class MacroPmAgent(BaseAgent):
         )
 
         # 2) 4 사이클 + 6 국면 산출 (정량 결과를 Claude 입력에 주입)
-        bundle = self._fetch_macro_bundle(
-            country="US" if us_w >= 0.5 else "KR"
-        )
+        primary_country = "US" if us_w >= 0.5 else "KR"
+        bundle = self._fetch_macro_bundle(country=primary_country)
+
+        # 2.5) 실측 지표(현재값) 수집 — LLM 수치 환각 방지용 그라운딩.
+        #   프롬프트엔 사이클 stage 라벨만 들어가 LLM이 환율·금리 등 '현재값'을 학습
+        #   기억에서 지어내던 문제(2026-06: USD/KRW 1,520원대를 1,400원으로 환각)를
+        #   실측값 주입으로 차단. 매크로 서사는 본질적으로 US/KR 모두 언급하므로 양국 적재.
+        actuals = self._collect_actuals(bundle, primary_country)
 
         # 3) user message 구성
-        user_message = self._build_user_message(input_data, bundle, us_w, kr_w, rationale)
+        user_message = self._build_user_message(
+            input_data, bundle, us_w, kr_w, rationale, actuals
+        )
 
         # 4) Claude 호출 (JSON 파싱 + Pydantic 검증 + 완전성 재시도)
         result, _raw = await self.call_claude_json(
@@ -276,6 +283,82 @@ class MacroPmAgent(BaseAgent):
             "raw_inputs": inputs,
         }
 
+    def _collect_actuals(
+        self, bundle: dict[str, Any], primary_country: str
+    ) -> dict[str, dict[str, Any]]:
+        """US/KR 실측 지표(raw_inputs)를 country별로 수집.
+
+        primary는 bundle에 이미 적재된 raw_inputs 재사용(추가 read 없음), 나머지 1개국만
+        추가 조회. Firestore 장애 시 가능한 만큼만 반환(best-effort).
+        """
+        actuals: dict[str, dict[str, Any]] = {}
+        if bundle.get("raw_inputs"):
+            actuals[primary_country] = bundle["raw_inputs"]
+        other = "US" if primary_country == "KR" else "KR"
+        try:
+            other_inputs = self._load_macro_inputs(other)
+            if other_inputs:
+                actuals[other] = other_inputs
+        except Exception as e:
+            logger.debug(f"[macro_pm] {other} 실측 지표 로드 실패: {e}")
+        return actuals
+
+    @staticmethod
+    def _format_actuals_country(country: str, raw: dict[str, Any]) -> list[str]:
+        """한 국가의 실측 지표를 사람이 읽는 라인으로 변환. 값 없거나 0.0 fallback은 생략."""
+        def num(key: str, allow_zero: bool = False):
+            v = raw.get(key)
+            if not isinstance(v, (int, float)):
+                return None
+            if v == 0 and not allow_zero:
+                return None
+            return float(v)
+
+        is_kr = country == "KR"
+        out: list[str] = []
+        # 통화 — KR은 USD/KRW(원), US는 DXY 달러지수
+        cur, c3, c12 = num("dxy_current"), num("dxy_3m_ago"), num("dxy_12m_ago")
+        if cur is not None:
+            label = "USD/KRW 환율(원)" if is_kr else "DXY 달러지수"
+            seg = f"  - {label}: 현재 {cur:,.1f}"
+            if c3 is not None:
+                seg += f" / 3개월 전 {c3:,.1f}"
+            if c12 is not None:
+                seg += f" / 12개월 전 {c12:,.1f}"
+            out.append(seg)
+        # 정책금리
+        rc, r3, r12 = num("rate_current"), num("rate_3m_ago"), num("rate_12m_ago")
+        if rc is not None:
+            rate_label = "한국은행 기준금리" if is_kr else "연방기금금리"
+            seg = f"  - {rate_label}: 현재 {rc:.2f}%"
+            if r3 is not None:
+                seg += f" / 3개월 전 {r3:.2f}%"
+            if r12 is not None:
+                seg += f" / 12개월 전 {r12:.2f}%"
+            out.append(seg)
+        # 인플레이션 — YoY 타당 범위(-5~30%)만 인용. 범위 밖은 지수 레벨 등
+        #   파이프라인 오매핑일 가능성이 커 환각 유발 → 주입 생략(known issue).
+        def plausible_yoy(v):
+            return v is not None and -5.0 <= v <= 30.0
+
+        cpi = num("cpi_yoy")
+        if plausible_yoy(cpi):
+            out.append(f"  - CPI(전년비): {cpi:.2f}%")
+        core = num("core_cpi_yoy")
+        if plausible_yoy(core):
+            out.append(f"  - Core CPI(전년비): {core:.2f}%")
+        # 경기
+        gdp = num("gdp_yoy")
+        if gdp is not None:
+            out.append(f"  - GDP(전년비): {gdp:.2f}%")
+        un = num("unemployment_current")
+        if un is not None:
+            out.append(f"  - 실업률: {un:.2f}%")
+        sp = raw.get("spread_10y_2y")
+        if isinstance(sp, (int, float)) and sp != 0:
+            out.append(f"  - 10Y-2Y 국채 스프레드: {float(sp):.2f}%p")
+        return out
+
     def _load_macro_inputs(self, country: str) -> dict[str, Any]:
         """Firestore macro_indicators에서 cycle_detector 입력 로드.
 
@@ -314,6 +397,7 @@ class MacroPmAgent(BaseAgent):
         us_w: float,
         kr_w: float,
         rationale: str,
+        actuals: dict[str, dict[str, Any]] | None = None,
     ) -> str:
         lines: list[str] = []
         lines.append("# 분석 요청")
@@ -365,12 +449,40 @@ class MacroPmAgent(BaseAgent):
                 "→ historical pattern 기반 정성 분석으로 응답하세요 (수치 추정 X)."
             )
 
+        # 실측 지표(현재값) — LLM 수치 환각 방지 그라운딩
+        actuals = actuals or {}
+        actual_lines: list[str] = []
+        for ctry in ("KR", "US"):
+            raw = actuals.get(ctry)
+            if not raw:
+                continue
+            ctry_lines = self._format_actuals_country(ctry, raw)
+            if ctry_lines:
+                actual_lines.append(f"[{ctry}]")
+                actual_lines.extend(ctry_lines)
+        if actual_lines:
+            lines.append(
+                "\n# 실측 지표 — 현재값 (수집 데이터, YoY·전년비 등은 최근 발표 기준)"
+            )
+            lines.extend(actual_lines)
+            lines.append(
+                "→ transition_signals_to_monitor의 current(현재값)·trigger_level을 "
+                "포함한 **모든 환율·금리·물가 수치는 위 실측값에서만 인용**할 것. "
+                "위에 없는 수치는 임의로 만들지 말고, 값이 없으면 정성 서술로 대체."
+            )
+        else:
+            lines.append(
+                "\n# 실측 지표 사용 불가 → 환율·금리·물가의 구체적 '현재 수치'를 "
+                "임의로 제시하지 말 것 (정성 서술만)."
+            )
+
         lines.append(
             "\n# 출력 지시\n"
             "위 정량 결과를 그대로 사용하여 제공된 구조화 출력 도구를 호출해 결과를 제출. "
             "regime은 위 정량 결과와 일치해야 하며, 사이클 4축의 stage 단어를 그대로 사용. "
             "cycle_analysis 4축과 summary_neutral은 **반드시** 채울 것 (생략 시 빈 카드 노출). "
             "weighting_used는 위 정량 가중치 그대로. "
+            "수치 인용은 위 '실측 지표' 값만 사용 — 학습 기억의 환율·금리 수치 생성 절대 금지. "
             "단정어 사용 금지 — '관찰', '통상 패턴', '역사적 통계' 등 중립 표현."
         )
         return "\n".join(lines)
