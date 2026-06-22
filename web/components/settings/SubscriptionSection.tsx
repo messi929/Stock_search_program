@@ -59,8 +59,8 @@ export function SubscriptionSection() {
         ) : tier === "free" || !sub ? (
           <div className="space-y-3">
             <p className="text-sm text-muted-foreground">
-              현재 무료 플랜입니다. Pro로 업그레이드하면 6종 페르소나·월 100회
-              분석·커스텀 스크리너를 이용할 수 있습니다. 첫 14일 무료.
+              현재 무료 플랜입니다. Pro로 업그레이드하면 월 100회 분석·관심 종목
+              30개·커스텀 스크리너를 이용할 수 있습니다. 첫 14일 무료.
             </p>
             <Link href="/pricing" className="block">
               <Button className="w-full sm:w-auto">💎 Pro 업그레이드</Button>

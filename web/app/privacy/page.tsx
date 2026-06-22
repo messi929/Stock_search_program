@@ -42,14 +42,14 @@ export default function PrivacyPage() {
             <li>투자 경력 (1년 미만 / 1~5년차 / 5년 이상)</li>
             <li>관심 섹터 (사용자가 선택)</li>
             <li>투자 원칙 (사용자가 자유 입력)</li>
-            <li>선호 페르소나 (안정·리스크관리 / 고성장·혁신 / 가치·저평가)</li>
+            <li>선호 투자 시계 (단기 / 단중기 / 중기 / 장기)</li>
             <li>보유 기간 선호</li>
             <li>알림 수신 이메일 (기본 이메일과 다른 경우)</li>
           </ul>
 
           <p className="mb-3 font-medium text-foreground">자동 수집 항목</p>
           <ul className="list-disc pl-5 space-y-1">
-            <li>분석 횟수, 페르소나 사용 빈도 등 사용 로그</li>
+            <li>분석 횟수, 투자 시계 사용 빈도 등 사용 로그</li>
             <li>접속 시 IP 주소, 브라우저 종류, 기기 유형</li>
             <li>관심 종목 목록 및 진입선 메타데이터 (사용자가 저장한 경우)</li>
           </ul>
@@ -66,7 +66,7 @@ export default function PrivacyPage() {
         <Section n="2" title="개인정보 수집 및 이용 목적">
           <ol className="list-decimal pl-5 space-y-2">
             <li>회원 가입·식별, 본인 확인, 부정 이용 방지</li>
-            <li>분석 서비스 제공 및 개인화 (페르소나·관심 섹터 반영)</li>
+            <li>분석 서비스 제공 및 개인화 (투자 시계·관심 섹터 반영)</li>
             <li>요금제 결제·환불 처리</li>
             <li>알림 발송 (사용자가 동의한 경우에 한함)</li>
             <li>서비스 개선을 위한 통계 분석 (개인 식별 정보 제외)</li>

@@ -6,20 +6,24 @@ import {
 } from "@/components/analyze/AgentCardShell";
 import type { StrategistResult } from "@/types/api";
 
-const PERSONA_NAME: Record<string, string> = {
-  blackrock: "안정·리스크관리",
-  ark: "고성장·혁신",
-  graham: "가치·저평가",
+// persona_used에는 시간축 관점 id(short/short_mid/mid/long)가 담긴다.
+const HORIZON_NAME: Record<string, string> = {
+  short: "단기",
+  short_mid: "단중기",
+  mid: "중기",
+  long: "장기",
 };
 
-/** 페르소나별 진입 철학 한 줄 — 사용자가 "왜 이 가격?"을 즉시 이해. */
-const PERSONA_PHILOSOPHY: Record<string, string> = {
-  blackrock:
-    "보수적 진입 — 큰 폭 조정 시 단계적 참고. 리스크 우선·하방 보호 중심.",
-  ark:
-    "공격적 진입 — 소폭 조정에도 적극 참고. 장기 성장 잠재 우선.",
-  graham:
-    "매우 보수적 — 안전마진 큰 폭 확보 후 참고. 본질 가치 대비 할인 중심.",
+/** 관점별 진입 철학 한 줄 — 사용자가 "왜 이 가격?"을 즉시 이해. */
+const HORIZON_PHILOSOPHY: Record<string, string> = {
+  short:
+    "기술적 레벨 중심 — 지지·이동평균·변동성 밴드 기준의 좁은 관찰 폭. 단기 신뢰구간은 넓음.",
+  short_mid:
+    "실적 모멘텀 + 기술 강세 — 분기 이벤트·신고가 돌파 부근 관찰.",
+  mid:
+    "밸류·성장 균형(GARP) — 역사적 밸류 밴드와 실적 경로 기준의 관찰 폭.",
+  long:
+    "내재가치·해자 중심 — 큰 폭 할인 시 단계적 참고. 구조적 훼손 기준의 넓은 폭.",
 };
 
 function pctFromCurrent(price: number, current: number | null | undefined): string {
@@ -53,13 +57,13 @@ export function StrategistCard({
     <AgentCardShell
       icon="🎯"
       title="종합 분석 (Strategist)"
-      subtitle={data ? `${PERSONA_NAME[data.persona_used] ?? data.persona_used} 관점` : "Opus"}
+      subtitle={data ? `${HORIZON_NAME[data.persona_used] ?? data.persona_used} 관점` : "Opus"}
       status={status}
     >
       {!data ? (
         status === "running" ? (
           <p className="text-sm text-muted-foreground">
-            페르소나 분석 + 진입선 산출 중...
+            관점 분석 + 진입선 산출 중...
           </p>
         ) : null
       ) : (
@@ -67,7 +71,7 @@ export function StrategistCard({
           {/* Perspective */}
           <section>
             <h4 className="text-xs font-medium text-muted-foreground mb-1">
-              페르소나 관점
+              관점 분석
             </h4>
             <p className="text-sm leading-relaxed">{data.persona_perspective}</p>
           </section>
@@ -82,7 +86,7 @@ export function StrategistCard({
             </p>
           </section>
 
-          {/* 진입 관찰 구간 — 거리 % + 페르소나 철학 */}
+          {/* 진입 관찰 구간 — 거리 % + 관점 철학 */}
           {data.entry_points && (
             <section>
               <div className="flex items-baseline justify-between mb-1 gap-2 flex-wrap">
@@ -95,9 +99,9 @@ export function StrategistCard({
                   </span>
                 )}
               </div>
-              {PERSONA_PHILOSOPHY[data.persona_used] && (
+              {HORIZON_PHILOSOPHY[data.persona_used] && (
                 <p className="text-[11px] text-muted-foreground mb-2 italic">
-                  💭 {PERSONA_PHILOSOPHY[data.persona_used]}
+                  💭 {HORIZON_PHILOSOPHY[data.persona_used]}
                 </p>
               )}
               <div className="grid grid-cols-3 gap-2 text-sm">

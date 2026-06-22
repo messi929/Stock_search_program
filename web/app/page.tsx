@@ -34,9 +34,9 @@ const FEATURES = [
     desc: "AI 답변의 모든 수치를 현재 시점 데이터로 재검증. 신선도 5% 이상 차이는 자동 경고.",
   },
   {
-    icon: "🎭",
-    title: "페르소나 전환 (6종)",
-    desc: "안정·리스크관리 / 고성장·혁신 / 가치·저평가 + 이벤트·매크로·한국 시장 — 같은 종목을 6가지 관점으로",
+    icon: "🕰️",
+    title: "투자 시계 전환 (4종)",
+    desc: "단기 / 단중기 / 중기 / 장기 — 같은 종목을 보는 기간에 따라 4가지 시간축 관점으로",
   },
   {
     icon: "🔔",
@@ -45,10 +45,11 @@ const FEATURES = [
   },
 ];
 
-const PERSONAS = [
-  { id: "blackrock", icon: "🏛", name: "안정·리스크관리", tagline: "리스크 우선, 장기 가치" },
-  { id: "ark", icon: "🚀", name: "고성장·혁신", tagline: "파괴적 혁신, 5년 시계" },
-  { id: "graham", icon: "📚", name: "가치·저평가", tagline: "안전마진, 저평가" },
+const HORIZONS = [
+  { id: "short", icon: "⚡", name: "단기", tagline: "수일~1개월 · 추세·거래량·수급" },
+  { id: "short_mid", icon: "📈", name: "단중기", tagline: "1~3개월 · 분기 실적 모멘텀 + 기술" },
+  { id: "mid", icon: "⚖️", name: "중기", tagline: "3개월~1년 · 밸류·성장 균형" },
+  { id: "long", icon: "🏔", name: "장기", tagline: "1년+ · 펀더멘털·해자·매크로 사이클" },
 ];
 
 const STEPS = [
@@ -62,7 +63,7 @@ const STEPS = [
     num: "2",
     icon: "🔍",
     title: "종목·관점 선택",
-    desc: "종목을 검색하거나 AI 발견·스마트 리스트에서. 6가지 분석 관점 중 하나 선택.",
+    desc: "종목을 검색하거나 AI 발견·스마트 리스트에서. 4가지 투자 시계 중 하나 선택.",
   },
   {
     num: "3",
@@ -186,21 +187,21 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Personas */}
+      {/* Horizons */}
       <section className="px-6 py-12 max-w-5xl mx-auto">
         <h2 className="text-2xl font-semibold text-center mb-2">
-          같은 종목, 3가지 다른 관점
+          같은 종목, 4가지 시간축 관점
         </h2>
         <p className="text-sm text-muted-foreground text-center mb-8">
-          (이벤트·매크로·한국 시장 등 데이터 특화 3종까지 총 6 페르소나)
+          보는 기간(단기·단중기·중기·장기)에 따라 분석 초점이 달라집니다
         </p>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {PERSONAS.map((p) => (
-            <Card key={p.id}>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          {HORIZONS.map((h) => (
+            <Card key={h.id}>
               <CardContent className="p-6 text-center">
-                <div className="text-4xl mb-3">{p.icon}</div>
-                <h3 className="text-lg font-semibold">{p.name}</h3>
-                <p className="text-sm text-muted-foreground mt-2">{p.tagline}</p>
+                <div className="text-4xl mb-3">{h.icon}</div>
+                <h3 className="text-lg font-semibold">{h.name}</h3>
+                <p className="text-sm text-muted-foreground mt-2">{h.tagline}</p>
               </CardContent>
             </Card>
           ))}
@@ -239,7 +240,7 @@ export default function Home() {
             <h2 className="text-2xl font-semibold">지금 시작하세요</h2>
             <p className="text-sm text-muted-foreground max-w-xl mx-auto leading-relaxed">
               Free 플랜으로 즉시 시작 · 신용카드 불필요 · 분석 월 20회, 실시간
-              검증 월 10회 무료 제공. Pro로 업그레이드 시 6 페르소나·무제한 분석.
+              검증 월 10회 무료 제공. Pro로 업그레이드 시 분석 월 100회·관심 종목 30개.
             </p>
             <div className="flex flex-col sm:flex-row justify-center gap-3 pt-2">
               <Link

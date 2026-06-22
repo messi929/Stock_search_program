@@ -208,7 +208,7 @@ export function AnalyzeView({ ticker }: { ticker: string }) {
                     ? "bg-rose-500/10 text-rose-700 border-rose-500/30"
                     : "bg-sky-500/10 text-sky-700 border-sky-500/30"
                 }`}
-                title={isKR ? "한국 시장 — 일별 외국인·기관 수급, Korean Specialist 페르소나 적용" : "미국 시장 — 일별 수급 데이터 없음, Korean Specialist 비활성"}
+                title={isKR ? "한국 시장 — 일별 외국인·기관 수급 데이터 제공" : "미국 시장 — 일별 외국인·기관 수급 데이터 없음"}
               >
                 {marketFlag} {exchangeLabel}
               </span>
