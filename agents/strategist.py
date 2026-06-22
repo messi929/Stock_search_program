@@ -49,6 +49,8 @@ class StrategistInput(BaseModel):
     # 시간축 관점 — 신규 1차 축. 지정 시 persona 대신 horizon emphasis 프롬프트 사용.
     #   "short" | "short_mid" | "mid" | "long". 빈 값이면 레거시 persona 경로(하위호환).
     horizon: str = ""
+    # 결정론적 매크로 컨텍스트(LLM 미호출) — 중기/장기 관점에서 매크로 그라운딩 주입(Phase 1b).
+    macro_context: str = ""
     query: str = ""  # 원본 사용자 자연어 질의
 
 
@@ -334,6 +336,10 @@ class StrategistAgent(BaseAgent):
             lines.append(f"\n# 적용 관점(시간축)\n{_hz_label}")
         else:
             lines.append(f"\n# 적용 페르소나\n{input_data.persona}")
+
+        # 중기/장기 관점 — 결정론적 매크로 사이클/실측 데이터 그라운딩(Phase 1b).
+        if input_data.macro_context:
+            lines.append(f"\n{input_data.macro_context}")
 
         # 사용자 프로파일
         lines.append("\n# 사용자 프로파일")

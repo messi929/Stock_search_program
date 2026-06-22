@@ -489,3 +489,61 @@ class MacroPmAgent(BaseAgent):
             "단정어 사용 금지 — '관찰', '통상 패턴', '역사적 통계' 등 중립 표현."
         )
         return "\n".join(lines)
+
+
+# ──────────────────────────────────────────────
+# 결정론적 매크로 컨텍스트 (LLM 미호출) — horizon strategist 그라운딩용
+# ──────────────────────────────────────────────
+
+
+def build_macro_context_block(ticker: str) -> str:
+    """LLM 없이 결정론적 4사이클/6국면 + 실측 지표를 텍스트 블록으로 생성.
+
+    중기/장기 관점(horizon) strategist 입력에 주입해 매크로를 실데이터로 그라운딩한다
+    (Phase 1b — 추가 LLM 비용 0). cycle_detector/regime_detector는 순수 계산이며
+    build_cycle_inputs만 Firestore를 읽는다. 실패·데이터 부재 시 빈 문자열.
+    """
+    try:
+        from agents.event_analyst import is_kr_ticker
+
+        agent = MacroPmAgent()
+        country = "KR" if (ticker and is_kr_ticker(ticker)) else "US"
+        bundle = agent._fetch_macro_bundle(country=country)
+        if not bundle.get("available"):
+            return ""
+
+        actuals = agent._collect_actuals(bundle, country)
+        regime = bundle.get("regime", {}) or {}
+        cycles = bundle.get("cycles", {}) or {}
+
+        lines = ["# 매크로 사이클 (정량·실측 — 수치는 그대로 인용, 임의 생성 금지)"]
+        lines.append(
+            f"- 현재 국면: {regime.get('regime_kr') or regime.get('regime', 'Transition')} "
+            f"(confidence {float(regime.get('regime_confidence', 0) or 0):.2f})"
+        )
+        seg = []
+        for k, label in (
+            ("interest_rate", "금리"),
+            ("business_cycle", "경기"),
+            ("currency", "통화"),
+            ("inflation", "인플레이션"),
+        ):
+            c = cycles.get(k, {}) or {}
+            if c.get("stage"):
+                seg.append(f"{label}={c['stage']}")
+        if seg:
+            lines.append("- 사이클: " + ", ".join(seg))
+
+        for ctry in ("KR", "US"):
+            raw = actuals.get(ctry)
+            if not raw:
+                continue
+            cl = MacroPmAgent._format_actuals_country(ctry, raw)
+            if cl:
+                lines.append(f"[{ctry}]")
+                lines.extend(cl)
+
+        return "\n".join(lines) if len(lines) > 2 else ""
+    except Exception as e:
+        logger.debug(f"[macro_context] 생성 실패: {type(e).__name__}: {e}")
+        return ""

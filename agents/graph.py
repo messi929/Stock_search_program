@@ -184,6 +184,20 @@ async def strategist_node(state: AnalysisState) -> dict:
     agent = StrategistAgent()
     persona = state.get("persona", "blackrock")
     horizon = state.get("horizon", "") or ""
+
+    # Phase 1b — 중기/장기 관점은 결정론적 매크로 사이클/실측 데이터를 strategist에
+    # 주입해 매크로 서술을 그라운딩(추가 LLM 비용 0). 단기/단중기는 기술·수급 중심이라 제외.
+    macro_context = ""
+    if horizon in ("mid", "long"):
+        try:
+            from agents.macro_pm import build_macro_context_block
+
+            macro_context = await asyncio.to_thread(
+                build_macro_context_block, state.get("ticker", "")
+            )
+        except Exception as e:
+            logger.debug(f"[graph:strategist] macro_context 생성 실패: {e}")
+
     try:
         result = await agent.run(
             StrategistInput(
@@ -193,6 +207,7 @@ async def strategist_node(state: AnalysisState) -> dict:
                 user_profile=state.get("user_profile") or UserProfile(),
                 persona=persona,
                 horizon=horizon,
+                macro_context=macro_context,
                 query=state.get("query", ""),
             ),
             uid=state.get("user_uid", ""),
