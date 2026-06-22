@@ -16,7 +16,7 @@ steps:
       - |
         REGION="asia-northeast3"
         IMAGE="gcr.io/$PROJECT_ID/stock-collector"
-        CLOUD_URL="https://stock-screener-119320994983.$${REGION}.run.app"
+        CLOUD_URL="https://stock-screener-1043976673827.$${REGION}.run.app"
         SECRETS="FIREBASE_CREDENTIALS=firebase-key:latest,ADMIN_KEY=admin-key:latest"
         SECRETS_LIGHT="FIREBASE_CREDENTIALS=firebase-key:latest,ADMIN_KEY=admin-key:latest"
 
