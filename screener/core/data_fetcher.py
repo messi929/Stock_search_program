@@ -450,7 +450,9 @@ def _fetch_single_fundamental(ticker: str) -> tuple:
     try:
         url = f"https://finance.naver.com/item/main.naver?code={ticker}"
         resp = requests.get(url, headers=_HEADERS, timeout=5)
-        resp.encoding = "euc-kr"
+        # 네이버 finance는 UTF-8 서빙. 과거 euc-kr 강제 디코딩이 한글(섹터·테마)을
+        # U+FFFD mojibake로 손상시켰음(숫자 PER/PBR은 ASCII라 무사). 2026-06-23 수정.
+        resp.encoding = "utf-8"
         soup = BeautifulSoup(resp.text, "html.parser")
 
         data = {}
@@ -637,7 +639,7 @@ def fetch_themes() -> tuple[dict, dict]:
         try:
             url = f"https://finance.naver.com/sise/theme.naver?&page={page}"
             resp = requests.get(url, headers=_HEADERS, timeout=5)
-            resp.encoding = "euc-kr"
+            resp.encoding = "utf-8"
             soup = BeautifulSoup(resp.text, "html.parser")
 
             found = False
@@ -662,7 +664,7 @@ def fetch_themes() -> tuple[dict, dict]:
         try:
             url = f"https://finance.naver.com/sise/sise_group_detail.naver?type=theme&no={no}"
             resp = requests.get(url, headers=_HEADERS, timeout=5)
-            resp.encoding = "euc-kr"
+            resp.encoding = "utf-8"
             soup = BeautifulSoup(resp.text, "html.parser")
 
             for a in soup.select("div.name_area a"):
@@ -701,7 +703,7 @@ def _fetch_foreign_inst_naver(tickers: list[str]) -> dict:
             # 외국인 순매수
             url = f"https://finance.naver.com/item/frgn.naver?code={ticker}"
             resp = requests.get(url, headers=_HEADERS, timeout=5)
-            resp.encoding = "euc-kr"
+            resp.encoding = "utf-8"
             soup = BeautifulSoup(resp.text, "html.parser")
 
             foreign_net = 0
