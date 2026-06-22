@@ -46,7 +46,7 @@ export function HeroPreview() {
               <span>🎯</span>
               <span>종합 전략</span>
               <span className="text-xs font-normal text-muted-foreground">
-                · 안정·리스크관리 관점
+                · 중기 관점
               </span>
             </div>
             <p className="text-sm text-muted-foreground leading-relaxed">
