@@ -254,7 +254,7 @@ def test_build_cycle_inputs_falls_back_when_offset_missing():
 
 
 def test_build_cycle_inputs_quarterly_uses_wider_window():
-    """gdp_yoy_us는 freq=Q → window 95일/45일."""
+    """gdp_yoy_us는 freq=Q → 분기 발표 지연 대응으로 days_back=200일."""
     with patch.object(mrc, "_fetch_latest_value") as mock_latest, patch.object(
         mrc, "_fetch_value_at_offset"
     ) as mock_offset:
@@ -263,13 +263,12 @@ def test_build_cycle_inputs_quarterly_uses_wider_window():
 
         mrc.build_cycle_inputs(MagicMock(), "US")
 
-    # gdp_yoy_us 호출 시 days_back=95 인지 확인
+    # gdp_yoy_us 호출 시 days_back=200(분기 윈도우)인지 확인
     gdp_calls = [c for c in mock_latest.call_args_list if "gdp_yoy_us" in str(c)]
     assert len(gdp_calls) > 0
-    # kwargs에 days_back=95 검증
     for call in gdp_calls:
         if "days_back" in call.kwargs:
-            assert call.kwargs["days_back"] == 95
+            assert call.kwargs["days_back"] == 200
 
 
 def test_data_quality_known_gaps_for_kr():

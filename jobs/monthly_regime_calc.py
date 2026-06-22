@@ -330,9 +330,28 @@ def build_cycle_inputs(
         365,
         fallback=inputs["unemployment_current"],
     )
-    inputs["cpi_yoy"] = _fetch_or_track("cpi_yoy", mapping["cpi_yoy"])
+    def _yoy_from_index(field_name: str, key: str) -> float:
+        """CPI 등 '지수(index)' 시리즈를 전년동월 대비 YoY(%)로 변환.
+
+        Firestore의 cpi_total/cpi_all/cpi_core는 *지수 레벨*(예 KR 119.9, US 332)이지
+        YoY가 아니다. 이를 그대로 cycle_detector에 넣으면 119%→하이퍼인플레이션으로
+        오판한다(2026-06 확인). 현재값÷12개월전−1로 실제 YoY를 산출. 12개월 전 값이
+        없으면 계산 불가 → missing 추적 후 0.0(중립) fallback.
+        """
+        cur = _fetch_or_track(field_name, key)
+        if field_name in missing:  # 현재값 자체가 없음
+            return 0.0
+        meta_freq = _infer_freq_for_key(key)
+        win = 60 if meta_freq == "Q" else 25 if meta_freq == "M" else 14
+        prev = _fetch_value_at_offset(db, key, 365, window_days=win)
+        if prev is None or prev == 0:
+            missing.append(f"{field_name} (12m-ago for YoY)")
+            return 0.0
+        return round((cur / prev - 1.0) * 100.0, 2)
+
+    inputs["cpi_yoy"] = _yoy_from_index("cpi_yoy", mapping["cpi_yoy"])
     if "core_cpi_yoy" in mapping:
-        inputs["core_cpi_yoy"] = _fetch_latest_value(db, mapping["core_cpi_yoy"])
+        inputs["core_cpi_yoy"] = _yoy_from_index("core_cpi_yoy", mapping["core_cpi_yoy"])
 
     inputs["dxy_current"] = _fetch_or_track("dxy_current", mapping["dxy_current"])
     inputs["dxy_3m_ago"] = _fetch_offset_or_track(
