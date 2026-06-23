@@ -92,7 +92,11 @@ export function Treemap({
           return (
             <Link
               key={row.ticker}
-              href={`/analyze/${row.ticker}`}
+              href={
+                row.stock_type === "etf"
+                  ? `/etf/${row.ticker}`
+                  : `/analyze/${row.ticker}`
+              }
               role="gridcell"
               aria-label={`${row.name ?? row.ticker} ${change >= 0 ? "+" : ""}${change.toFixed(1)}%`}
               className={`flex flex-col justify-center items-center text-center p-2 rounded transition focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 ${colorClass(change)}`}

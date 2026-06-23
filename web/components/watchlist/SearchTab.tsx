@@ -44,9 +44,11 @@ export function SearchTab() {
   const effectiveActiveIdx =
     hits.length > 0 ? Math.min(activeIdx, hits.length - 1) : -1;
 
-  const navigate = (ticker: string) => {
+  const navigate = (ticker: string, stockType?: string) => {
     if (!ticker) return;
-    router.push(`/analyze/${ticker.toUpperCase()}`);
+    const tk = ticker.toUpperCase();
+    // ETF는 전용 상세(/etf), 일반 종목은 딥다이브(/analyze)로.
+    router.push(stockType === "etf" ? `/etf/${tk}` : `/analyze/${tk}`);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -65,7 +67,7 @@ export function SearchTab() {
       e.preventDefault();
       // 1) 자동완성 후보 선택 우선
       if (hits.length > 0 && effectiveActiveIdx >= 0 && effectiveActiveIdx < hits.length) {
-        navigate(hits[effectiveActiveIdx].ticker);
+        navigate(hits[effectiveActiveIdx].ticker, hits[effectiveActiveIdx].stock_type);
         return;
       }
       // 2) 후보 없을 때 ticker 직접 입력 fallback
@@ -124,7 +126,7 @@ export function SearchTab() {
                     role="option"
                     aria-selected={i === effectiveActiveIdx}
                     type="button"
-                    onClick={() => navigate(hit.ticker)}
+                    onClick={() => navigate(hit.ticker, hit.stock_type)}
                     onMouseEnter={() => setActiveIdx(i)}
                     className={`block w-full text-left px-3 py-2 text-sm transition border-b last:border-b-0 ${
                       i === effectiveActiveIdx ? "bg-amber-500/10" : "hover:bg-muted/50"

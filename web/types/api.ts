@@ -418,6 +418,7 @@ export type StockSearchHit = {
   name: string;
   close: number;
   market: string;
+  stock_type?: string; // "etf"면 /etf/ 상세로 라우팅
 };
 
 export type StockSearchResponse = {

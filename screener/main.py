@@ -577,6 +577,7 @@ from screener.api.admin_routes import router as admin_router
 from screener.api.rank_page import router as rank_router
 from screener.api.auth_routes import router as auth_router
 from api.routes.ai import router as axis_ai_router
+from api.routes.etf import router as axis_etf_router
 from api.routes.kis import router as axis_kis_router
 from api.routes.kis_ws import router as axis_kis_ws_router
 from api.routes.screener import router as axis_screener_router
@@ -587,6 +588,7 @@ app.include_router(admin_router)
 app.include_router(rank_router)
 app.include_router(auth_router)
 app.include_router(axis_ai_router)
+app.include_router(axis_etf_router)
 app.include_router(axis_kis_router)
 app.include_router(axis_kis_ws_router)
 app.include_router(axis_screener_router)

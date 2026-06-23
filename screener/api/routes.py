@@ -273,6 +273,8 @@ async def get_all_stocks(q: str = "", limit: int = 30):
             "name": str(row.get("name", "") or row.get("ticker", "")),
             "close": float(row.get("close", 0) or 0),
             "market": str(row.get("market", "") or ""),
+            # ETF면 프론트가 /etf/ 상세로 라우팅(일반 종목은 /analyze).
+            "stock_type": str(row.get("stock_type", "stock") or "stock"),
         })
     return {"stocks": stocks}
 

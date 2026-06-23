@@ -54,7 +54,11 @@ export function ResultsTable({
             >
               <td className="px-3 py-2 whitespace-nowrap">
                 <Link
-                  href={`/analyze/${row.ticker}`}
+                  href={
+                    row.stock_type === "etf"
+                      ? `/etf/${row.ticker}`
+                      : `/analyze/${row.ticker}`
+                  }
                   className="font-medium text-amber-500 hover:underline rounded focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-500"
                 >
                   {typeof row.name === "string" && row.name ? row.name : row.ticker}
