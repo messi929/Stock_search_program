@@ -1,6 +1,8 @@
 """FastAPI 라우터."""
 
+import asyncio
 import io
+import time
 from copy import deepcopy
 from datetime import datetime, timezone, timedelta
 
@@ -279,19 +281,61 @@ async def get_all_stocks(q: str = "", limit: int = 30):
     return {"stocks": stocks}
 
 
+# ── 자동 AI 헬스 (합성 핑) — 인스턴스별 스로틀 + 인프로세스 캐시 ──
+_AI_HEALTH_PROBE_INTERVAL = 240  # 초 — 최대 4분에 1회만 실제 핑
+_ai_health = {"ok": True, "reason": "", "last_probe": 0.0}
+
+
+async def _probe_ai_health() -> None:
+    """1토큰 Claude 호출로 API 생존 확인. 성공→ok, 실패→분류 사유. 인프로세스 캐시 갱신.
+
+    캐시 우회(skip_cache)·재시도 1회로 빠르게 실제 API 상태를 확인한다.
+    """
+    from agents.graph import _friendly_error_msg
+    from utils.claude_client import MODEL_HAIKU, ClaudeClient
+
+    ok, reason = True, ""
+    try:
+        cli = ClaudeClient(max_retries=1, use_response_cache=False)
+        await cli.complete(
+            agent="health", model=MODEL_HAIKU, system="",
+            messages=[{"role": "user", "content": "ping"}],
+            max_tokens=1, skip_cache=True,
+        )
+    except Exception as e:
+        ok = False
+        reason = _friendly_error_msg(e)
+    _ai_health["ok"] = ok
+    _ai_health["reason"] = reason
+    # 관찰용 best-effort 기록(어드민/추후 활용)
+    try:
+        from firebase_admin import firestore
+
+        from screener.db.firebase_client import get_db
+
+        get_db().collection("config").document("ai_health").set(
+            {"ok": ok, "reason": reason, "checked_at": firestore.SERVER_TIMESTAMP}
+        )
+    except Exception:
+        pass
+
+
 @router.get("/maintenance")
 async def get_maintenance():
-    """점검 공지 설정(공개) — 프론트 배너용. 관리자가 /api/admin/maintenance로 설정.
+    """점검 공지(공개) + 자동 AI 헬스 — 프론트 배너용. 인증 불필요.
 
-    인증 불필요(전 사용자 배너 표시). 미설정·오류 시 enabled=false.
+    - 수동 점검 공지: config/maintenance (관리자가 /api/admin/maintenance로 설정).
+    - 자동 AI 장애 감지: 폴링에 묶인 합성 핑(≥4분 1회, 8초 타임아웃) → ai_degraded.
+      자동/수동은 독립. 배너는 수동 우선, 없으면 자동 표시.
     """
+    manual = {"enabled": False, "starts_at": "", "ends_at": "", "message": ""}
     try:
         from screener.db.firebase_client import get_db
 
         doc = get_db().collection("config").document("maintenance").get()
         if doc.exists:
             d = doc.to_dict() or {}
-            return {
+            manual = {
                 "enabled": bool(d.get("enabled")),
                 "starts_at": d.get("starts_at", "") or "",
                 "ends_at": d.get("ends_at", "") or "",
@@ -299,7 +343,25 @@ async def get_maintenance():
             }
     except Exception as e:
         logger.debug(f"[maintenance] 조회 실패: {e}")
-    return {"enabled": False, "starts_at": "", "ends_at": "", "message": ""}
+
+    # 합성 핑 — 인스턴스별 스로틀. 첫 호출/스테일 시에만 실제 API 핑(8초 상한).
+    now = time.time()
+    if now - _ai_health["last_probe"] > _AI_HEALTH_PROBE_INTERVAL:
+        _ai_health["last_probe"] = now
+        try:
+            await asyncio.wait_for(_probe_ai_health(), timeout=8)
+        except asyncio.TimeoutError:
+            _ai_health["ok"] = False
+            _ai_health["reason"] = "AI 응답 지연 — 일시 장애 가능"
+        except Exception as e:
+            logger.debug(f"[ai_health] 핑 실패: {e}")
+
+    ai_degraded = not _ai_health["ok"]
+    return {
+        **manual,
+        "ai_degraded": ai_degraded,
+        "ai_reason": _ai_health["reason"] if ai_degraded else "",
+    }
 
 
 @router.get("/categories")

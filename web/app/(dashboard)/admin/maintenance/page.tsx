@@ -70,6 +70,21 @@ export default function AdminMaintenancePage() {
         </p>
       </div>
 
+      {/* 자동 AI 헬스(합성 핑) — 수동 공지와 독립. Claude API 장애 시 자동 배너. */}
+      <div className="rounded-md border px-4 py-2.5 text-sm flex items-center gap-2">
+        <span className="text-muted-foreground">AI API 자동 감지:</span>
+        {data?.ai_degraded ? (
+          <span className="font-medium text-red-500">
+            🔴 장애 감지{data?.ai_reason ? ` — ${data.ai_reason}` : ""} (자동 배너 노출 중)
+          </span>
+        ) : (
+          <span className="font-medium text-emerald-500">🟢 정상</span>
+        )}
+        <span className="ml-auto text-[11px] text-muted-foreground">
+          ~4분마다 합성 핑 · 장애 시 자동 배너, 복구 시 자동 해제
+        </span>
+      </div>
+
       {/* 미리보기 */}
       {enabled && (
         <div className="rounded-md bg-amber-500/15 border border-amber-500/40 text-amber-200 px-4 py-2 text-sm text-center">

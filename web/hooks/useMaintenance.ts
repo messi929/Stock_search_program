@@ -13,6 +13,9 @@ export interface MaintenanceConfig {
   starts_at: string; // "YYYY-MM-DDTHH:MM" (로컬) 또는 빈값
   ends_at: string;
   message: string;
+  // 자동 AI 헬스(합성 핑) — Claude API 장애 자동 감지. 수동 공지와 독립.
+  ai_degraded?: boolean;
+  ai_reason?: string;
 }
 
 export function useMaintenance() {

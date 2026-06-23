@@ -181,9 +181,14 @@ export const adminApi = {
     }),
   // 점검 공지 — 읽기는 공개 GET, 쓰기는 관리자 PUT.
   maintenance: () =>
-    apiCall<{ enabled: boolean; starts_at: string; ends_at: string; message: string }>(
-      "/api/maintenance",
-    ),
+    apiCall<{
+      enabled: boolean;
+      starts_at: string;
+      ends_at: string;
+      message: string;
+      ai_degraded?: boolean;
+      ai_reason?: string;
+    }>("/api/maintenance"),
   setMaintenance: (cfg: {
     enabled: boolean;
     starts_at: string;
