@@ -16,6 +16,7 @@ const NAV = [
   { href: "/analyze", label: "종목 분석", icon: "🔍" },
   { href: "/discover", label: "종목 발견", icon: "🧭" },
   { href: "/screener", label: "스크리너", icon: "📊" },
+  { href: "/etf", label: "ETF", icon: "🧺" },
   { href: "/settings/profile", label: "설정", icon: "⚙️" },
 ];
 
