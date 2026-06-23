@@ -13,6 +13,7 @@ const TABS = [
   { href: "/admin/usage", label: "사용량" },
   { href: "/admin/revenue", label: "수입" },
   { href: "/admin/errors", label: "에러" },
+  { href: "/admin/maintenance", label: "점검 공지" },
 ];
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {

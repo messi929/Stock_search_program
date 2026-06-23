@@ -831,3 +831,39 @@ async def admin_errors_summary(request: Request, days: int = 7):
     except Exception as e:
         logger.warning(f"admin_errors_summary 집계 실패: {e}")
     return {"days": days, "total": total, "by_type": by_type, "by_day": by_day}
+
+
+# ──────────────────────────────────────────────
+# 점검 공지(maintenance) — config/maintenance 문서. 공개 조회는 /api/maintenance.
+# ──────────────────────────────────────────────
+
+@router.put("/maintenance")
+async def set_maintenance(request: Request):
+    """점검 공지 설정(켜기/끄기, 시작·종료 시각, 메시지). 관리자 전용. 즉시 반영."""
+    if not _is_admin(request):
+        return _forbid()
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    cfg = {
+        "enabled": bool(body.get("enabled")),
+        "starts_at": str(body.get("starts_at") or "")[:40],  # ISO 또는 빈값
+        "ends_at": str(body.get("ends_at") or "")[:40],
+        "message": str(body.get("message") or "")[:500],
+    }
+    try:
+        from firebase_admin import firestore
+
+        from screener.db.firebase_client import get_db
+
+        get_db().collection("config").document("maintenance").set(
+            {**cfg, "updated_at": firestore.SERVER_TIMESTAMP}
+        )
+    except Exception as e:
+        logger.warning(f"maintenance 저장 실패: {e}")
+        return JSONResponse(status_code=500, content={"detail": "저장 실패"})
+
+    user = getattr(request.state, "user", None) or {}
+    logger.info(f"[admin] 점검 공지 설정 by {user.get('email', '?')}: {cfg}")
+    return {"ok": True, **cfg}

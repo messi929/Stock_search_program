@@ -179,6 +179,21 @@ export const adminApi = {
       method: "POST",
       body: JSON.stringify({ note }),
     }),
+  // 점검 공지 — 읽기는 공개 GET, 쓰기는 관리자 PUT.
+  maintenance: () =>
+    apiCall<{ enabled: boolean; starts_at: string; ends_at: string; message: string }>(
+      "/api/maintenance",
+    ),
+  setMaintenance: (cfg: {
+    enabled: boolean;
+    starts_at: string;
+    ends_at: string;
+    message: string;
+  }) =>
+    apiCall<{ ok: boolean }>("/api/admin/maintenance", {
+      method: "PUT",
+      body: JSON.stringify(cfg),
+    }),
 };
 
 // ── 포맷 헬퍼 ──

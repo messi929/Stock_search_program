@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
 
+import { MaintenanceBanner } from "@/components/MaintenanceBanner";
 import { Providers } from "./providers";
 
 const SITE_URL = "https://axislytics.com";
@@ -44,7 +45,10 @@ export default function RootLayout({
   return (
     <html lang="ko" className="dark h-full antialiased">
       <body className="min-h-full flex flex-col bg-background text-foreground">
-        <Providers>{children}</Providers>
+        <Providers>
+          <MaintenanceBanner />
+          {children}
+        </Providers>
       </body>
     </html>
   );

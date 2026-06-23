@@ -279,6 +279,29 @@ async def get_all_stocks(q: str = "", limit: int = 30):
     return {"stocks": stocks}
 
 
+@router.get("/maintenance")
+async def get_maintenance():
+    """점검 공지 설정(공개) — 프론트 배너용. 관리자가 /api/admin/maintenance로 설정.
+
+    인증 불필요(전 사용자 배너 표시). 미설정·오류 시 enabled=false.
+    """
+    try:
+        from screener.db.firebase_client import get_db
+
+        doc = get_db().collection("config").document("maintenance").get()
+        if doc.exists:
+            d = doc.to_dict() or {}
+            return {
+                "enabled": bool(d.get("enabled")),
+                "starts_at": d.get("starts_at", "") or "",
+                "ends_at": d.get("ends_at", "") or "",
+                "message": d.get("message", "") or "",
+            }
+    except Exception as e:
+        logger.debug(f"[maintenance] 조회 실패: {e}")
+    return {"enabled": False, "starts_at": "", "ends_at": "", "message": ""}
+
+
 @router.get("/categories")
 async def get_categories():
     """카테고리 목록 (그룹별). Free 카테고리 먼저 + tier 표시."""
