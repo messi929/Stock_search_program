@@ -28,7 +28,7 @@ const TIERS = [
     ctaHref: "/login",
     highlight: false,
     features: [
-      "관심 종목 5개",
+      "관심 종목 무제한",
       "AI 분석 월 20회",
       "실시간 검증 월 10회",
       "투자 시계 — 단기 (수일~1개월)",
@@ -46,7 +46,7 @@ const TIERS = [
     ctaHref: "/login",
     highlight: true,
     features: [
-      "관심 종목 30개",
+      "관심 종목 무제한",
       "AI 분석 월 100회 (공정사용)",
       "실시간 검증 월 50회",
       "투자 시계 4종 전체 (단중기·중기·장기 포함)",

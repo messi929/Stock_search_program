@@ -241,7 +241,7 @@ export default function Home() {
             <h2 className="text-2xl font-semibold">지금 시작하세요</h2>
             <p className="text-sm text-muted-foreground max-w-xl mx-auto leading-relaxed">
               Free 플랜으로 즉시 시작 · 신용카드 불필요 · 분석 월 20회, 실시간
-              검증 월 10회 무료 제공. Pro로 업그레이드 시 분석 월 100회·관심 종목 30개.
+              검증 월 10회 무료 제공. Pro로 업그레이드 시 분석 월 100회·투자 시계 4종·커스텀 스크리너.
             </p>
             <div className="flex flex-col sm:flex-row justify-center gap-3 pt-2">
               <Link

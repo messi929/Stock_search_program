@@ -7,7 +7,6 @@ import { toast } from "sonner";
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { useKisLivePrices } from "@/hooks/useKisLivePrices";
-import { usePersonas } from "@/hooks/usePersonas";
 import { useUpdateWatchlist, useWatchlist } from "@/hooks/useWatchlist";
 import {
   entryProximity,
@@ -17,11 +16,8 @@ import { apiCall } from "@/lib/api";
 import type { StockSearchResponse } from "@/types/api";
 
 export function WatchlistPreview() {
-  // user_plan은 personas API에 포함됨 — pro/premium은 30개, free는 5개.
-  const { data: personas } = usePersonas();
-  const isPaid =
-    personas?.user_plan === "pro" || personas?.user_plan === "premium";
-  const limit = isPaid ? 30 : 5;
+  // 관심종목은 티어 무관(등록은 AI 비용 0). 대시보드 미리보기는 티어 상관없이 동일 캡.
+  const limit = 30;
   const { data, isLoading, isError } = useWatchlist();
   const update = useUpdateWatchlist();
   const tickers = data?.watchlist ?? [];
