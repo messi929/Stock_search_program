@@ -23,7 +23,10 @@ from fastapi import APIRouter, HTTPException
 from loguru import logger
 from pydantic import BaseModel, Field
 
-_KR_TICKER = re.compile(r"^\d{6}$")
+# 라우팅: 순수 알파벳(SPY/QQQ)=해외(US, yfinance), 그 외(숫자 포함: 069500, 0193T0 등
+# KRX 코드)=국내 상장(naver). KR ETF는 신상품에서 문자 포함 6자 코드(0193T0)도 쓰므로
+# \d{6}로는 부족 — 숫자 포함 여부로 판별.
+_US_TICKER = re.compile(r"^[A-Za-z]{1,6}$")
 
 router = APIRouter(prefix="/api/etf", tags=["etf"])
 
@@ -332,12 +335,12 @@ async def get_etf_detail(ticker: str) -> dict:
     if cached is not None:
         return cached
 
-    # KR 6자리 → 네이버, 그 외(알파벳) → 해외(US 상장) yfinance.
-    if _KR_TICKER.match(ticker):
+    # 순수 알파벳(SPY 등) → 해외(US) yfinance, 그 외(숫자 포함 KRX 코드) → 국내 상장 naver.
+    if _US_TICKER.match(ticker):
+        detail = await asyncio.to_thread(_fetch_us_etf, ticker)
+    else:
         j = await asyncio.to_thread(_fetch_naver_etf, ticker)
         detail = _normalize(ticker, j) if j is not None else None
-    else:
-        detail = await asyncio.to_thread(_fetch_us_etf, ticker)
 
     if detail is None:
         raise HTTPException(

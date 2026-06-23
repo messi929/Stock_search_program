@@ -105,8 +105,8 @@ export function EtfDetailView({ ticker }: { ticker: string }) {
       <div className="max-w-4xl">
         <Card>
           <CardContent className="p-6 text-sm text-muted-foreground space-y-2">
-            <p>⚠️ ETF 정보를 찾을 수 없습니다. (현재 KR 상장 ETF만 지원합니다)</p>
-            <Link href="/screener?category=etf" className="text-amber-600 hover:underline">
+            <p>⚠️ ETF 정보를 불러오지 못했습니다. 종목 코드를 확인하거나 잠시 후 다시 시도해주세요.</p>
+            <Link href="/etf" className="text-amber-600 hover:underline">
               ETF 목록 보기 →
             </Link>
           </CardContent>
