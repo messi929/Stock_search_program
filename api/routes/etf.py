@@ -14,6 +14,7 @@ LEGAL: ETF는 사실 데이터지만 응답 문자열은 filter_forbidden을 거
 from __future__ import annotations
 
 import asyncio
+import re
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
@@ -21,6 +22,8 @@ import requests
 from fastapi import APIRouter, HTTPException
 from loguru import logger
 from pydantic import BaseModel, Field
+
+_KR_TICKER = re.compile(r"^\d{6}$")
 
 router = APIRouter(prefix="/api/etf", tags=["etf"])
 
@@ -201,6 +204,118 @@ def _fetch_naver_etf(ticker: str) -> Optional[dict]:
         return None
 
 
+# ──────────────────────────────────────────────
+# 해외(US 상장) ETF — yfinance funds_data
+# ──────────────────────────────────────────────
+
+# yfinance 섹터 키 → 한글 라벨.
+_YF_SECTOR_KO = {
+    "technology": "기술",
+    "financial_services": "금융",
+    "healthcare": "헬스케어",
+    "consumer_cyclical": "임의소비재",
+    "consumer_defensive": "필수소비재",
+    "communication_services": "커뮤니케이션",
+    "industrials": "산업재",
+    "energy": "에너지",
+    "basic_materials": "소재",
+    "real_estate": "부동산",
+    "realestate": "부동산",
+    "utilities": "유틸리티",
+}
+
+
+def _fmt_usd_aum(v) -> str:
+    """총자산(USD) → '$650.2B' 류 포맷."""
+    try:
+        n = float(v)
+    except (TypeError, ValueError):
+        return ""
+    if n <= 0:
+        return ""
+    if n >= 1e12:
+        return f"${n/1e12:.1f}T"
+    if n >= 1e9:
+        return f"${n/1e9:.1f}B"
+    if n >= 1e6:
+        return f"${n/1e6:.1f}M"
+    return f"${n:,.0f}"
+
+
+def _normalize_us(ticker: str, info: dict, top_df, sectors: dict, overview: dict) -> EtfDetail:
+    holdings: list[Holding] = []
+    seq = 1
+    try:
+        for sym, row in (top_df.iterrows() if top_df is not None else []):
+            w = row.get("Holding Percent")
+            holdings.append(
+                Holding(
+                    seq=seq,
+                    ticker=str(sym or "").strip(),
+                    name=str(row.get("Name") or "").strip(),
+                    shares=None,
+                    weight=round(float(w) * 100, 2) if w is not None else None,
+                )
+            )
+            seq += 1
+    except Exception as e:
+        logger.debug(f"[etf:us] holdings 파싱 실패 {ticker}: {e}")
+
+    sector_bd: list[Breakdown] = []
+    for k, v in (sectors or {}).items():
+        try:
+            w = float(v) * 100
+        except (TypeError, ValueError):
+            continue
+        if w > 0:
+            sector_bd.append(Breakdown(code=_YF_SECTOR_KO.get(str(k), str(k)), weight=round(w, 2)))
+    sector_bd.sort(key=lambda b: b.weight, reverse=True)
+
+    fee = info.get("netExpenseRatio") or info.get("annualReportExpenseRatio")
+    fee_pct = None
+    if fee is not None:
+        f = _to_float(fee)
+        # yfinance는 0.0945(=0.0945%) 또는 비율(0.000945) 혼재 — 1 미만이면 ×100 보정 안전치
+        fee_pct = round(f, 3) if (f is not None and f >= 0.01) else (round(f * 100, 3) if f is not None else None)
+
+    return EtfDetail(
+        ticker=ticker,
+        name=str(info.get("longName") or info.get("shortName") or ticker).strip(),
+        issuer=str(overview.get("family") or "").strip(),
+        base_index=str(overview.get("categoryName") or "").strip(),  # 카테고리(지수 아님)
+        nav=_to_float(info.get("navPrice") or info.get("regularMarketPrice")),
+        total_nav=_fmt_usd_aum(info.get("totalAssets")),
+        total_fee=fee_pct,
+        chase_error_rate=None,
+        deviation_rate=None,
+        listed_date="",
+        underlying_region="us",
+        top_holdings=holdings,
+        sector_breakdown=sector_bd,
+        country_breakdown=[],  # yfinance US ETF는 국가 비중 미제공
+        asset_breakdown=[],
+    )
+
+
+def _fetch_us_etf(ticker: str) -> Optional[EtfDetail]:
+    """yfinance로 US 상장 ETF 정보+상위 holdings 수집. ETF 아니면 None."""
+    try:
+        import yfinance as yf
+
+        t = yf.Ticker(ticker)
+        info = t.info or {}
+        if str(info.get("quoteType") or "").upper() != "ETF":
+            return None
+        fd = t.funds_data
+        top_df = getattr(fd, "top_holdings", None)
+        sectors = getattr(fd, "sector_weightings", None) or {}
+        overview = getattr(fd, "fund_overview", None) or {}
+        return _normalize_us(ticker, info, top_df, sectors, overview)
+    except Exception as e:
+        logger.warning(f"[etf:us] yfinance 조회 실패 {ticker}: {e}")
+        return None
+
+
 @router.get("/{ticker}")
 async def get_etf_detail(ticker: str) -> dict:
     """ETF 상세(정보 + 상위 구성종목 + 섹터/국가/자산 비중). 1일 1회 외부 호출, 그 외 캐시.
@@ -217,14 +332,19 @@ async def get_etf_detail(ticker: str) -> dict:
     if cached is not None:
         return cached
 
-    j = await asyncio.to_thread(_fetch_naver_etf, ticker)
-    if j is None:
+    # KR 6자리 → 네이버, 그 외(알파벳) → 해외(US 상장) yfinance.
+    if _KR_TICKER.match(ticker):
+        j = await asyncio.to_thread(_fetch_naver_etf, ticker)
+        detail = _normalize(ticker, j) if j is not None else None
+    else:
+        detail = await asyncio.to_thread(_fetch_us_etf, ticker)
+
+    if detail is None:
         raise HTTPException(
             404,
-            {"code": "ETF_NOT_FOUND", "message": "ETF 정보를 찾을 수 없습니다 (KR 상장 ETF만 지원)."},
+            {"code": "ETF_NOT_FOUND", "message": "ETF 정보를 찾을 수 없습니다."},
         )
 
-    detail = _normalize(ticker, j)
     detail.as_of = datetime.now(timezone.utc).isoformat()
     detail.disclaimer = DISCLAIMER
 

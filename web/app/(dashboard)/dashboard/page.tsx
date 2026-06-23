@@ -121,7 +121,7 @@ export default function DashboardHome() {
       {/* Quick actions */}
       <section>
         <h2 className="font-semibold mb-3">빠른 시작</h2>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
           <Link
             href="/screener"
             className={`${buttonVariants({ variant: "outline", size: "lg" })} h-auto py-4 px-4 justify-start`}
@@ -152,6 +152,17 @@ export default function DashboardHome() {
               <div className="font-semibold">🔍 종목 분석</div>
               <div className="text-xs text-muted-foreground mt-1">
                 4 에이전트 종합 + 검증
+              </div>
+            </div>
+          </Link>
+          <Link
+            href="/etf"
+            className={`${buttonVariants({ variant: "outline", size: "lg" })} h-auto py-4 px-4 justify-start`}
+          >
+            <div className="text-left w-full">
+              <div className="font-semibold">🧺 ETF 탐색</div>
+              <div className="text-xs text-muted-foreground mt-1">
+                국내·해외 ETF 정보·구성종목·비중
               </div>
             </div>
           </Link>

@@ -16,6 +16,7 @@ const REGION_LABEL: Record<string, string> = {
   domestic: "🇰🇷 국내",
   foreign: "🌐 국내상장 국외",
   mixed: "🌗 혼합",
+  us: "🇺🇸 미국 상장",
   unknown: "ETF",
 };
 

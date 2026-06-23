@@ -32,7 +32,7 @@ export interface EtfDetail {
   chase_error_rate: number | null;
   deviation_rate: number | null;
   listed_date: string;
-  underlying_region: "domestic" | "foreign" | "mixed" | "unknown";
+  underlying_region: "domestic" | "foreign" | "mixed" | "us" | "unknown";
   top_holdings: EtfHolding[];
   sector_breakdown: EtfBreakdown[];
   country_breakdown: EtfBreakdown[];
