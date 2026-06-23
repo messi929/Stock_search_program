@@ -36,7 +36,7 @@ PLAN_LIMITS: dict[str, dict[str, int]] = {
     #       상세: docs/axis/UNIT_ECONOMICS.md
     "free": {"analyses": 20, "validations": 10, "discoveries": 5},
     "pro": {"analyses": 100, "validations": 50, "discoveries": 30},
-    "premium": {"analyses": 300, "validations": 150, "discoveries": 100},
+    # Premium은 2-tier 전환 시 제거(2026-06). 추후 재도입 시 별도 검토.
 }
 
 # analyses(딥다이브)로 카운트되는 에이전트 — 파이프라인 종착점 호출 1회 = 분석 1회.
@@ -1400,16 +1400,16 @@ def _custom_screeners_col(uid: str):
 
 
 def _require_pro(request: Request) -> str:
-    """uid 추출 + Pro/Premium 확인. 실패 시 HTTPException."""
+    """uid 추출 + Pro 확인. 실패 시 HTTPException."""
     user = getattr(request.state, "user", None) or {}
     uid = user.get("uid", "")
     if not uid:
         raise HTTPException(401, {"code": "UNAUTHORIZED", "message": "로그인 필요"})
     tier = (user.get("tier") or "free").lower()
-    if tier not in ("pro", "premium"):
+    if tier != "pro":
         raise HTTPException(
             402,
-            {"code": "PRO_REQUIRED", "message": "커스텀 스크리너는 Pro 이상 전용입니다."},
+            {"code": "PRO_REQUIRED", "message": "커스텀 스크리너는 Pro 전용입니다."},
         )
     return uid
 

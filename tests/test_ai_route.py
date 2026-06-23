@@ -166,7 +166,7 @@ def test_quota_enforcement() -> None:
     limits = ai.PLAN_LIMITS
     assert limits["pro"]["analyses"] == 100, "Pro 공정사용 한도 100회 (2026-06 결정)"
     assert limits["free"]["analyses"] == 20
-    assert limits["premium"]["analyses"] == 300
+    assert "premium" not in limits, "Premium 티어 제거됨 (2-tier)"
 
     # _count_month_usage를 monkeypatch (Firestore 의존 제거)
     orig = ai._count_month_usage
@@ -208,7 +208,7 @@ def test_quota_enforcement() -> None:
     finally:
         ai._count_month_usage = orig
 
-    print("[quota] Free 20 / Pro 100 / Premium 300 enforce OK")
+    print("[quota] Free 20 / Pro 100 enforce OK (Premium 제거)")
 
 
 def main() -> None:

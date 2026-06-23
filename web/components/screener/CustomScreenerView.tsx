@@ -53,7 +53,7 @@ const INITIAL_VALUE: FilterBuilderValue = {
 export function CustomScreenerView() {
   const { data: personas, isLoading: planLoading } = usePersonas();
   const userPlan = (personas?.user_plan ?? "free").toLowerCase();
-  const isPro = userPlan === "pro" || userPlan === "premium";
+  const isPro = userPlan === "pro";
 
   const [value, setValue] = useState<FilterBuilderValue>(INITIAL_VALUE);
   const [activeId, setActiveId] = useState<string | null>(null);

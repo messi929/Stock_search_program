@@ -376,7 +376,7 @@ export type Horizon = {
 
 export type PersonasResponse = {
   personas: Persona[];
-  user_plan: "free" | "pro" | "premium";
+  user_plan: "free" | "pro";
   user_default_persona: string;
   /** 4개 시간 시계 (단기/단중기/중기/장기). */
   horizons: Horizon[];

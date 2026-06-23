@@ -9,7 +9,6 @@ import type { UsageMetric } from "@/types/api";
 const PLAN_LABEL: Record<string, string> = {
   free: "무료",
   pro: "Pro",
-  premium: "Premium",
 };
 
 // kind: /history?kind= 로 전달 (analysis|validation|discovery)

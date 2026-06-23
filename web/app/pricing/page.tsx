@@ -13,7 +13,7 @@ import { Card, CardContent } from "@/components/ui/card";
 
 export const metadata = {
   title: "요금제 — Axis",
-  description: "Free / Pro / Premium 요금제",
+  description: "Free / Pro 요금제",
 };
 
 const TIERS = [
