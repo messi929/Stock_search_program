@@ -1,0 +1,2 @@
+# Windows 배치 파일은 cmd.exe 호환을 위해 항상 CRLF로 체크아웃 (LF면 실행 실패)
+*.bat text eol=crlf
