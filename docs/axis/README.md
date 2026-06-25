@@ -14,6 +14,7 @@ docs/axis/
 ├── PROGRESS.md                 # Week 1~6 진척 + 라운드 1~3 결과 (2026-04-30 갱신)
 ├── NEXT_STEPS.md               # 남은 작업 + 사용자 액션 + LEGAL/비용 잔여
 ├── REDESIGN.md                 # 🆕 분석 시간 단축 재설계 (post-beta 큰 작업)
+├── MARKETING.md                # 🆕 마케팅 전략(스레드 0→1) + 콘텐츠 공장 기능/사용법
 ├── BETA_GUIDE.md               # 베타 테스터 안내
 ├── INTEGRATION_NOTES.md        # v7.5 연동 메모
 │
