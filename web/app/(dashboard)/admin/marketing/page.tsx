@@ -21,13 +21,22 @@ const STATUS_FILTERS: { key: string; label: string }[] = [
   { key: "", label: "전체" },
   { key: "draft", label: "초안" },
   { key: "approved", label: "승인됨" },
+  { key: "published", label: "발행됨" },
   { key: "archived", label: "보관" },
 ];
 
 const STATUS_BADGE: Record<DraftStatus, string> = {
   draft: "bg-slate-500/15 text-slate-300",
   approved: "bg-emerald-500/15 text-emerald-300",
+  published: "bg-sky-500/15 text-sky-300",
   archived: "bg-zinc-500/15 text-zinc-400",
+};
+
+const STATUS_LABEL: Record<DraftStatus, string> = {
+  draft: "초안",
+  approved: "승인됨",
+  published: "발행됨",
+  archived: "보관",
 };
 
 export default function AdminMarketingPage() {
@@ -37,7 +46,15 @@ export default function AdminMarketingPage() {
   // null = 아직 사용자가 손대지 않음 → 서버 기본값 사용
   const [selectedFormats, setSelectedFormats] = useState<string[] | null>(null);
   const [generating, setGenerating] = useState(false);
+  const [briefingGenerating, setBriefingGenerating] = useState(false);
   const [statusFilter, setStatusFilter] = useState("");
+
+  const publishStatusQ = useQuery({
+    queryKey: ["admin", "marketing", "publish-status"],
+    queryFn: marketingApi.publishStatus,
+    staleTime: 5 * 60_000,
+  });
+  const publishEnabled = publishStatusQ.data?.enabled ?? false;
 
   const formatsQ = useQuery({
     queryKey: ["admin", "marketing", "formats"],
@@ -85,6 +102,19 @@ export default function AdminMarketingPage() {
       toast.error(e instanceof Error ? e.message : "생성 실패");
     } finally {
       setGenerating(false);
+    }
+  };
+
+  const generateBriefing = async () => {
+    setBriefingGenerating(true);
+    try {
+      const res = await marketingApi.generateBriefing();
+      toast.success(`브리핑 ${res.count}건 생성됨`);
+      draftsQ.refetch();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "브리핑 생성 실패");
+    } finally {
+      setBriefingGenerating(false);
     }
   };
 
@@ -164,6 +194,32 @@ export default function AdminMarketingPage() {
         </div>
       </div>
 
+      {/* ── 새벽 미국시장 브리핑 생성 ── */}
+      <div className="flex items-center justify-between gap-3 rounded-lg border p-4">
+        <div>
+          <p className="text-sm font-medium">🌙 새벽 미국시장 브리핑</p>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            간밤 S&P500·나스닥·다우·반도체·환율을 모아 중립 브리핑 글을 생성합니다.
+            종목 입력 불필요.
+          </p>
+        </div>
+        <Button
+          type="button"
+          variant="outline"
+          onClick={generateBriefing}
+          disabled={briefingGenerating}
+        >
+          {briefingGenerating ? "생성 중..." : "🌙 브리핑 생성"}
+        </Button>
+      </div>
+
+      {!publishEnabled && (
+        <p className="text-xs text-amber-400">
+          ⚠ Threads 자동발행이 비활성 상태입니다(토큰 미설정). 지금은 복사 후 수동 발행만
+          가능합니다.
+        </p>
+      )}
+
       {/* ── 상태 필터 ── */}
       <div className="flex items-center gap-1.5">
         {STATUS_FILTERS.map((s) => (
@@ -199,6 +255,7 @@ export default function AdminMarketingPage() {
               key={d.id}
               draft={d}
               maxChars={maxChars}
+              publishEnabled={publishEnabled}
               onChanged={() => draftsQ.refetch()}
             />
           ))}
@@ -215,10 +272,12 @@ export default function AdminMarketingPage() {
 function DraftCard({
   draft,
   maxChars,
+  publishEnabled,
   onChanged,
 }: {
   draft: MarketingDraft;
   maxChars: number;
+  publishEnabled: boolean;
   onChanged: () => void;
 }) {
   const [text, setText] = useState(draft.text);
@@ -233,12 +292,28 @@ function DraftCard({
     setText(draft.text);
   }
 
+  const isBriefing = draft.kind === "briefing";
+  const isPublished = draft.status === "published";
   const dirty = text !== draft.text;
   const over = text.length > maxChars;
   const ogUrl = useMemo(
     () => `/stocks/${encodeURIComponent(draft.ticker)}/opengraph-image`,
     [draft.ticker],
   );
+
+  const publish = async () => {
+    if (!confirm("이 글을 Threads에 지금 발행할까요? (되돌릴 수 없습니다)")) return;
+    setBusy(true);
+    try {
+      const res = await marketingApi.publish(draft.id);
+      toast.success("Threads에 발행됨" + (res.draft?.permalink ? "" : ""));
+      onChanged();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "발행 실패");
+    } finally {
+      setBusy(false);
+    }
+  };
 
   const save = async () => {
     setBusy(true);
@@ -293,24 +368,35 @@ function DraftCard({
     <div className="rounded-lg border p-4 space-y-3">
       {/* 헤더 */}
       <div className="flex items-center gap-2 flex-wrap">
-        <span className="font-semibold text-sm">{draft.name || draft.ticker}</span>
-        <span className="text-xs text-muted-foreground">{draft.ticker}</span>
+        <span className="font-semibold text-sm">
+          {isBriefing ? "🌙 " : ""}
+          {draft.name || draft.ticker}
+        </span>
+        {!isBriefing && (
+          <span className="text-xs text-muted-foreground">{draft.ticker}</span>
+        )}
         <span className="px-2 py-0.5 rounded-full text-[11px] bg-blue-500/15 text-blue-300">
           {draft.fmt_label}
         </span>
         <span
           className={`px-2 py-0.5 rounded-full text-[11px] ${STATUS_BADGE[draft.status]}`}
         >
-          {draft.status === "draft"
-            ? "초안"
-            : draft.status === "approved"
-              ? "승인됨"
-              : "보관"}
+          {STATUS_LABEL[draft.status]}
         </span>
         {draft.filtered.length > 0 && (
           <span className="px-2 py-0.5 rounded-full text-[11px] bg-amber-500/15 text-amber-300">
             ⚠ 필터됨: {draft.filtered.join(", ")}
           </span>
+        )}
+        {isPublished && draft.permalink && (
+          <a
+            href={draft.permalink}
+            target="_blank"
+            rel="noreferrer"
+            className="text-[11px] text-sky-400 underline underline-offset-2"
+          >
+            발행글 보기 ↗
+          </a>
         )}
       </div>
 
@@ -330,7 +416,7 @@ function DraftCard({
           {text.length} / {maxChars}자{over ? " (초과!)" : ""}
         </span>
         <div className="ml-auto flex items-center gap-2">
-          {dirty && (
+          {dirty && !isPublished && (
             <Button size="sm" variant="outline" onClick={save} disabled={busy}>
               저장
             </Button>
@@ -338,27 +424,41 @@ function DraftCard({
           <Button size="sm" variant="outline" onClick={copy} disabled={over}>
             📋 복사
           </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => setShowOg((v) => !v)}
-          >
-            {showOg ? "카드 숨기기" : "🖼 OG카드"}
-          </Button>
-          {draft.status !== "approved" ? (
-            <Button size="sm" onClick={() => setStatus("approved")} disabled={busy}>
-              ✓ 승인
-            </Button>
-          ) : (
+          {!isBriefing && (
             <Button
               size="sm"
               variant="outline"
-              onClick={() => setStatus("draft")}
-              disabled={busy}
+              onClick={() => setShowOg((v) => !v)}
             >
-              초안으로
+              {showOg ? "카드 숨기기" : "🖼 OG카드"}
             </Button>
           )}
+          {!isPublished && publishEnabled && (
+            <Button
+              size="sm"
+              onClick={publish}
+              disabled={busy || over || dirty}
+              title={dirty ? "수정사항을 먼저 저장하세요" : "Threads에 발행"}
+              className="bg-sky-600 hover:bg-sky-500"
+            >
+              🚀 발행
+            </Button>
+          )}
+          {!isPublished &&
+            (draft.status !== "approved" ? (
+              <Button size="sm" variant="outline" onClick={() => setStatus("approved")} disabled={busy}>
+                ✓ 승인
+              </Button>
+            ) : (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setStatus("draft")}
+                disabled={busy}
+              >
+                초안으로
+              </Button>
+            ))}
           <Button
             size="sm"
             variant="outline"

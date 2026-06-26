@@ -60,3 +60,73 @@ def fetch_market_news(limit: int = 8, timeout: float = 4.0) -> list[dict]:
         _CACHE["at"] = now
         _CACHE["items"] = items
     return items[:limit]
+
+
+# ──────────────────────────────────────────────
+# 새벽 미국시장 뉴스 — 등락 '이유' 보강 (Google News RSS 검색)
+# ──────────────────────────────────────────────
+
+# Google News RSS 검색은 공개 피드. 한국어 '뉴욕증시' 기사는 간밤 등락의
+# 원인(테크/반도체/금리/실적/관세 등)을 함께 담아, 브리핑에 '왜'를 채운다.
+_GNEWS_RSS = "https://news.google.com/rss/search"
+_US_QUERIES: tuple[str, ...] = ("뉴욕증시", "나스닥 반도체")
+
+_US_CACHE: dict[str, object] = {"at": 0.0, "items": []}
+
+
+def fetch_overnight_us_news(limit: int = 8, timeout: float = 5.0) -> list[dict]:
+    """간밤 미국증시 한국어 헤드라인(등락 이유 포함). 실패 시 빈 리스트.
+
+    Google News RSS 검색('뉴욕증시' 등)으로 최신 기사를 모은다. 헤드라인만 사용하며,
+    브리핑 에이전트가 '근거 있을 때만' 원인을 1줄 덧붙이는 데 쓴다(추측 금지).
+    """
+    now = time.time()
+    cached = _US_CACHE.get("items") or []
+    if cached and (now - float(_US_CACHE.get("at", 0.0))) < _TTL_SEC:
+        return list(cached)[:limit]
+
+    items: list[dict] = []
+    seen: set[str] = set()
+    headers = {"User-Agent": "AxisResearch/1.0 (+https://axislytics.com)"}
+    for q in _US_QUERIES:
+        try:
+            r = httpx.get(
+                _GNEWS_RSS,
+                params={"q": q, "hl": "ko", "gl": "KR", "ceid": "KR:ko"},
+                timeout=timeout,
+                headers=headers,
+                follow_redirects=True,
+            )
+            if r.status_code != 200 or not r.content:
+                continue
+            root = ElementTree.fromstring(r.content)
+            count = 0
+            for item in root.iter("item"):
+                title = (item.findtext("title") or "").strip()
+                if not title or title in seen:
+                    continue
+                seen.add(title)
+                # "제목 - 출처" 형태에서 출처 분리(있으면)
+                src = "구글뉴스"
+                if " - " in title:
+                    head, _, tail = title.rpartition(" - ")
+                    if head and tail:
+                        title, src = head.strip(), tail.strip()
+                items.append(
+                    {
+                        "headline": title,
+                        "source": src,
+                        "published_at": (item.findtext("pubDate") or "").strip(),
+                        "link": (item.findtext("link") or "").strip(),
+                    }
+                )
+                count += 1
+                if count >= 6:  # 쿼리별 최대 6
+                    break
+        except Exception as e:
+            logger.debug(f"[news_rss] US '{q}' 실패: {type(e).__name__}: {str(e)[:80]}")
+
+    if items:
+        _US_CACHE["at"] = now
+        _US_CACHE["items"] = items
+    return items[:limit]

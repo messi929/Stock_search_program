@@ -4,10 +4,11 @@
  */
 import { apiCall } from "@/lib/api";
 
-export type DraftStatus = "draft" | "approved" | "archived";
+export type DraftStatus = "draft" | "approved" | "archived" | "published";
 
 export interface MarketingDraft {
   id: string;
+  kind: "stock" | "briefing";
   ticker: string;
   name: string;
   market: string;
@@ -19,6 +20,8 @@ export interface MarketingDraft {
   status: DraftStatus;
   filtered: string[];
   source: string;
+  permalink: string;
+  published_at: string | null;
   created_at: string | null;
   updated_at: string | null;
 }
@@ -51,6 +54,11 @@ export const marketingApi = {
       "/api/admin/marketing/generate",
       { method: "POST", body: JSON.stringify(req) },
     ),
+  generateBriefing: () =>
+    apiCall<{ created: MarketingDraft[]; count: number }>(
+      "/api/admin/marketing/briefing/generate",
+      { method: "POST" },
+    ),
   update: (id: string, patch: { text?: string; status?: DraftStatus }) =>
     apiCall<{ ok: boolean; draft: MarketingDraft }>(
       `/api/admin/marketing/drafts/${id}`,
@@ -60,4 +68,11 @@ export const marketingApi = {
     apiCall<{ ok: boolean }>(`/api/admin/marketing/drafts/${id}`, {
       method: "DELETE",
     }),
+  publishStatus: () =>
+    apiCall<{ enabled: boolean }>("/api/admin/marketing/publish-status"),
+  publish: (id: string) =>
+    apiCall<{ ok: boolean; draft: MarketingDraft }>(
+      `/api/admin/marketing/drafts/${id}/publish`,
+      { method: "POST" },
+    ),
 };

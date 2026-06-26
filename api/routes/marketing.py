@@ -17,11 +17,12 @@ from starlette.responses import JSONResponse
 
 from agents.marketer import DEFAULT_FORMATS, FORMATS, THREADS_MAX, generate_batch, pick_hot_tickers
 from screener.api.admin_routes import _forbid, _is_admin
+from utils import threads_client
 
 router = APIRouter(prefix="/api/admin/marketing")
 
 _COLLECTION = "marketing_drafts"
-_VALID_STATUS = ("draft", "approved", "archived")
+_VALID_STATUS = ("draft", "approved", "archived", "published")
 
 
 def _iso(v):
@@ -37,6 +38,7 @@ def _iso(v):
 def _serialize(doc_id: str, d: dict) -> dict:
     return {
         "id": doc_id,
+        "kind": d.get("kind", "stock"),  # "stock"(종목글) | "briefing"(시황브리핑)
         "ticker": d.get("ticker", ""),
         "name": d.get("name", ""),
         "market": d.get("market", ""),
@@ -48,6 +50,8 @@ def _serialize(doc_id: str, d: dict) -> dict:
         "status": d.get("status", "draft"),
         "filtered": d.get("filtered", []) or [],
         "source": d.get("source", "haiku"),
+        "permalink": d.get("permalink", ""),
+        "published_at": _iso(d.get("published_at")),
         "created_at": _iso(d.get("created_at")),
         "updated_at": _iso(d.get("updated_at")),
     }
@@ -153,6 +157,126 @@ async def generate_drafts(request: Request):
         f"(종목 {tickers}, 포맷 {formats})"
     )
     return {"created": created, "count": len(created)}
+
+
+@router.post("/briefing/generate")
+async def generate_briefing_draft(request: Request):
+    """새벽 미국시장 브리핑 초안 1건 생성 → Firestore 저장.
+
+    간밤 미국 지수(FDR) + RSS 뉴스 → Haiku 1회. 종목 입력 불필요.
+    """
+    if not _is_admin(request):
+        return _forbid()
+
+    user = getattr(request.state, "user", None) or {}
+    uid = user.get("uid", "") if isinstance(user, dict) else ""
+
+    from agents.briefing import generate_briefing
+
+    post = await generate_briefing(uid=uid)
+    if not post:
+        return JSONResponse(
+            status_code=502,
+            content={"detail": "브리핑 생성 실패(지수 데이터 또는 AI 응답 없음)"},
+        )
+
+    from firebase_admin import firestore
+
+    from screener.db.firebase_client import get_db
+
+    db = get_db()
+    now = firestore.SERVER_TIMESTAMP
+    try:
+        ref = db.collection(_COLLECTION).document()
+        ref.set({**post, "status": "draft", "created_at": now, "updated_at": now})
+        doc = ref.get()
+        serialized = _serialize(ref.id, doc.to_dict() or post)
+    except Exception as e:
+        logger.warning(f"[marketing] 브리핑 저장 실패: {e}")
+        return JSONResponse(status_code=500, content={"detail": "초안 저장 실패"})
+
+    logger.info(f"[marketing] 브리핑 초안 생성 by {user.get('email', '?')}")
+    return {"created": [serialized], "count": 1}
+
+
+@router.get("/publish-status")
+async def publish_status(request: Request):
+    """Threads 자동발행 가능 여부(토큰/USER_ID 설정 여부). 프론트 발행버튼 활성화용."""
+    if not _is_admin(request):
+        return _forbid()
+    return {"enabled": threads_client.is_enabled()}
+
+
+@router.post("/drafts/{draft_id}/publish")
+async def publish_draft(request: Request, draft_id: str):
+    """초안을 Threads에 발행 → status=published + permalink 기록.
+
+    Threads 미설정(토큰 없음)이면 503. 발행 실패 시 502(초안은 그대로 유지).
+    """
+    if not _is_admin(request):
+        return _forbid()
+    if not threads_client.is_enabled():
+        return JSONResponse(
+            status_code=503,
+            content={"detail": "Threads 자동발행 미설정(THREADS_ACCESS_TOKEN/USER_ID)"},
+        )
+
+    from firebase_admin import firestore
+
+    from screener.db.firebase_client import get_db
+
+    db = get_db()
+    ref = db.collection(_COLLECTION).document(draft_id)
+    snap = ref.get()
+    if not snap.exists:
+        return JSONResponse(status_code=404, content={"detail": "초안 없음"})
+    data = snap.to_dict() or {}
+
+    if data.get("status") == "published":
+        return JSONResponse(status_code=409, content={"detail": "이미 발행된 초안입니다"})
+
+    text = str(data.get("text") or "").strip()
+    if not text:
+        return JSONResponse(status_code=400, content={"detail": "본문이 비어 있습니다"})
+
+    # 발행 직전 금지표현 재검증(이중 안전)
+    from agents.base import BaseAgent
+
+    _filtered_text, found = BaseAgent.filter_forbidden(text)
+    if found:
+        return JSONResponse(
+            status_code=422,
+            content={"detail": f"금지표현 검출({found}) — 수정 후 발행하세요"},
+        )
+
+    try:
+        result = await threads_client.publish_text(text)
+    except Exception as e:
+        logger.warning(f"[marketing] 발행 실패 {draft_id}: {e}")
+        return JSONResponse(status_code=502, content={"detail": f"발행 실패: {e}"})
+
+    try:
+        ref.set(
+            {
+                "status": "published",
+                "permalink": result.get("permalink", ""),
+                "threads_post_id": result.get("id", ""),
+                "published_at": firestore.SERVER_TIMESTAMP,
+                "updated_at": firestore.SERVER_TIMESTAMP,
+            },
+            merge=True,
+        )
+        doc = ref.get()
+    except Exception as e:
+        logger.warning(f"[marketing] 발행 후 상태 저장 실패 {draft_id}: {e}")
+        # 발행 자체는 성공했으므로 permalink는 반환
+        return {"ok": True, "permalink": result.get("permalink", ""), "warning": "상태 저장 실패"}
+
+    logger.info(
+        f"[marketing] 발행 완료 {draft_id} by {getattr(request.state, 'user', {}) or {}} "
+        f"{result.get('permalink', '')}"
+    )
+    return {"ok": True, "draft": _serialize(draft_id, doc.to_dict() or {})}
 
 
 @router.patch("/drafts/{draft_id}")

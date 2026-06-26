@@ -67,9 +67,12 @@ def _save_drafts(posts: list[dict]) -> int:
         saved = 0
         for p in posts:
             try:
-                db.collection("marketing_drafts").document().set(
-                    {**p, "status": "draft", "created_at": now, "updated_at": now}
-                )
+                # status가 이미 지정돼 있으면 존중(자동발행 경로의 published 등), 없으면 draft
+                status = p.get("status") or "draft"
+                doc = {**p, "status": status, "created_at": now, "updated_at": now}
+                if status == "published" and "published_at" not in doc:
+                    doc["published_at"] = now
+                db.collection("marketing_drafts").document().set(doc)
                 saved += 1
             except Exception as e:
                 logger.warning(f"[marketing] 저장 실패 {p.get('ticker')}: {e}")
