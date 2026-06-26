@@ -42,7 +42,9 @@ done
 IMAGE="gcr.io/${PROJECT_ID}/${IMAGE_NAME}:latest"
 PROJECT_NUMBER=$(gcloud projects describe "${PROJECT_ID}" --format="value(projectNumber)")
 SA="${PROJECT_NUMBER}-compute@developer.gserviceaccount.com"
-SCHED_SA="${PROJECT_ID}@appspot.gserviceaccount.com"
+# 스케줄러 OAuth SA — 이 프로젝트엔 App Engine이 없어 appspot SA가 없다.
+# 기존 axis-* 스케줄러와 동일하게 compute SA를 사용한다.
+SCHED_SA="${SA}"
 
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo "  프로젝트: ${PROJECT_ID}  리전: ${REGION}"
