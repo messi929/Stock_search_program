@@ -1,7 +1,7 @@
 # MARKETING.md — 마케팅 전략 & 콘텐츠 공장
 
 > 0→1(첫 사용자 확보) 단계의 마케팅 전략과, 이를 위해 구현한 "콘텐츠 공장" 기능 문서.
-> 최종 갱신: 2026-06-26
+> 최종 갱신: 2026-06-27
 
 ---
 
@@ -38,7 +38,7 @@
 ### 전환 경로 (스레드 → 가입)
 1. 게시물엔 결과 절반만 노출 → "전체 분석은 프로필 링크"
 2. 프로필 링크 = `/stocks/[ticker]` 공개 페이지 → 검색 → 로그인 게이트 → AI 딥다이브
-3. 무료 1회 경험 → 가입. (유입 측정은 공유링크 UTM → `/admin/funnel`)
+3. 무료 1회 경험 → 가입. (클릭 측정은 Threads 자체 링크 분석. UTM 가입귀속은 미구현 — §7 참고)
 
 ### 운영 원칙
 - 유용한 글 8 : 홍보 2 (스레드는 광고성 글 도달을 죽임)
@@ -102,30 +102,71 @@
 
 ---
 
-## 5. Phase 2 — Threads 자동 발행 (미구현)
+## 5. Phase 2 — Threads 자동 발행 ✅ 배포 완료 (2026-06-27)
 
-검수·승인한 초안을 Threads API로 바로 발행.
+검수·승인한 초안을 Threads API로 바로 발행. 커밋 `f50bc39`, `f587b18`. 발급 절차 = [THREADS_PUBLISHING.md](THREADS_PUBLISHING.md).
 
-### Threads API 사실
-- 2단계: 컨테이너 생성 `POST /{user-id}/threads` → 발행 `POST /{user-id}/threads_publish`
-- base: `https://graph.threads.net/v1.0/`, 텍스트 **500자**, 하루 **250개**
-- 이미지는 **공개 URL** 필요 → 기존 OG카드 `/stocks/[ticker]/opengraph-image` 그대로 첨부 가능
+### 토큰 (✅ 확보)
+- 발행 계정 `@axislystics`(공개), Meta 앱 "Axis"(앱ID `2849320188770068`)
+- **콘솔 "사용자 토큰 생성기"로 장기 토큰 직접 발급** = 1계정 정석 지름길(OAuth 브라우저플로우/curl 불필요)
+  - 함정: 앱 역할에 Threads Tester 추가 → **발행계정 본인으로 threads.net 설정→웹사이트 권한→초대 탭에서 'Axis' 글자 클릭해 수락**(삭제버튼=거절) → 콘솔 하드새로고침 → 토큰 생성
+- `THREADS_USER_ID`(숫자, `/me`로 획득) + `THREADS_ACCESS_TOKEN`(60일, ~2026-08-25 만료, refresh 필요). 값=`API_KEYS.local.txt` 11번. GCP Secret 등록 완료.
 
-### 선행 조건 (JEON 직접 셋업 — 며칠 소요)
-1. Meta 앱 생성(Threads use case)
-2. 인스타그램 **비즈니스/크리에이터** 계정을 Threads에 연결
-3. **비즈니스 계정 인증** (승인 지연 가능)
-4. 장기 토큰(60일, refresh) 발급 → 본인 1계정이라 OAuth 유저플로우 불필요
+### 구현 (배포됨)
+| 구성 | 파일 |
+|------|------|
+| 발행 클라이언트 | `utils/threads_client.py` (2단계 발행, **httpx UTF-8**, 재시도, is_enabled/publish_text/get_me/refresh_token) |
+| 발행 라우트 | `POST /api/admin/marketing/drafts/{id}/publish`(발행 전 `filter_forbidden` 재검증→status=published+permalink), `GET /publish-status` |
+| 발행 버튼 | 검수 카드 🚀발행 (publish_status=enabled일 때) |
 
-### 구현 예정
-- `utils/threads_client.py` (컨테이너 생성→발행, 토큰 갱신, OG카드 첨부)
-- 라우트 `POST /api/admin/marketing/drafts/{id}/publish` + UI "승인 → 자동 발행" 버튼
-- Secret: `THREADS_ACCESS_TOKEN`, `THREADS_USER_ID`
-- (선택) Cloud Run Jobs 예약 발행
+> ⚠️ **한글 발행은 반드시 Python httpx(UTF-8)** — Windows Git Bash로 `curl --data-urlencode "text=한글"` 하면 깨짐. ⚠️ Threads API는 **글 삭제 미지원**(테스트글은 앱에서 수동삭제).
 
 ---
 
-## 6. 알려진 한계 / 메모
-- Haiku 특성상 가끔 어색한 표현("봉투 데이터" 등) 발생 → 검수 탭에서 수정. 잦으면 프롬프트 강화.
+## 6. 일일 콘텐츠 엔진 — 새벽 미국시장 브리핑 + 양쪽관점 (✅ 배포)
+
+매일 자동으로 2종 생성 → 검수 큐 → 🚀발행. Cloud Run Job `axis-threads-daily` + 스케줄러 **평일 07:30 KST**. `jobs/daily_threads_content.py`.
+
+### 🌙 새벽 미국시장 브리핑 (`agents/briefing.py`, **Sonnet**)
+- **지수**: FinanceDataReader로 S&P500/나스닥/다우/필라델피아반도체(SOXX)/VIX/원달러 종가·등락
+- **왜(분석)+근거**: `utils/news_rss.fetch_overnight_us_news()`(Google News RSS '뉴욕증시'/'나스닥 반도체')에서 등락 원인 헤드라인을 받아, **①무슨일 ②왜(구체적 촉발요인 — "매도세/투심위축" 동어반복 금지) ③근거(출처/사실)** 구조로 작성
+- **환각 금지**: 원인은 **제공된 헤드라인 안에서만** 도출, 근거 없으면 추측 X. 순한국어. ~25원/건.
+- (예) 반도체 -4.7% → "오픈AI IPO 연기설로 AI·기술주 투심 위축 + 마이크론 실적 경계감"
+
+### 📊 양쪽관점 종목글 = 기존 `marketer.contrarian` 재활용 (Haiku ~5원)
+
+### 운영 모드
+- 기본 = **검수 큐**(생성만, 발행 X) → `/admin/marketing`에서 보고 🚀발행
+- 완전 자동발행 전환 = 잡 args에 `--publish` 추가(`deploy-threads-job.sh`)
+- 하루 비용 ≈ 브리핑 25원 + 종목글 10원 = **~35원**
+
+---
+
+## 7. 채널 구조 + Threads 프로필
+
+### 채널 (2개 사이트가 역할 분담, Threads가 허브)
+- 🌙 **StockBizView** (stockbizview.com) = **시황분석** ← 브리핑 글이 연결
+- 📈 **Axis** (axislytics.com) = **종목분석** ← 양쪽관점 종목글이 연결
+- Threads `@axislystics` = 두 채널 먹여주는 콘텐츠 허브
+
+### 프로필 (확정 2026-06-27) — Threads API로 수정 불가, 수동 입력
+- **이름**(프로필 상단 노출): `Axis · 데이터로 읽는 투자 기준`
+- **사용자이름/핸들**(게시글마다 노출): `axislystics` → 오타처럼 보이고 도메인 불일치, **`axislytics`로 변경 권장**
+- **소개(bio)** — 방어/면책 톤 금지(자신감):
+  ```
+  새벽 미국장 정리부터 화제 종목까지, 매일.
+  강점만 보면 물리기 쉽죠. 약점도 같이.
+  🌙 시황 · 📈 종목분석 ↓
+  ```
+- **로고**: 실제 폰트(Century Gothic Bold) 'axis' 소문자 워드마크 + 민트 축라인. `바탕화면\axis_logo\axis_avatar.png`(다크·원형크롭 안전) + light/transparent. (※ Pillow 손그림 도형은 아마추어 → 실폰트 워드마크가 정답)
+- **링크**: Threads 멀티링크(최대 5, 제목만 노출·URL 숨김). 시황=StockBizView, 종목=Axis. 웹은 저장 버그 잦음 → **모바일 앱 권장**.
+
+> 전환 추적: **UTM 캡처 로직은 미구현**(URL에 utm 붙여도 무시됨). 클릭수는 **Threads 자체 링크 분석**으로 확인. 가입 귀속이 필요해지면 그때 캡처 구현.
+
+---
+
+## 8. 알려진 한계 / 메모
+- Haiku 특성상 가끔 어색한 표현 발생 → 검수 탭에서 수정. (브리핑은 Sonnet이라 품질↑)
 - 스냅샷 미적재 환경(서버 밖·종목 미보유)에선 수치 없는 일반론 글이 나옴 → 로컬은 `prime_name_store`로 해결.
-- 관련 문서: [LEGAL.md](LEGAL.md)(절대 원칙), [UNIT_ECONOMICS.md](UNIT_ECONOMICS.md)(비용), [PROGRESS.md](PROGRESS.md).
+- 토큰 60일 만료(~2026-08-25) 전 refresh 필요 — 자동 갱신 Job은 후속.
+- 관련 문서: [THREADS_PUBLISHING.md](THREADS_PUBLISHING.md)(토큰 발급), [LEGAL.md](LEGAL.md)(절대 원칙), [UNIT_ECONOMICS.md](UNIT_ECONOMICS.md)(비용), [PROGRESS.md](PROGRESS.md).
