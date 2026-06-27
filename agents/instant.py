@@ -82,6 +82,63 @@ def build_instant_snapshot(ticker: str) -> Optional[dict]:
     }
 
 
+def _is_subsequence(needle: str, hay: str) -> bool:
+    """needle의 문자들이 hay 안에 순서대로 등장하는가. 'HD일렉트릭' ⊂ 'HD현대일렉트릭'."""
+    it = iter(hay)
+    return all(ch in it for ch in needle)
+
+
+def resolve_ticker(query: str) -> Optional[str]:
+    """입력(티커 또는 종목명) → 적재된 실제 티커. 못 찾으면 None.
+
+    사용자가 '267260' 대신 'HD일렉트릭'(축약 종목명)을 넣어도 매칭되게 한다.
+    우선순위: 티커 정확 → 종목명 정확 → 종목명 부분포함 → 서브시퀀스(공백·대소문자 무시).
+    부분포함/서브시퀀스에서 후보가 여럿이면 **가장 짧은 이름**(가장 구체적)을 고른다.
+    """
+    if not query:
+        return None
+    q = query.strip()
+    try:
+        from screener.api.routes import _get_combined_df
+
+        df = _get_combined_df()
+        if df is None or df.empty:
+            return None
+        tcol = df["ticker"].astype(str)
+        exact = df[tcol.str.upper() == q.upper()]
+        if not exact.empty:
+            return str(exact.iloc[0]["ticker"])
+        if "name" not in df.columns:
+            return None
+
+        qn = q.upper().replace(" ", "")
+        nnorm = df["name"].astype(str).str.upper().str.replace(" ", "", regex=False)
+
+        name_exact = df[nnorm == qn]
+        if not name_exact.empty:
+            return str(name_exact.iloc[0]["ticker"])
+
+        def _shortest(mask) -> Optional[str]:
+            sub = df[mask]
+            if sub.empty:
+                return None
+            idx = nnorm[sub.index].str.len().idxmin()
+            return str(df.loc[idx, "ticker"])
+
+        part = _shortest(nnorm.str.contains(re.escape(qn), na=False))
+        if part:
+            return part
+
+        if len(qn) >= 3:
+            subseq_mask = nnorm.apply(lambda nm: bool(nm) and _is_subsequence(qn, nm))
+            sub = _shortest(subseq_mask)
+            if sub:
+                return sub
+    except Exception as e:
+        logger.debug(f"[instant] resolve_ticker 실패 {query}: {e}")
+    return None
+
+
 # ──────────────────────────────────────────────
 # 빠른 요약 (Haiku 1회 — ~5원, ~2s)
 # ──────────────────────────────────────────────

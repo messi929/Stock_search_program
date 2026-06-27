@@ -26,7 +26,7 @@ from loguru import logger
 from pydantic import BaseModel, Field
 
 from agents.base import BaseAgent
-from agents.instant import build_instant_snapshot, _snapshot_facts
+from agents.instant import build_instant_snapshot, resolve_ticker, _snapshot_facts
 from utils.claude_client import MODEL_HAIKU, MODEL_SONNET
 
 # 마케팅 글 = 서비스의 얼굴 → 품질 우선 기본 Sonnet. 비용 절감 시 MARKETER_MODEL=haiku.
@@ -165,6 +165,8 @@ class MarketerAgent(BaseAgent):
     ) -> Optional[dict]:
         """단일 (종목 × 포맷) 초안 생성. 실패 시 None."""
         fmt = fmt if fmt in FORMATS else "curiosity"
+        # 종목명으로 입력해도 동작하게 티커 해석(예: 'HD현대일렉트릭' → '267260').
+        ticker = resolve_ticker(ticker) or ticker
         snapshot = build_instant_snapshot(ticker)
         # 헛글 방지: 인용할 실수치가 부족하면 생성을 건너뛴다(숫자 없는 두루뭉술한 글 차단).
         if not snapshot or _numeric_fact_count(snapshot) < MIN_NUMERIC_FACTS:

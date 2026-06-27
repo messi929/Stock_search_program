@@ -134,7 +134,16 @@ async def generate_drafts(request: Request):
 
     posts = await generate_batch(tickers, formats, uid=uid)
     if not posts:
-        return JSONResponse(status_code=502, content={"detail": "생성 실패(AI 응답 없음)"})
+        return JSONResponse(
+            status_code=422,
+            content={
+                "detail": (
+                    f"인용할 실수치가 있는 종목을 찾지 못했습니다(입력: {tickers}). "
+                    "종목코드(예: 267260)나 적재된 정확한 종목명으로 입력하거나, "
+                    "스크리너에 데이터가 있는 종목인지 확인하세요."
+                )
+            },
+        )
 
     from firebase_admin import firestore
 
