@@ -2,20 +2,24 @@
 
 기존 자산 재활용:
   - build_instant_snapshot(): 스크리너 in-memory 스냅샷에서 안전 수치만 추출(LLM 비호출)
-  - Haiku 1회(~5원): 스냅샷 → 500자 이내 스레드 글로 재가공
-  - BaseAgent.filter_forbidden / 면책: LEGAL 가드(추천·목표가 금지)
+  - LLM 1회: 스냅샷 → 480자 이내 스레드 글로 재가공 (기본 Sonnet, MARKETER_MODEL=haiku 회귀 가능)
+  - BaseAgent.filter_forbidden: LEGAL 가드(추천·목표가 금지)
+
+품질 원칙(JEON 피드백 2026-06-27):
+  - 실수치를 숫자 그대로 인용(≥2개). 숫자 없는 두루뭉술(_numeric_fact_count 가드로 생성 차단).
+  - "AI한테 물어봤더니" 류 프레이밍 금지 — 글의 주어는 'AI'가 아니라 '수치'.
 
 0→1 마케팅 목적. 4가지 포맷(호기심/반대의견/신뢰/댓글모집)으로 생성하며,
 관리자가 콘솔에서 검수·수정 후 복사(또는 Phase 2에서 자동 발행)한다.
 
 LEGAL: 추천/매수·매도/목표가/매수가/손절가 절대 금지. 관찰·참고·중립 해석만.
-스레드 500자 제약상 본문 면책은 1줄 압축 버전을 사용한다(정보제공·판단은 본인).
+면책은 계정 프로필(bio)에 상시 고지하므로 본문에는 넣지 않는다(JEON 결정 2026-06-27).
 """
 
 from __future__ import annotations
 
 import asyncio
-import re
+import os
 from typing import Optional
 
 from loguru import logger
@@ -23,7 +27,13 @@ from pydantic import BaseModel, Field
 
 from agents.base import BaseAgent
 from agents.instant import build_instant_snapshot, _snapshot_facts
-from utils.claude_client import MODEL_HAIKU
+from utils.claude_client import MODEL_HAIKU, MODEL_SONNET
+
+# 마케팅 글 = 서비스의 얼굴 → 품질 우선 기본 Sonnet. 비용 절감 시 MARKETER_MODEL=haiku.
+MARKETER_MODEL = MODEL_HAIKU if os.getenv("MARKETER_MODEL", "").lower() == "haiku" else MODEL_SONNET
+
+# 헛글 방지 가드: 글에 인용할 실수치가 이만큼 미만이면 생성 자체를 건너뛴다.
+MIN_NUMERIC_FACTS = 2
 
 
 # ──────────────────────────────────────────────
@@ -31,40 +41,45 @@ from utils.claude_client import MODEL_HAIKU
 # ──────────────────────────────────────────────
 
 THREADS_MAX = 500  # Threads 글자 수 제한
-# 본문 1줄 면책 — 풀 DISCLAIMER는 4줄이라 500자 글에 부적합.
-COMPACT_DISCLAIMER = "📌 투자 권유 아님 · 정보 제공일 뿐 판단은 본인 몫 (Axis)"
+# 면책은 본문이 아니라 계정 프로필(bio)에 상시 고지한다(JEON 결정 2026-06-27).
+# bio가 모든 게시물에 적용되므로 본문 면책은 중복 + 광고 톤이라 제거.
 
 FORMATS: dict[str, dict[str, str]] = {
     "curiosity": {
-        "label": "호기심 (AI한테 물어봤더니)",
+        "label": "호기심 (눈에 띄는 수치)",
         "guide": (
-            "'AI한테 이 종목 물어봤더니' 톤. 스냅샷 수치 1~2개를 흥미롭게 제시하고, "
-            "마지막에 '근데 검증 돌려보니…' 같은 데이터 신선도/검증 포인트를 한 줄 흘려 "
-            "호기심을 남긴다. 단정 금지, 관찰 표현만."
+            "스냅샷에서 가장 눈에 띄는 수치 1~2개를 **숫자 그대로** 던지며 시작한다. "
+            "예: '거래량이 평소의 3.1배 터졌다. 그런데 외국인은 5일째 순매도.' "
+            "마지막에 '이 수치, 지금도 유효할까' 식으로 데이터 신선도/재검증 포인트를 한 줄 흘려 "
+            "호기심을 남긴다. 'AI한테 물어봤더니' 류 프레이밍 금지, 단정 금지."
         ),
     },
     "contrarian": {
         "label": "반대의견 (반대로 보면)",
         "guide": (
-            "'다들 좋다는데 반대로 보면' 톤. 스냅샷 수치에서 읽히는 약점·과열·리스크 "
-            "관찰 포인트를 균형 있게 제시한다. 공포 조장/단정 금지. '이런 점은 관찰이 필요' "
-            "식 중립 프레이밍. 반대 시나리오를 생각하게 만드는 게 목적."
+            "'다들 좋다는데, 숫자로 보면 이런 약점도' 톤. 스냅샷의 구체 수치에서 읽히는 "
+            "과열·고평가·수급 피로 같은 리스크를 **숫자를 짚어가며** 제시한다. "
+            "예: 'RSI 74로 과열권 + 52주 고가 -3% 코앞, 그런데 외국인은 3일째 순매도.' "
+            "공포 조장·단정 금지, 중립 프레이밍('이 수치는 관찰이 필요'). "
+            "강점만 보면 놓치는 반대 시나리오를 숫자로 생각하게 만드는 게 목적."
         ),
     },
     "trust": {
         "label": "신뢰 (데이터 검증)",
         "guide": (
-            "'AI 답변, 그대로 믿어도 되나?' 톤. 이 종목 수치가 며칠 전 데이터일 수 있다는 "
-            "점, 그래서 현재 시점 재검증이 왜 중요한지를 종목 예시로 설명한다. Axis가 "
-            "검증을 핵심으로 둔다는 브랜드 메시지를 자연스럽게. 과장 금지."
+            "이 종목의 구체 수치(예: RSI, 등락률, 외국인 수급)를 하나 인용한 뒤, "
+            "그 값이 며칠 전 데이터일 수 있다는 점과 현재 시점 재검증의 중요성을 설명한다. "
+            "Axis가 '검증'을 핵심으로 둔다는 메시지를 자연스럽게. 'AI 답변' 프레이밍 대신 "
+            "'숫자는 늘 갱신된다'는 관점으로. 과장 금지."
         ),
     },
     "cta": {
         "label": "댓글 모집 (종목 남겨주세요)",
         "guide": (
-            "참여 유도 글. 이 종목을 짧게 예시로 들고 '궁금한 종목 댓글로 남겨주시면 "
-            "AI로 양쪽(강점/약점) 다 뜯어서 관찰 포인트를 정리해 드린다'고 초대한다. "
-            "추천이 아니라 '판단용 자료 제공'임을 분명히. 댓글을 부르는 한 문장으로 마무리."
+            "이 종목의 실제 수치 하나를 짧게 예시로 던진 뒤, '궁금한 종목 댓글로 남겨주시면 "
+            "강점·약점 수치를 양쪽 다 정리해 드린다'고 초대한다. "
+            "'AI한테 물어봤더니' 프레이밍 금지. 추천이 아니라 '판단용 자료 제공'임을 분명히. "
+            "댓글을 부르는 한 문장으로 마무리."
         ),
     },
 }
@@ -72,20 +87,33 @@ FORMATS: dict[str, dict[str, str]] = {
 DEFAULT_FORMATS = ("curiosity", "contrarian", "cta")
 
 
-_SYSTEM = """당신은 한국 주식 정보 서비스 'Axis'의 SNS(스레드) 카피라이터입니다.
-주어진 종목 스냅샷 수치만으로, 스크롤을 멈추게 하는 짧은 한국어 스레드 글을 씁니다.
+_SYSTEM = """당신은 한국/미국 주식 정보 서비스 'Axis'의 SNS(스레드) 카피라이터입니다.
+주어진 종목 스냅샷의 '실제 수치'로, 스크롤을 멈추게 하는 짧고 구체적인 한국어 스레드 글을 씁니다.
 
-절대 원칙(법적 안전 — 어기면 서비스가 위법):
+# 1순위 규칙 — 구체성 (어기면 글은 폐기)
+- 스냅샷에 있는 **실제 숫자를 최소 2개 이상 그대로 인용**한다.
+  예: "RSI 72", "외국인 8일 연속 순매수", "거래량 평소의 2.3배", "PER 14.1", "52주 고가 대비 -8%"
+- 숫자에는 의미를 붙인다. 예: "RSI 72 — 과열권", "PER 14는 업종 평균보다 낮은 편"
+- **금지된 헛소리(절대 쓰지 말 것)**: "뭔가 움직임이 있다", "평소와 다른 패턴",
+  "관찰할 만한 수치들이 눈에 띈다", "특정 흐름/기류", "심상치 않다" 등 숫자 없는 두루뭉술한 표현.
+  숫자로 못 쓰겠으면 그 문장을 통째로 빼라.
+
+# 2순위 규칙 — 톤
+- **"AI한테 물어봤더니 / AI에게 물어보니 / AI가 분석했더니" 식의 프레이밍 절대 금지.**
+  글의 주어는 'AI'가 아니라 '수치'다. 데이터를 직접 보여주는 사람의 말투로 쓴다.
+- 광고/홍보 티, 챗봇 말투, 과장 금지. 사람이 직접 차트 보며 쓴 듯 담백하게.
+
+# 법적 안전 (어기면 서비스가 위법)
 - 금지: 추천/추천합니다, 사세요, 매수·매도, 매수가/목표가/손절가 등 가격 제시,
-  "매수 신호/시그널", "반드시·확실히 오른다", "유망주" 등 권유·단정 표현
-- 허용: '관찰', '참고', '현재 ~ 구간', 수치의 중립적 해석, 질문형
+  "매수 신호/시그널", "반드시·확실히 오른다", "유망주" 등 권유·단정
+- 허용: 수치의 중립적 해석, '관찰', '참고', '현재 ~ 구간', 질문형
 - 종목명은 주어진 것만 사용(추정·창작 금지)
+- 핵심: '추천하지 마라'가 '아무 말도 하지 마라'는 뜻이 아니다 — 숫자는 구체적으로, 결론(사라/팔라)만 빼라.
 
-문체:
-- 스레드 감성: 짧은 문장, 줄바꿈, 과한 이모지 금지(0~3개), 광고 티 최소화
-- 사람이 쓴 듯 담백하게. 표/마크다운 금지
-- hook(첫 문장)은 한 줄로 강하게, body는 3~6줄, hashtags는 2~4개(한국어 키워드, # 제외)
-- 전체가 380자를 넘지 않도록(면책 문구 자리 확보)"""
+# 문체
+- 짧은 문장, 줄바꿈, 이모지 0~3개. 표/마크다운 금지
+- hook(첫 문장)은 가장 강한 수치 하나로 시작. body는 3~6줄, hashtags는 2~4개(한국어 키워드, # 제외)
+- 전체가 480자를 넘지 않도록(Threads 500자 제한 — 본문 면책 없음, 면책은 프로필 bio)"""
 
 
 class ThreadsPost(BaseModel):
@@ -98,13 +126,32 @@ class ThreadsPost(BaseModel):
     )
 
 
+def _numeric_fact_count(s: dict) -> int:
+    """스냅샷에서 글에 인용 가능한 '실제 수치' 개수. 헛글 가드용."""
+    keys = (
+        "price", "change_pct", "rsi", "per", "pbr", "roe",
+        "vs_high_52w", "foreign_consecutive", "volume_ratio",
+    )
+    n = 0
+    for k in keys:
+        v = s.get(k)
+        if v is None:
+            continue
+        try:
+            if float(v) != 0.0:
+                n += 1
+        except (TypeError, ValueError):
+            continue
+    return n
+
+
 class MarketerAgent(BaseAgent):
-    """Haiku 기반 스레드 글 생성기."""
+    """스레드 글 생성기 (기본 Sonnet — MARKETER_MODEL=haiku로 회귀 가능)."""
 
     def __init__(self, claude=None):
         super().__init__(
             agent_name="marketer",
-            model=MODEL_HAIKU,
+            model=MARKETER_MODEL,
             system_prompt=_SYSTEM,
             claude=claude,
         )
@@ -119,9 +166,14 @@ class MarketerAgent(BaseAgent):
         """단일 (종목 × 포맷) 초안 생성. 실패 시 None."""
         fmt = fmt if fmt in FORMATS else "curiosity"
         snapshot = build_instant_snapshot(ticker)
-        if not snapshot:
-            # 스냅샷 없으면(미적재 종목) 최소 정보로라도 진행
-            snapshot = {"ticker": ticker.upper(), "name": ticker.upper(), "is_kr": bool(re.match(r"^\d{6}$", ticker))}
+        # 헛글 방지: 인용할 실수치가 부족하면 생성을 건너뛴다(숫자 없는 두루뭉술한 글 차단).
+        if not snapshot or _numeric_fact_count(snapshot) < MIN_NUMERIC_FACTS:
+            logger.warning(
+                f"[marketer] 실수치 부족 — 생성 건너뜀 {ticker}/{fmt} "
+                f"(facts={_numeric_fact_count(snapshot) if snapshot else 0}). "
+                f"store 미적재 또는 데이터 결손일 수 있음."
+            )
+            return None
 
         name = snapshot.get("name") or ticker.upper()
         facts = _snapshot_facts(snapshot)
@@ -165,12 +217,14 @@ class MarketerAgent(BaseAgent):
 
 
 def assemble_post(post: ThreadsPost) -> str:
-    """ThreadsPost → 발행용 본문 문자열 (hook + body + hashtags + 1줄 면책)."""
+    """ThreadsPost → 발행용 본문 문자열 (hook + body + hashtags).
+
+    면책 문구는 본문에 넣지 않는다 — 계정 프로필(bio)에 상시 고지(JEON 결정 2026-06-27).
+    """
     parts: list[str] = [post.hook.strip(), post.body.strip()]
     tags = [t.strip().lstrip("#") for t in (post.hashtags or []) if t and t.strip()]
     if tags:
         parts.append(" ".join(f"#{t}" for t in tags))
-    parts.append(COMPACT_DISCLAIMER)
     text = "\n\n".join(p for p in parts if p)
     return text.strip()
 

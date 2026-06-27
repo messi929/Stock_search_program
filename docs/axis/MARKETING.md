@@ -28,7 +28,7 @@
 
 | 키 | 포맷 | 톤 / 목적 |
 |----|------|-----------|
-| `curiosity` | 호기심 (AI한테 물어봤더니) | 수치 1~2개 흥미롭게 + "검증 돌려보니…" 호기심 유발 |
+| `curiosity` | 호기심 (눈에 띄는 수치) | 눈에 띄는 실수치 1~2개를 숫자 그대로 + "지금도 유효할까" 검증 훅 |
 | `contrarian` | 반대의견 (반대로 보면) | 약점·과열·리스크 관찰 포인트, 반대 시나리오 사고 유도 |
 | `trust` | 신뢰 (데이터 검증) | "AI 답변 그대로 믿어도 되나" — 신선도/재검증 브랜드 메시지 |
 | `cta` | 댓글 모집 (종목 남겨주세요) | 참여 유도, "궁금한 종목 댓글로" → 댓글=리드+다음 소재 |
@@ -55,7 +55,8 @@
 ### 아키텍처
 ```
 [종목] → build_instant_snapshot (스크리너 스냅샷, 실수치 PER/RSI/등락)
-       → MarketerAgent (Haiku, 구조화출력 ThreadsPost{hook,body,hashtags})
+       → MarketerAgent (기본 Sonnet, 구조화출력 ThreadsPost{hook,body,hashtags})
+       → _numeric_fact_count 가드(실수치 2개 미만이면 생성 스킵 — 헛글 차단)
        → filter_forbidden (추천·목표가 가드) + 압축 면책 1줄
        → Firestore marketing_drafts/{id} (status: draft|approved|archived)
        → 관리자 검수 UI / 일괄생성 CLI
@@ -76,10 +77,10 @@
 - `DELETE /api/admin/marketing/drafts/{id}`
 
 ### 비용
-- 종목 × 포맷 1건당 Haiku ~5원. (예: 3종목 × 3포맷 = 9건 ≈ 45원)
+- 종목 × 포맷 1건당 **Sonnet ~35원**(품질 우선 기본값). 비용 절감 필요 시 `MARKETER_MODEL=haiku`(~5원).
 
 ### 법적 안전
-- 글에는 풀 4줄 면책 대신 **압축 1줄** 사용(500자 제약): `📌 투자 권유 아님 · 정보 제공일 뿐 판단은 본인 몫 (Axis)`
+- **본문 면책 없음**(JEON 결정 2026-06-27) — 면책은 계정 프로필(bio)에 상시 고지로 대체. 광고 톤 회피 + 500자 확보. ⚠️ **bio 면책 줄은 절대 제거 금지**(투자자문업 면허 없음, [LEGAL.md](LEGAL.md)). marketer/briefing 공통 진입점 `assemble_post()`에서 본문 면책 제거.
 - `filter_forbidden`로 추천/매수·매도/목표가/시그널 등 자동 치환. 검수 시 `filtered` 뱃지로 경고 노출.
 
 ---
@@ -133,12 +134,12 @@
 - **환각 금지**: 원인은 **제공된 헤드라인 안에서만** 도출, 근거 없으면 추측 X. 순한국어. ~25원/건.
 - (예) 반도체 -4.7% → "오픈AI IPO 연기설로 AI·기술주 투심 위축 + 마이크론 실적 경계감"
 
-### 📊 양쪽관점 종목글 = 기존 `marketer.contrarian` 재활용 (Haiku ~5원)
+### 📊 양쪽관점 종목글 = 기존 `marketer.contrarian` 재활용 (기본 Sonnet ~35원/편)
 
 ### 운영 모드
 - 기본 = **검수 큐**(생성만, 발행 X) → `/admin/marketing`에서 보고 🚀발행
 - 완전 자동발행 전환 = 잡 args에 `--publish` 추가(`deploy-threads-job.sh`)
-- 하루 비용 ≈ 브리핑 25원 + 종목글 10원 = **~35원**
+- 하루 비용 ≈ 브리핑 25원 + 종목글 2편×35원 = **~95원**(MARKETER_MODEL=haiku면 ~45원)
 
 ---
 
@@ -152,11 +153,12 @@
 ### 프로필 (확정 2026-06-27) — Threads API로 수정 불가, 수동 입력
 - **이름**(프로필 상단 노출): `Axis · 데이터로 읽는 투자 기준`
 - **사용자이름/핸들**(게시글마다 노출): `axislystics` → 오타처럼 보이고 도메인 불일치, **`axislytics`로 변경 권장**
-- **소개(bio)** — 방어/면책 톤 금지(자신감):
+- **소개(bio)** — 자신감 톤 유지 + 면책은 마지막 1줄로만(본문에서 빠진 면책을 bio가 책임짐, 제거 금지):
   ```
   새벽 미국장 정리부터 화제 종목까지, 매일.
   강점만 보면 물리기 쉽죠. 약점도 같이.
   🌙 시황 · 📈 종목분석 ↓
+  ※ 정보 제공일 뿐, 투자판단은 본인 (투자자문업 아님)
   ```
 - **로고**: 실제 폰트(Century Gothic Bold) 'axis' 소문자 워드마크 + 민트 축라인. `바탕화면\axis_logo\axis_avatar.png`(다크·원형크롭 안전) + light/transparent. (※ Pillow 손그림 도형은 아마추어 → 실폰트 워드마크가 정답)
 - **링크**: Threads 멀티링크(최대 5, 제목만 노출·URL 숨김). 시황=StockBizView, 종목=Axis. 웹은 저장 버그 잦음 → **모바일 앱 권장**.
@@ -166,7 +168,7 @@
 ---
 
 ## 8. 알려진 한계 / 메모
-- Haiku 특성상 가끔 어색한 표현 발생 → 검수 탭에서 수정. (브리핑은 Sonnet이라 품질↑)
+- 종목글 기본 Sonnet 승격(2026-06-27, JEON "퀄리티 별로" 피드백). 프롬프트에 실수치 ≥2개 인용 강제 + "AI한테 물어봤더니" 프레이밍 금지 + 헛소리 표현 금지. 그래도 어색하면 검수 탭에서 수정.
 - 스냅샷 미적재 환경(서버 밖·종목 미보유)에선 수치 없는 일반론 글이 나옴 → 로컬은 `prime_name_store`로 해결.
 - 토큰 60일 만료(~2026-08-25) 전 refresh 필요 — 자동 갱신 Job은 후속.
 - 관련 문서: [THREADS_PUBLISHING.md](THREADS_PUBLISHING.md)(토큰 발급), [LEGAL.md](LEGAL.md)(절대 원칙), [UNIT_ECONOMICS.md](UNIT_ECONOMICS.md)(비용), [PROGRESS.md](PROGRESS.md).
