@@ -79,6 +79,8 @@ def build_instant_snapshot(ticker: str) -> Optional[dict]:
         "vs_high_52w": num("vs_high_52w"),
         "foreign_consecutive": int(num("foreign_consecutive", 0) or 0),
         "volume_ratio": num("volume_ratio"),
+        # 데이터 기준 시각(ISO). 마케팅 글이 '오늘' 대신 정확한 일자로 쓰게 한다.
+        "updated_at": text("updated_at"),
     }
 
 
