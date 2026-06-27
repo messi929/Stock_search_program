@@ -388,6 +388,28 @@ function DraftCard({
             ⚠ 필터됨: {draft.filtered.join(", ")}
           </span>
         )}
+        {(draft.score ?? 0) > 0 && (
+          <span
+            className={`px-2 py-0.5 rounded-full text-[11px] ${
+              draft.score >= 25
+                ? "bg-emerald-500/15 text-emerald-300"
+                : draft.score >= 18
+                  ? "bg-amber-500/15 text-amber-300"
+                  : "bg-rose-500/15 text-rose-300"
+            }`}
+            title="편집 단계 자가채점(후킹·긴장·구체성·독자시점·담백함·법적안전 6축 합산)"
+          >
+            품질 {draft.score}/30
+          </span>
+        )}
+        {(draft.warnings?.length ?? 0) > 0 && (
+          <span
+            className="px-2 py-0.5 rounded-full text-[11px] bg-orange-500/15 text-orange-300"
+            title="자기언급·내부용어·길이 등 사람이 한번 더 볼 지점"
+          >
+            ⚠ 점검: {draft.warnings.join(", ")}
+          </span>
+        )}
         {isPublished && draft.permalink && (
           <a
             href={draft.permalink}
@@ -399,6 +421,13 @@ function DraftCard({
           </a>
         )}
       </div>
+
+      {/* 글의 핵심 긴장(앵글) — 하네스 v2 */}
+      {!isBriefing && draft.angle && (
+        <p className="text-[11px] text-muted-foreground">
+          🎯 앵글: {draft.angle}
+        </p>
+      )}
 
       {/* 편집 textarea */}
       <textarea

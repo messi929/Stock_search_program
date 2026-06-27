@@ -55,7 +55,7 @@ async def _publish_posts(posts: list[dict]) -> int:
 
 
 async def run_daily(
-    stocks: int = 2,
+    stocks: int = 1,
     briefing: bool = True,
     publish: bool = False,
     dry_run: bool = False,
@@ -129,7 +129,7 @@ def main(argv: Optional[list[str]] = None) -> int:
         pass
 
     parser = argparse.ArgumentParser(description="매일 스레드 콘텐츠 자동 생성")
-    parser.add_argument("--stocks", type=int, default=2, help="양쪽관점 종목 글 개수(0=생략)")
+    parser.add_argument("--stocks", type=int, default=1, help="양쪽관점 종목 글 개수(0=생략)")
     parser.add_argument("--no-briefing", action="store_true", help="새벽 미국장 브리핑 생략")
     parser.add_argument("--publish", action="store_true", help="생성 후 Threads 즉시 자동발행")
     parser.add_argument("--dry-run", action="store_true", help="생성·출력만, 저장/발행 X")

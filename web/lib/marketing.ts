@@ -19,6 +19,9 @@ export interface MarketingDraft {
   char_count: number;
   status: DraftStatus;
   filtered: string[];
+  warnings: string[]; // 독자시점/길이 가드 경고 (하네스 v2)
+  score: number; // 편집 자가채점 0~30 (하네스 v2)
+  angle: string; // 글의 핵심 긴장 (하네스 v2)
   source: string;
   permalink: string;
   published_at: string | null;

@@ -30,7 +30,7 @@ JOB_NAME="axis-threads-daily"
 SCHED_CRON="30 7 * * 1-5"   # 평일 07:30 KST
 
 # 검수 큐 모드(기본). 완전 자동발행은 끝에 ,--publish 추가.
-JOB_ARGS="-m,jobs.daily_threads_content,--stocks,2"
+JOB_ARGS="-m,jobs.daily_threads_content,--stocks,1"
 
 SKIP_BUILD=false
 for arg in "$@"; do

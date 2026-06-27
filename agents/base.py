@@ -139,11 +139,14 @@ class BaseAgent(ABC):
         system: str | None = None,
         thinking_budget: int = 0,
         output_schema: type[BaseModel] | None = None,
+        model: str | None = None,
     ) -> dict:
         """Claude 호출 헬퍼. system override로 페르소나별 동적 프롬프트 가능.
 
         thinking_budget>0이면 Extended Thinking 활성화 (복잡 추론 품질↑).
         output_schema 지정 시 구조화 출력(강제 tool use) — content가 유효 JSON 보장.
+        model 지정 시 self.model 대신 해당 모델로 호출(한 에이전트가 단계별로
+        Haiku/Sonnet을 섞어 쓰는 다단계 하네스용). 미지정이면 self.model.
         """
         messages: list[dict] = [{"role": "user", "content": user_message}]
         if prefill is not None:
@@ -151,7 +154,7 @@ class BaseAgent(ABC):
 
         result = await self.claude.complete(
             agent=self.agent_name,
-            model=self.model,
+            model=model or self.model,
             system=system if system is not None else self.system_prompt,
             messages=messages,
             max_tokens=max_tokens,
@@ -177,6 +180,7 @@ class BaseAgent(ABC):
         completeness_check: Callable[[BaseModel], list[str]] | None = None,
         thinking_budget: int = 0,
         structured_output: bool = False,
+        model: str | None = None,
     ) -> tuple[BaseModel, dict]:
         """Claude 호출 + JSON 파싱 + Pydantic 검증.
 
@@ -221,6 +225,7 @@ class BaseAgent(ABC):
                 system=system,
                 thinking_budget=thinking_budget,
                 output_schema=schema_for_call,
+                model=model,
             )
             json_str = extract_json(result["content"])
 

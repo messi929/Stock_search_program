@@ -49,6 +49,9 @@ def _serialize(doc_id: str, d: dict) -> dict:
         "char_count": int(d.get("char_count", len(d.get("text", "")) or 0)),
         "status": d.get("status", "draft"),
         "filtered": d.get("filtered", []) or [],
+        "warnings": d.get("warnings", []) or [],   # 독자시점/길이 가드(하네스 v2)
+        "score": int(d.get("score", 0) or 0),       # 편집 자가채점(0~30)
+        "angle": d.get("angle", "") or "",          # 글의 핵심 긴장(하네스 v2)
         "source": d.get("source", "haiku"),
         "permalink": d.get("permalink", ""),
         "published_at": _iso(d.get("published_at")),
@@ -100,7 +103,8 @@ async def generate_drafts(request: Request):
     """초안 생성. body: {tickers?: str[], formats?: str[], hot_count?: int}.
 
     tickers 비우면 스크리너 스냅샷에서 '오늘 화제 종목'을 hot_count개 자동 선정.
-    각 (종목 × 포맷) 조합마다 Haiku 1회 생성 후 Firestore에 status=draft로 저장.
+    각 (종목 × 포맷) 조합마다 4단계 하네스(앵글→작가 best-of-N→편집→가드, 조합당
+    ~5콜)로 초안 생성 후 Firestore에 status=draft로 저장.
     """
     if not _is_admin(request):
         return _forbid()
