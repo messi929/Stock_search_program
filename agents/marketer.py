@@ -253,7 +253,10 @@ def _numeric_fact_count(s: dict) -> int:
 def _as_of_label(snapshot: dict) -> str:
     """스냅샷 데이터의 기준일 라벨('M월 D일'). updated_at 파싱 실패 시 빈 문자열.
 
-    updated_at은 종목 행의 데이터 갱신 시각(KR=장마감 직후 KST=그 거래일과 일치).
+    updated_at은 종목 행의 데이터 갱신 시각으로, 수집기가 **KST**로 저장한다(naive).
+      - KR: 장마감(17:30 KST) 직후 캡처 → 그 거래일과 일치 → KST 날짜 그대로.
+      - US: 미 동부 장마감 후 = 한국 새벽 캡처 → KST 날짜는 현지 세션일보다 하루 앞섬.
+        America/New_York로 변환해 실제 세션일을 쓰고 '(현지)'를 붙여 혼동 방지.
     '오늘' 대신 이 일자로 표기해 발행 지연 시에도 정확하게.
     """
     raw = (snapshot or {}).get("updated_at") or ""
@@ -261,9 +264,18 @@ def _as_of_label(snapshot: dict) -> str:
         return ""
     try:
         from datetime import datetime
+        from zoneinfo import ZoneInfo
 
+        kst = ZoneInfo("Asia/Seoul")
         dt = datetime.fromisoformat(str(raw).replace("Z", "+00:00"))
-        return f"{dt.month}월 {dt.day}일"
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=kst)  # naive updated_at은 KST로 간주
+        if snapshot.get("is_kr"):
+            d = dt.astimezone(kst)
+            return f"{d.month}월 {d.day}일"
+        # US: 동부 세션일로 보정 + '(현지)' 표기
+        d = dt.astimezone(ZoneInfo("America/New_York"))
+        return f"{d.month}월 {d.day}일(현지)"
     except Exception:
         return ""
 

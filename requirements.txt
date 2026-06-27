@@ -13,6 +13,7 @@ httpx>=0.25.0
 yfinance>=0.2.0
 pykrx>=1.2.8
 holidays>=0.50  # 한국 증시 휴장(공휴일) 판별 — 새벽 브리핑 '오늘 국내장' 정확성
+tzdata>=2024.1  # zoneinfo IANA tz DB(slim 컨테이너엔 시스템 tz 없음) — US 종목 기준일 ET 변환
 
 # Axis AI Layer
 anthropic>=0.40.0
