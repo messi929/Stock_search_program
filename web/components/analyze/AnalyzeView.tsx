@@ -14,8 +14,12 @@
  * 페르소나(블랙록/ARK/그레이엄)는 2026-06-22 시계(horizon)로 전면 대체됨. 데이터 노드
  * (event/macro/korean)는 내부 제공자로만 잔존(UI 미노출) — 카드 렌더링은 휴면 폴백.
  */
+import { useEffect } from "react";
 import Link from "next/link";
+import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
+
+import { apiCall } from "@/lib/api";
 
 import { AddToWatchlistButton } from "@/components/analyze/AddToWatchlistButton";
 import { AnalystCard } from "@/components/analyze/AnalystCard";
@@ -43,6 +47,7 @@ import {
   useAnalysisStore,
   type DataDriven,
   type DataDrivenStatus,
+  type SavedAnalysisResult,
   type StrategistFlow,
   type StrategistStatus,
 } from "@/store/analysisStore";
@@ -86,6 +91,51 @@ export function AnalyzeView({ ticker }: { ticker: string }) {
   const run = useAnalysisStore((s) => s.runs[ticker.toUpperCase()]);
   const startRun = useAnalysisStore((s) => s.start);
   const setValidatorInStore = useAnalysisStore((s) => s.setValidator);
+  const restoreRun = useAnalysisStore((s) => s.restore);
+
+  // ── 모바일 백그라운드/앱전환/새로고침 후 복원 ──
+  // SSE run은 메모리에만 있어 탭이 추방(eviction)되면 사라진다. 서버가 완료 결과를
+  // Firestore에 저장(GET /api/ai/result)하므로, 메모리 run이 없으면 저장 결과로 복원한다.
+  const tkKey = ticker.toUpperCase();
+  const savedQ = useQuery({
+    queryKey: ["ai", "result", tkKey],
+    queryFn: () =>
+      apiCall<{ result: SavedAnalysisResult | null }>(
+        `/api/ai/result?ticker=${encodeURIComponent(ticker)}`,
+      ),
+    enabled: !run, // 메모리에 run이 있으면 조회 불필요
+    staleTime: 30_000,
+    retry: false,
+  });
+  const saved = savedQ.data?.result ?? null;
+
+  // 메모리 run이 없고 최근(12h 내) 저장결과가 있으면 카드 복원(새로고침·eviction 대응).
+  // 너무 오래된 결과는 자동 복원하지 않음(오래된 종목 재방문 시엔 시계 선택 화면 유지).
+  // Date.now()는 purity 룰상 렌더가 아닌 effect 안에서만 호출.
+  useEffect(() => {
+    if (run || !saved) return;
+    const recent =
+      saved.saved_at == null ||
+      Date.now() - new Date(saved.saved_at).getTime() < 12 * 3600_000;
+    if (recent) restoreRun(ticker, saved);
+  }, [run, saved, ticker, restoreRun]);
+
+  // 앱전환 후 복귀: 진행 중이던 run이 스톨됐을 수 있음 → 서버 저장결과로 회복.
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState !== "visible") return;
+      if (!useAnalysisStore.getState().runs[tkKey]?.running) return;
+      apiCall<{ result: SavedAnalysisResult | null }>(
+        `/api/ai/result?ticker=${encodeURIComponent(ticker)}`,
+      )
+        .then((r) => {
+          if (r.result) restoreRun(ticker, r.result);
+        })
+        .catch(() => {});
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
+  }, [ticker, tkKey, restoreRun]);
 
   // runPersona: 실행 중/완료된 페르소나. null이면 미선택 → 선택 화면 표시(자동 실행 X).
   const runPersona = run?.persona ?? null;

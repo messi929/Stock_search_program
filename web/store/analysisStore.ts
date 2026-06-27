@@ -114,6 +114,26 @@ const PENDING_STRATEGIST_STATUS: StrategistStatus = {
   strategist: "pending",
 };
 
+/**
+ * GET /api/ai/result 페이로드 — 서버에 저장된 **전체** 분석 결과(복원용).
+ * 모바일 백그라운드/새로고침/앱전환 후 메모리 run이 사라졌을 때 카드를 되살린다.
+ * 필드는 _build_full_response(백엔드)와 동일 직렬화 → SSE result와 구조 동일.
+ */
+export interface SavedAnalysisResult {
+  ticker: string;
+  persona?: PersonaId;
+  horizon?: HorizonId;
+  research?: ResearchResult | null;
+  analyst?: AnalystResult | null;
+  validator?: ValidatorResult | null;
+  strategist?: StrategistResult | null;
+  event?: EventAnalystResult | null;
+  macro?: MacroPmResult | null;
+  korean?: KoreanSpecialistResult | null;
+  metadata?: { total_elapsed?: number } | null;
+  saved_at?: string | null;
+}
+
 /** 최근 분석 이력 항목 — localStorage 영속(가벼운 메타만). */
 export interface RecentAnalysis {
   ticker: string;
@@ -142,6 +162,12 @@ interface AnalysisStore {
   ) => void;
   /** ValidateButton 단독 재검증 결과를 run에 반영. */
   setValidator: (ticker: string, validator: ValidatorResult) => void;
+  /**
+   * 서버에 저장된 전체 결과로 run을 복원(완료 상태). 모바일 백그라운드/새로고침/앱전환
+   * 후 메모리 run이 사라진 경우 카드 전체를 되살린다. 라이브 스트림과 충돌하지 않는다
+   * (live patch는 자신의 controller만 갱신, restore는 controller를 만들지 않음).
+   */
+  restore: (ticker: string, result: SavedAnalysisResult) => void;
 }
 
 // AbortController는 직렬화·렌더와 무관하므로 store state 밖 모듈 레벨에 보관.
@@ -342,6 +368,54 @@ export const useAnalysisStore = create<AnalysisStore>()(
         [key]: { ...cur, strategistFlow: { ...cur.strategistFlow, validator } },
       },
     }));
+  },
+
+  restore: (ticker, result) => {
+    const key = ticker.toUpperCase();
+    const st = (v: unknown): AgentStatus => (v ? "done" : "pending");
+    const hasStrategist = !!(
+      result.horizon ||
+      result.research ||
+      result.analyst ||
+      result.validator ||
+      result.strategist
+    );
+    const restored: AnalysisRun = {
+      ticker: key,
+      persona: result.persona ?? "blackrock",
+      horizon: result.horizon,
+      isStrategist: hasStrategist,
+      running: false,
+      strategistFlow: {
+        research: result.research ?? null,
+        analyst: result.analyst ?? null,
+        validator: result.validator ?? null,
+        strategist: result.strategist ?? null,
+      },
+      strategistStatus: {
+        research: st(result.research),
+        analyst: st(result.analyst),
+        validator: st(result.validator),
+        strategist: st(result.strategist),
+      },
+      dataDriven: {
+        event: result.event ?? null,
+        macro: result.macro ?? null,
+        korean: result.korean ?? null,
+      },
+      dataDrivenStatus: {
+        event: st(result.event),
+        macro: st(result.macro),
+        korean: st(result.korean),
+      },
+      instantSnapshot: null,
+      instantSummary: null,
+      elapsed: result.metadata?.total_elapsed ?? null,
+      likelyCached: false,
+      error: null,
+      upgradeUrl: null,
+    };
+    set((s) => ({ runs: { ...s.runs, [key]: restored } }));
   },
     }),
     {

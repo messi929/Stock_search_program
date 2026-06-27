@@ -134,6 +134,36 @@ def _update_history_result(uid: str, hist_id: str, summary: dict) -> None:
         logger.debug(f"[history] 결과 요약 업데이트 실패 (id={hist_id}): {e}")
 
 
+def _save_full_result(uid: str, ticker: str, horizon: str, full: dict) -> None:
+    """완료된 **전체** 분석 결과를 Firestore에 저장 — 모바일 백그라운드/새로고침 후 복원용.
+
+    users/{uid}/analysis_runs/{ticker} (종목당 최신 1건만 덮어쓰기). full은
+    _build_full_response 출력(모든 카드 + LEGAL 필터 통과). datetime 등은
+    default=str로 JSON-safe coerce 후 저장 → Firestore 저장 + GET 직렬화 양쪽 안전.
+    빈 분석(결과 0개)이면 저장하지 않는다. 실패는 무시(분석 흐름 차단 금지).
+    """
+    if not uid or not ticker:
+        return
+    if not any(
+        full.get(k)
+        for k in ("research", "analyst", "validator", "strategist", "event", "macro", "korean")
+    ):
+        return
+    try:
+        from firebase_admin import firestore
+
+        from screener.db.firebase_client import get_db
+
+        safe = json.loads(json.dumps(full, ensure_ascii=False, default=str))
+        safe["horizon"] = horizon or ""
+        safe["saved_at"] = firestore.SERVER_TIMESTAMP
+        get_db().collection("users").document(uid).collection(
+            "analysis_runs"
+        ).document(ticker.upper()).set(safe)
+    except Exception as e:
+        logger.warning(f"[result] 전체 결과 저장 실패 (uid={uid}, ticker={ticker}): {e}")
+
+
 def _count_month_usage(uid: str) -> dict[str, int]:
     """현재 월(UTC) Axis AI 사용량 합산.
 
@@ -513,7 +543,13 @@ async def analyze(req: AnalyzeRequest, request: Request):
     # 분석 완료 — 그 시점 결과 요약을 이력에 저장
     _update_history_result(uid, hist_id, _extract_history_summary(final))
 
-    return _build_full_response(final, elapsed)
+    resp = _build_full_response(final, elapsed)
+    # 전체 결과 저장 — 복원용(GET /api/ai/result).
+    try:
+        _save_full_result(uid, req.ticker, horizon, resp)
+    except Exception as e:
+        logger.debug(f"[result] non-stream 결과 저장 스킵: {e}")
+    return resp
 
 
 def _build_full_response(final: dict, elapsed: float) -> dict:
@@ -800,6 +836,15 @@ async def _stream_analysis(
 
     # 분석 완료 — 그 시점 결과 요약을 이력에 저장
     _update_history_result(user_uid, history_id, _extract_history_summary(final_state))
+
+    # 전체 결과 저장 — 모바일 백그라운드/새로고침 후 복원용(GET /api/ai/result).
+    # 클라가 complete를 못 받고 떠나도, 서버가 여기까지 왔으면 결과는 보존된다.
+    try:
+        _save_full_result(
+            user_uid, ticker, horizon, _build_full_response(final_state, total_elapsed)
+        )
+    except Exception as e:
+        logger.debug(f"[result] 스트림 결과 저장 스킵: {e}")
 
     yield _sse(
         "complete",
@@ -1113,6 +1158,40 @@ async def get_latest_analysis(request: Request, ticker: str = ""):
     except Exception as e:
         logger.warning(f"[history] latest 조회 실패 (uid={uid}, ticker={tk}): {e}")
         return {"item": None}
+
+
+@router.get("/result")
+async def get_saved_result(request: Request, ticker: str = ""):
+    """저장된 **전체** 분석 결과 1건 — 모바일 백그라운드/새로고침 후 복원용.
+
+    users/{uid}/analysis_runs/{ticker}. 종목당 최신 1건. 없으면 {"result": null}.
+    클라이언트(analysisStore.restore)가 이 페이로드로 카드 전체를 복원한다.
+    """
+    user = getattr(request.state, "user", None) or {}
+    uid = user.get("uid", "")
+    tk = (ticker or "").upper()
+    if not uid or not tk:
+        return {"result": None}
+    try:
+        from screener.db.firebase_client import get_db
+
+        doc = (
+            get_db()
+            .collection("users")
+            .document(uid)
+            .collection("analysis_runs")
+            .document(tk)
+            .get()
+        )
+        if not doc.exists:
+            return {"result": None}
+        x = doc.to_dict() or {}
+        sa = x.get("saved_at")
+        x["saved_at"] = sa.isoformat() if hasattr(sa, "isoformat") else None
+        return {"result": x}
+    except Exception as e:
+        logger.warning(f"[result] 조회 실패 (uid={uid}, ticker={tk}): {e}")
+        return {"result": None}
 
 
 @router.get("/history")
