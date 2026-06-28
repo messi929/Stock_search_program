@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -13,6 +13,24 @@ export function CheckoutButton() {
   const { signedIn } = useAuth();
   const checkout = useCheckout();
   const [plan, setPlan] = useState<"monthly" | "yearly">("monthly");
+  const resumed = useRef(false);
+
+  // 가입→결제 흐름: 비로그인 사용자가 결제를 누르면 /login?next=/pricing?checkout=plan 으로
+  // 보내고, 로그인 후 /pricing 으로 돌아오면 checkout 파라미터를 보고 결제를 자동 재개한다.
+  // (effect 안에서 setState 금지 규칙 — plan은 건드리지 않고 파라미터 값으로 바로 결제)
+  useEffect(() => {
+    if (!signedIn || resumed.current) return;
+    const q = new URLSearchParams(window.location.search).get("checkout");
+    if (q !== "monthly" && q !== "yearly") return;
+    resumed.current = true;
+    checkout.mutate(q, {
+      onError: (e) => toast.error((e as Error)?.message ?? "결제 시작에 실패했습니다."),
+    });
+    // 중복 재개 방지: URL에서 checkout 파라미터 제거
+    const url = new URL(window.location.href);
+    url.searchParams.delete("checkout");
+    window.history.replaceState({}, "", url.toString());
+  }, [signedIn, checkout]);
 
   const tab = (key: "monthly" | "yearly", label: string) => (
     <button
@@ -47,8 +65,11 @@ export function CheckoutButton() {
           {checkout.isPending ? "이동 중…" : "💎 14일 무료로 시작"}
         </Button>
       ) : (
-        <Link href="/login" className="block">
-          <Button className="w-full">💎 14일 무료로 시작</Button>
+        <Link
+          href={`/login?next=${encodeURIComponent(`/pricing?checkout=${plan}`)}`}
+          className="block"
+        >
+          <Button className="w-full">💎 가입하고 14일 무료로 시작</Button>
         </Link>
       )}
       <p className="text-center text-[11px] text-muted-foreground">

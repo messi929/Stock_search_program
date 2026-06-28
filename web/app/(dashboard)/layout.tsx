@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect } from "react";
 
 import { AnalysisProgressBar } from "@/components/dashboard/AnalysisProgressBar";
+import { PlanBadge } from "@/components/dashboard/PlanBadge";
 import { SiteFooter } from "@/components/layout/SiteFooter";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
@@ -74,6 +75,9 @@ export default function DashboardLayout({
           </Link>
         ))}
         <div className="mt-auto pt-4 border-t">
+          <div className="px-2 pb-2">
+            <PlanBadge />
+          </div>
           <p className="text-xs text-muted-foreground px-2 truncate">
             {user.email}
           </p>
@@ -95,6 +99,7 @@ export default function DashboardLayout({
           Axis
         </Link>
         <div className="flex items-center gap-1">
+          <PlanBadge compact />
           {isAdmin && (
             <Link
               href="/admin"
