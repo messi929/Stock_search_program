@@ -124,7 +124,7 @@ async def user_profile(request: Request):
 
 @router.post("/user/start-trial")
 async def user_start_trial(request: Request):
-    """사용자가 명시적으로 무료 체험(14일) 시작 — 카드 없는 앱 자체 트라이얼.
+    """사용자가 명시적으로 무료 체험(TRIAL_DAYS, 7일) 시작 — 카드 없는 앱 자체 트라이얼.
 
     운영 트라이얼은 카드 등록(LS) 기반이 기본 경로이며, 이 라우트는 보조.
     email_verified 필수 + check_trial_abuse(일회용메일·이메일중복·IP누적)로 보호.

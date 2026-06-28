@@ -70,7 +70,7 @@ export default function PricingPage() {
         <header className="mt-6 mb-12 text-center">
           <h1 className="text-3xl md:text-5xl font-bold">요금제</h1>
           <p className="mt-4 text-muted-foreground max-w-xl mx-auto">
-            Free 플랜으로 즉시 시작 · 신용카드 불필요. Pro는 <strong>첫 14일
+            Free 플랜으로 즉시 시작 · 신용카드 불필요. Pro는 <strong>첫 7일
             무료</strong>로 체험해보세요.
           </p>
         </header>
@@ -138,7 +138,7 @@ export default function PricingPage() {
         <section className="mt-16 max-w-3xl mx-auto space-y-6 text-sm">
           <h2 className="text-lg font-semibold">자주 묻는 질문</h2>
           <FaqItem q="지금 바로 시작할 수 있나요?">
-            네. Pro는 첫 14일 무료 체험으로 시작하며, 체험 기간이 끝나면
+            네. Pro는 첫 7일 무료 체험으로 시작하며, 체험 기간이 끝나면
             선택하신 주기(월/연)로 자동 결제됩니다. Free 플랜은 카드 등록 없이
             즉시 이용할 수 있습니다.
           </FaqItem>
@@ -147,8 +147,8 @@ export default function PricingPage() {
             지원합니다. 구독 관리·해지·영수증은 설정 페이지 또는 결제 영수증
             이메일의 관리 링크에서 가능합니다.
           </FaqItem>
-          <FaqItem q="14일 무료 체험은 어떻게 되나요?">
-            Pro는 신규 가입 시 첫 14일을 무료로 체험하실 수 있습니다. 체험
+          <FaqItem q="7일 무료 체험은 어떻게 되나요?">
+            Pro는 신규 가입 시 첫 7일을 무료로 체험하실 수 있습니다. 체험
             기간이 끝나기 전 언제든 해지하면 요금이 청구되지 않습니다.
           </FaqItem>
           <FaqItem q="연 구독이 더 저렴한가요?">

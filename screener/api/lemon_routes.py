@@ -90,7 +90,7 @@ async def get_subscription(request: Request):
 
     data = get_user_subscription(user["uid"])
     if not data:
-        # 문서 없음 = 사실상 신규 → 14일 무료 트라이얼 가능
+        # 문서 없음 = 사실상 신규 → 무료 트라이얼 가능
         return {"tier": "free", "subscription": None, "trial_eligible": True}
 
     sub = data.get("subscription")
@@ -99,8 +99,8 @@ async def get_subscription(request: Request):
         if hasattr(ts, "isoformat"):
             sub["current_period_end"] = ts.isoformat()
 
-    # 트라이얼(14일 무료) 가능 여부 — 과거 구독(lemon_customer_id)이나 트라이얼 이력이 있으면
-    # 불가. '재구독/연장 시 또 14일 무료'로 오해하지 않도록 프론트 CTA 문구를 분기시킨다.
+    # 트라이얼(무료 체험) 가능 여부 — 과거 구독(lemon_customer_id)이나 트라이얼 이력이 있으면
+    # 불가. '재구독/연장 시 또 무료 체험'으로 오해하지 않도록 프론트 CTA 문구를 분기시킨다.
     tier = data.get("tier", "free")
     ever_customer = bool(data.get("lemon_customer_id")) or bool(data.get("subscription"))
     trial_used = bool(data.get("trial_started"))

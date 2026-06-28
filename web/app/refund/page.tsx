@@ -37,7 +37,7 @@ export default function RefundPage() {
           <p className="text-muted-foreground">
             Pro 구독은 <strong className="text-foreground">결제일로부터 7일 이내</strong>{" "}
             요청 시 <strong className="text-foreground">전액 환불</strong>됩니다.
-            이유 불문. 첫 14일은 무료 체험으로 미리 사용해보실 수 있습니다.
+            이유 불문. 첫 7일은 무료 체험으로 미리 사용해보실 수 있습니다.
           </p>
         </div>
 
@@ -165,7 +165,7 @@ export default function RefundPage() {
           <p className="mt-3">
             본 서비스는 법정 청약철회 기간(7일)에 맞춰{" "}
             <strong>7일 전액 환불</strong>을 보장하며, 이에 더해 가입 첫{" "}
-            <strong>14일 무료 체험</strong>을 제공하여 결제 전 서비스를 충분히
+            <strong>7일 무료 체험</strong>을 제공하여 결제 전 서비스를 충분히
             평가하실 수 있도록 합니다.
           </p>
         </Section>
