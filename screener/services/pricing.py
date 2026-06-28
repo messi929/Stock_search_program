@@ -9,9 +9,9 @@ from __future__ import annotations
 
 import os
 
-# Pro 요금 (원). CLAUDE.md / project_payment_decision 기준: 월 29,000 / 연 319,000.
-PRO_MONTHLY_KRW: int = int(os.environ.get("PRO_MONTHLY_KRW", "29000"))
-PRO_YEARLY_KRW: int = int(os.environ.get("PRO_YEARLY_KRW", "319000"))
+# Pro 요금 (원). 2026-06-29 인상: 월 39,000 / 연 398,000 (이전 29,000 / 319,000).
+PRO_MONTHLY_KRW: int = int(os.environ.get("PRO_MONTHLY_KRW", "39000"))
+PRO_YEARLY_KRW: int = int(os.environ.get("PRO_YEARLY_KRW", "398000"))
 
 
 def monthly_recurring_krw(monthly_count: int, yearly_count: int) -> float:

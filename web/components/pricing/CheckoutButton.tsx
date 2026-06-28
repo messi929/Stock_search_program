@@ -31,8 +31,8 @@ export function CheckoutButton() {
   return (
     <div className="space-y-2">
       <div className="flex gap-1">
-        {tab("monthly", "월 29,000원")}
-        {tab("yearly", "연 319,000원")}
+        {tab("monthly", "월 39,000원")}
+        {tab("yearly", "연 398,000원")}
       </div>
       {signedIn ? (
         <Button
