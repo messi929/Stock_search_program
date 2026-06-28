@@ -89,7 +89,7 @@ export default function TermsPage() {
               메뉴에서 가능합니다.
             </li>
             <li>
-              유료 결제는 <strong>결제일로부터 14일 이내 전액 환불</strong>을
+              유료 결제는 <strong>결제일로부터 7일 이내 전액 환불</strong>을
               보장합니다. 환불 가능 기간·요청 방법·갱신분 처리 등 자세한 사항은{" "}
               <Link href="/refund" className="underline hover:text-foreground">
                 환불정책
