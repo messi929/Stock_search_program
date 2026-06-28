@@ -41,6 +41,7 @@ export function SubscriptionSection() {
   const tier = data?.tier ?? "free";
   const sub = data?.subscription ?? null;
   const isAdmin = sub?.plan === "admin";
+  const trialEligible = data?.trial_eligible === true;
 
   return (
     <Card>
@@ -60,10 +61,12 @@ export function SubscriptionSection() {
           <div className="space-y-3">
             <p className="text-sm text-muted-foreground">
               현재 무료 플랜입니다. Pro로 업그레이드하면 월 100회 분석·투자 시계 4종·
-              커스텀 스크리너를 이용할 수 있습니다. 첫 14일 무료.
+              커스텀 스크리너를 이용할 수 있습니다.{trialEligible ? " 첫 14일 무료." : ""}
             </p>
             <Link href="/pricing" className="block">
-              <Button className="w-full sm:w-auto">💎 Pro 업그레이드</Button>
+              <Button className="w-full sm:w-auto">
+                {trialEligible ? "💎 14일 무료로 Pro 시작" : "💎 Pro 구독"}
+              </Button>
             </Link>
           </div>
         ) : (

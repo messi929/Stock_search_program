@@ -535,6 +535,7 @@ export type Subscription = {
 export type SubscriptionResponse = {
   tier: string; // "free" | "pro"
   subscription: Subscription | null;
+  trial_eligible?: boolean; // 14일 무료 트라이얼 가능 여부(과거 구독/트라이얼 이력 없을 때만)
 };
 
 export type CheckoutResponse = { url: string };

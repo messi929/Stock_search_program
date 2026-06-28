@@ -86,11 +86,12 @@ async def get_subscription(request: Request):
     if user.get("tier") == "pro" and user.get("email"):
         from screener.middleware import ADMIN_EMAILS
         if user["email"].lower() in ADMIN_EMAILS:
-            return {"tier": "pro", "subscription": {"plan": "admin", "status": "active", "current_period_end": None, "cancel_at_period_end": False}}
+            return {"tier": "pro", "subscription": {"plan": "admin", "status": "active", "current_period_end": None, "cancel_at_period_end": False}, "trial_eligible": False}
 
     data = get_user_subscription(user["uid"])
     if not data:
-        return {"tier": "free", "subscription": None}
+        # 문서 없음 = 사실상 신규 → 14일 무료 트라이얼 가능
+        return {"tier": "free", "subscription": None, "trial_eligible": True}
 
     sub = data.get("subscription")
     if sub and sub.get("current_period_end"):
@@ -98,7 +99,14 @@ async def get_subscription(request: Request):
         if hasattr(ts, "isoformat"):
             sub["current_period_end"] = ts.isoformat()
 
-    return {"tier": data.get("tier", "free"), "subscription": sub}
+    # 트라이얼(14일 무료) 가능 여부 — 과거 구독(lemon_customer_id)이나 트라이얼 이력이 있으면
+    # 불가. '재구독/연장 시 또 14일 무료'로 오해하지 않도록 프론트 CTA 문구를 분기시킨다.
+    tier = data.get("tier", "free")
+    ever_customer = bool(data.get("lemon_customer_id")) or bool(data.get("subscription"))
+    trial_used = bool(data.get("trial_started"))
+    trial_eligible = tier == "free" and not ever_customer and not trial_used
+
+    return {"tier": tier, "subscription": sub, "trial_eligible": trial_eligible}
 
 
 # ── Checkout 세션 생성 ──

@@ -6,14 +6,20 @@ import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
-import { useCheckout } from "@/hooks/useSubscription";
+import { useCheckout, useSubscription } from "@/hooks/useSubscription";
 
-/** Pro 결제 버튼 — 월/연 선택 + 로그인 분기 + LS checkout. */
+/** Pro 결제 버튼 — 월/연 선택 + 로그인/구독상태 분기 + LS checkout. */
 export function CheckoutButton() {
   const { signedIn } = useAuth();
+  const { data: sub } = useSubscription();
   const checkout = useCheckout();
   const [plan, setPlan] = useState<"monthly" | "yearly">("monthly");
   const resumed = useRef(false);
+
+  const isPro = sub?.tier === "pro";
+  // 트라이얼(14일 무료) 자격: 비로그인 신규 방문자는 가능, 로그인 사용자는 서버 판정값.
+  // 로딩 중(undefined)엔 과대약속을 피해 '구독 시작'으로 보수적 처리.
+  const trialEligible = signedIn ? sub?.trial_eligible === true : true;
 
   // 가입→결제 흐름: 비로그인 사용자가 결제를 누르면 /login?next=/pricing?checkout=plan 으로
   // 보내고, 로그인 후 /pricing 으로 돌아오면 checkout 파라미터를 보고 결제를 자동 재개한다.
@@ -32,6 +38,22 @@ export function CheckoutButton() {
     window.history.replaceState({}, "", url.toString());
   }, [signedIn, checkout]);
 
+  // 이미 Pro(구독 중·체험 중·관리자) — '또 14일 무료' 오해 방지: 결제 CTA 대신 구독 관리.
+  if (isPro) {
+    return (
+      <div className="space-y-2">
+        <div className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-center text-sm font-medium text-amber-600">
+          💎 이미 Pro를 이용 중입니다
+        </div>
+        <Link href="/settings/profile" className="block">
+          <Button variant="outline" className="w-full">
+            구독 관리
+          </Button>
+        </Link>
+      </div>
+    );
+  }
+
   const tab = (key: "monthly" | "yearly", label: string) => (
     <button
       type="button"
@@ -45,6 +67,9 @@ export function CheckoutButton() {
       {label}
     </button>
   );
+
+  const ctaSignedIn = trialEligible ? "💎 14일 무료로 시작" : "💎 Pro 구독 시작";
+  const ctaGuest = trialEligible ? "💎 가입하고 14일 무료로 시작" : "💎 가입하고 Pro 시작";
 
   return (
     <div className="space-y-2">
@@ -62,18 +87,18 @@ export function CheckoutButton() {
           }
           disabled={checkout.isPending}
         >
-          {checkout.isPending ? "이동 중…" : "💎 14일 무료로 시작"}
+          {checkout.isPending ? "이동 중…" : ctaSignedIn}
         </Button>
       ) : (
         <Link
           href={`/login?next=${encodeURIComponent(`/pricing?checkout=${plan}`)}`}
           className="block"
         >
-          <Button className="w-full">💎 가입하고 14일 무료로 시작</Button>
+          <Button className="w-full">{ctaGuest}</Button>
         </Link>
       )}
       <p className="text-center text-[11px] text-muted-foreground">
-        첫 14일 무료 · 언제든 해지
+        {trialEligible ? "첫 14일 무료 · 언제든 해지" : "언제든 해지 · 결제 후 바로 이용"}
       </p>
     </div>
   );
