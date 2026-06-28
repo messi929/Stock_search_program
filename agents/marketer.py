@@ -120,6 +120,19 @@ _CORE_RULES = """# 1순위 — 구체성 (어기면 글은 폐기)
 - 결론(사라/팔라)은 빼되, "여기가 핵심"이라는 한 끗은 남긴다.
 - 브랜드 톤: 펌핑하지 않는다. 양쪽을 냉정하게 본다.
 
+# 기술적 분석 활용
+- facts에 '## 기술적 분석' 섹션(이동평균 정배열·골든/데드크로스·거래량 추세·매집·변동성 등)이
+  있으면 적극 활용한다. PER/PBR 같은 밸류 한 줄보다 추세·수급·거래량의 '움직임'이 더 후킹된다.
+- 단, 기술 용어를 '매수 신호/시그널'로 번역하지 말 것. "골든크로스 발생"은 사실 관찰로 쓰고
+  단정(오른다)으로 잇지 않는다.
+
+# 경기민감(사이클) 종목 — 단일 PER 함정 (반도체·화학·철강·정유·조선·해운 등)
+- facts에 '## 사이클 주의' 섹션이 있으면 반드시 반영한다.
+- 이런 업종은 이익이 크게 출렁여 단일 PER/PBR이 신호를 거꾸로 준다:
+  호황 이익 피크엔 PER이 낮게(저평가 착시), 불황 바닥엔 높게 보인다.
+- 따라서 "PER 9, 싸다" 식 단정 금지. "PER은 낮지만, 이게 이익 피크라면 얘기가 다르다"처럼
+  **사이클 위치를 함께 묻는 관점**을 남긴다. 이게 펌핑판에서 독자를 구하는 핵심 긴장이 된다.
+
 # 법적 안전 (어기면 서비스가 위법)
 - 금지: 추천/추천합니다, 사세요, 매수·매도, 매수가/목표가/손절가 등 가격 제시,
   "매수 신호/시그널", "반드시·확실히 오른다", "유망주" 등 권유·단정
@@ -132,13 +145,39 @@ _CORE_RULES = """# 1순위 — 구체성 (어기면 글은 폐기)
 - hook(첫 문장)은 가장 강한 수치/긴장 하나로 시작. body 3~6줄, hashtags 2~4개(한국어, # 제외).
 - 전체 480자 이내(Threads 500자, 본문 면책 없음 — 면책은 프로필 bio)."""
 
-_ANGLE_SYSTEM = """당신은 주식 SNS 글의 '편집 앵글'을 잡는 에디터입니다.
+# 앵글 아키타입 — '충돌형' 단일 재배 탈피(point 2). 앵글 파인더가 종목 데이터에
+# 가장 맞는 유형 하나를 고른다. key = 출력/추적용 라벨, value = 선택 가이드.
+ANGLE_ARCHETYPES: dict[str, str] = {
+    "충돌": "서로 어긋나는 두 수치(가격↓ vs 수급↑, RSI 과열 vs 외국인 이탈, 정배열 vs 거래량 감소).",
+    "사이클위치": "경기민감 업종에서 PER/이익의 사이클 위치가 주는 함정. '## 사이클 주의'가 있으면 1순위 후보.",
+    "추세변곡": "골든/데드크로스·정배열·이평수렴·이격 등 기술 추세의 전환 또는 임박.",
+    "수급반전": "외국인 연속 순매수/순매도의 지속·전환, 매집(거래량↑·가격안정) 신호의 의미.",
+    "단일충격": "한 개의 극단 수치(거래량 N배, 52주 저가 대비 +X%, N일 연속 상승)로 스크롤을 멈춘다.",
+    "과열피로": "RSI 과열·신고가 근접·연속 상승의 피로/되돌림 가능성을 냉정히 관찰.",
+}
+ARCHETYPE_KEYS: tuple[str, ...] = tuple(ANGLE_ARCHETYPES.keys())
+
+_ARCHETYPE_MENU = "\n".join(f"  · {k}: {v}" for k, v in ANGLE_ARCHETYPES.items())
+
+_ANGLE_SYSTEM = f"""당신은 주식 SNS 글의 '편집 앵글'을 잡는 에디터입니다.
 주어진 종목 수치에서, 독자가 스크롤을 멈출 만한 '단 하나의 긴장'을 찾아냅니다.
 
+# 앵글 유형(아키타입) — 이 종목 데이터가 가장 강하게 떠받치는 '한 가지'를 고른다
+{_ARCHETYPE_MENU}
+
+선택 원칙:
+- **'충돌'로 기계적으로 수렴시키지 말 것.** 데이터가 가장 선명하게 받쳐주는 유형을 고른다.
+  정배열·크로스가 뚜렷하면 '추세변곡', 거래량/연속상승이 극단이면 '단일충격',
+  '## 사이클 주의'가 있으면 '사이클위치'를 우선 고려한다.
+- 여러 유형이 가능하면, '최근 이미 많이 쓴 유형'을 피해 다양성을 확보한다(아래 입력 참고).
+
 원칙:
-- 숫자 나열 금지. 서로 충돌하거나 의외인 수치 조합에서 '하나의 이야기'를 뽑는다.
-  예: "주가는 빠지는데 외국인은 산다", "신고가 코앞인데 거래량은 마른다",
-      "RSI 과열인데 외국인은 이탈 중".
+- 숫자 나열 금지. 고른 아키타입에 맞는 '하나의 이야기'를 뽑는다.
+- '## 기술적 분석' 섹션(정배열·골든/데드크로스·거래량 추세·매집·변동성)이 있으면 그 신호를
+  밸류(PER/PBR)와 엮어 긴장을 만든다 — 움직임이 정적 밸류보다 강한 훅이 된다.
+- '## 사이클 주의' 섹션이 있으면 그것을 긴장으로 적극 활용한다.
+  예: "PER은 9로 싸 보이는데, 반도체 이익이 피크라면 그 싼 PER이 함정일 수 있다".
+- archetype: 위 6종 중 고른 유형의 라벨(예: '추세변곡')을 그대로 적는다.
 - tension: 그 긴장을 한 문장으로(독자가 읽을 문장이 아니라, 작가에게 줄 방향).
 - key_numbers: 그 긴장을 떠받치는, 의미를 붙일 수 있는 숫자 2~3개만.
 - avoid: 긴장과 무관하거나 값이 의심스러워 빼야 할 수치(예: 비정상적으로 높은 PER).
@@ -176,6 +215,9 @@ _EDITOR_SYSTEM = (
 class PostAngle(BaseModel):
     """① 앵글 파인더 출력 — 글 한 편의 '단 하나의 긴장'."""
 
+    archetype: str = Field(
+        default="", description="고른 앵글 유형 라벨(충돌/사이클위치/추세변곡/수급반전/단일충격/과열피로)"
+    )
     tension: str = Field(description="이 종목의 단 하나의 긴장/모순/관점 (작가에게 줄 방향, 한 문장)")
     key_numbers: list[str] = Field(
         default_factory=list, description="긴장을 떠받치는 의미부여된 숫자 2~3개"
@@ -235,7 +277,10 @@ def _numeric_fact_count(s: dict) -> int:
     """스냅샷에서 글에 인용 가능한 '실제 수치' 개수. 헛글 가드용."""
     keys = (
         "price", "change_pct", "rsi", "per", "pbr", "roe",
-        "vs_high_52w", "foreign_consecutive", "volume_ratio",
+        "vs_high_52w", "vs_low_52w", "foreign_consecutive", "volume_ratio",
+        # 기술 지표(1a) — 밸류 결손 종목도 기술 신호로 글을 쓸 수 있게 가드 완화.
+        "vs_ma20_pct", "vs_ma60_pct", "consecutive_gains", "volume_trend",
+        "volatility_20d",
     )
     n = 0
     for k in keys:
@@ -295,7 +340,10 @@ def _date_note(as_of: str) -> str:
 
 def _angle_brief(angle: PostAngle) -> str:
     """앵글 → 작가/편집 입력용 한국어 브리핑."""
-    parts = [f"# 편집 앵글(이 긴장 하나로 글을 수렴시켜라)\n{angle.tension.strip()}"]
+    head = "# 편집 앵글(이 긴장 하나로 글을 수렴시켜라)"
+    if angle.archetype:
+        head += f" [유형: {angle.archetype}]"
+    parts = [f"{head}\n{angle.tension.strip()}"]
     if angle.key_numbers:
         parts.append("핵심 숫자(이걸 의미와 함께 써라): " + ", ".join(angle.key_numbers))
     if angle.avoid:
@@ -327,10 +375,23 @@ class MarketerAgent(BaseAgent):
         raise NotImplementedError("MarketerAgent은 generate()를 사용하세요")
 
     # ── ① 앵글 ─────────────────────────────
-    async def _find_angle(self, facts: str, fmt: str, name: str, uid: str) -> Optional[PostAngle]:
+    async def _find_angle(
+        self,
+        facts: str,
+        fmt: str,
+        name: str,
+        uid: str,
+        avoid_archetypes: Optional[list[str]] = None,
+    ) -> Optional[PostAngle]:
         guide = FORMATS[fmt]["guide"]
+        avoid_line = ""
+        if avoid_archetypes:
+            avoid_line = (
+                f"\n\n# 최근 이미 많이 쓴 앵글 유형(가능하면 피해 다양성 확보)\n"
+                f"{', '.join(avoid_archetypes)} — 데이터가 다른 유형도 받쳐주면 그쪽을 골라라."
+            )
         user_msg = (
-            f"{facts}\n\n# 글 포맷(톤 힌트)\n{guide}\n\n"
+            f"{facts}\n\n# 글 포맷(톤 힌트)\n{guide}{avoid_line}\n\n"
             f"위 수치에서 '{name}' 글 한 편의 단 하나의 긴장을 잡아라. "
             f"포맷 톤에 맞는 긴장으로."
         )
@@ -429,8 +490,17 @@ class MarketerAgent(BaseAgent):
             return None
 
     # ── 진입점 ─────────────────────────────
-    async def generate(self, ticker: str, fmt: str, uid: str = "") -> Optional[dict]:
-        """단일 (종목 × 포맷) 초안 생성 — 4단계 하네스. 실패 시 None."""
+    async def generate(
+        self,
+        ticker: str,
+        fmt: str,
+        uid: str = "",
+        avoid_archetypes: Optional[list[str]] = None,
+    ) -> Optional[dict]:
+        """단일 (종목 × 포맷) 초안 생성 — 4단계 하네스. 실패 시 None.
+
+        avoid_archetypes: 최근 많이 쓴 앵글 유형(배치/발행 이력 기반 다양성 힌트, 비강제).
+        """
         fmt = fmt if fmt in FORMATS else "contrarian"
         ticker = resolve_ticker(ticker) or ticker
         snapshot = build_instant_snapshot(ticker)
@@ -447,7 +517,7 @@ class MarketerAgent(BaseAgent):
         facts = _snapshot_facts(snapshot) + "\n\n" + _date_note(_as_of_label(snapshot))
 
         # ① 앵글 (실패해도 진행 — 앵글 없으면 빈 브리핑)
-        angle = await self._find_angle(facts, fmt, name, uid)
+        angle = await self._find_angle(facts, fmt, name, uid, avoid_archetypes=avoid_archetypes)
         angle_brief = _angle_brief(angle) if angle else "# 편집 앵글\n(앵글 추출 실패 — 수치의 가장 강한 긴장 하나를 직접 잡아라)"
 
         # ② 작가 best-of-N
@@ -504,6 +574,7 @@ class MarketerAgent(BaseAgent):
             "score": edited.score_total,    # 편집 자가채점(0~30)
             "candidates": len(candidates),
             "angle": angle.tension if angle else "",
+            "archetype": (angle.archetype if angle else ""),  # 앵글 유형(다양성 추적/검수 노출)
             "source": "harness-v2",
         }
 
@@ -526,17 +597,23 @@ def assemble_post(post: ThreadsPost) -> str:
 
 
 async def generate_batch(
-    tickers: list[str], formats: list[str], uid: str = ""
+    tickers: list[str],
+    formats: list[str],
+    uid: str = "",
+    avoid_archetypes: Optional[list[str]] = None,
 ) -> list[dict]:
     """여러 (종목 × 포맷) 조합을 동시 생성. 실패 항목은 제외.
 
     각 조합이 내부에서 4단계(앵글+작가N+편집)를 돌리므로, 조합 간 동시성은
     유지하되 LLM 호출량이 조합당 ~5콜임에 유의(저volume 마케팅이라 허용).
+
+    avoid_archetypes: 최근 발행에서 많이 쓴 앵글 유형(다양성 힌트, 비강제). 배치 전체에
+    동일 적용 — 종목별 데이터가 달라 자연 분산되고, 이력 기반 회피는 point 3가 채운다.
     """
     agent = MarketerAgent()
     pairs = [(t, f) for t in tickers for f in formats]
     results = await asyncio.gather(
-        *(agent.generate(t, f, uid=uid) for t, f in pairs),
+        *(agent.generate(t, f, uid=uid, avoid_archetypes=avoid_archetypes) for t, f in pairs),
         return_exceptions=True,
     )
     out: list[dict] = []
@@ -548,10 +625,13 @@ async def generate_batch(
     return out
 
 
-def pick_hot_tickers(limit: int = 3) -> list[str]:
+def pick_hot_tickers(limit: int = 3, exclude: Optional[list[str]] = None) -> list[str]:
     """스크리너 스냅샷에서 '오늘 화제 종목' 자동 선정 — 등락 절댓값 + 거래량비 상위.
 
     KR 대형주 위주(노이즈 적은 종목). 데이터 없으면 빈 리스트.
+
+    exclude: 최근 이미 다룬 티커(연속성 메모리, point 3). 신선한 종목을 우선하되,
+    제외 후 부족하면 랭킹 순서로 보충해 '생성 0'을 막는다(중복 방지는 베스트에포트).
     """
     try:
         from screener.api.routes import _get_combined_df
@@ -568,14 +648,72 @@ def pick_hot_tickers(limit: int = 3) -> list[str]:
         if "market_cap" in d.columns:
             d = d.nlargest(300, "market_cap")
         if "change_pct" not in d.columns:
-            return d.head(limit)["ticker"].astype(str).tolist()
-        d = d.assign(_abs=d["change_pct"].abs())
-        if "volume_ratio" in d.columns:
-            d = d.assign(_score=d["_abs"].fillna(0) + d["volume_ratio"].fillna(0) * 2)
+            ranked = d.head(max(1, limit) * 4)["ticker"].astype(str).tolist()
         else:
-            d = d.assign(_score=d["_abs"].fillna(0))
-        d = d.sort_values("_score", ascending=False)
-        return d.head(max(1, limit))["ticker"].astype(str).tolist()
+            d = d.assign(_abs=d["change_pct"].abs())
+            if "volume_ratio" in d.columns:
+                d = d.assign(_score=d["_abs"].fillna(0) + d["volume_ratio"].fillna(0) * 2)
+            else:
+                d = d.assign(_score=d["_abs"].fillna(0))
+            d = d.sort_values("_score", ascending=False)
+            # 제외/보충을 위해 limit보다 넉넉히 후보를 뽑아둔다.
+            ranked = d.head(max(1, limit) * 4)["ticker"].astype(str).tolist()
+
+        ex = {str(t).upper() for t in (exclude or [])}
+        fresh = [t for t in ranked if t.upper() not in ex]
+        picked = fresh[: max(1, limit)]
+        if len(picked) < max(1, limit):  # 신선 종목 부족 → 랭킹순 보충(생성 0 방지)
+            picked += [t for t in ranked if t not in picked][: max(1, limit) - len(picked)]
+        return picked[: max(1, limit)]
     except Exception as e:
         logger.debug(f"[marketer] hot tickers 선정 실패: {e}")
         return []
+
+
+def recent_marketing_memory(limit: int = 60) -> dict:
+    """최근 마케팅 글(marketing_drafts)에서 연속성 메모리 추출 — 중복 회피용(point 3).
+
+    Returns:
+      {
+        "tickers": [최근 다룬 티커(중복 제거, 최신순)...],
+        "archetypes": [최근 과다 사용된 앵글 유형(상위 2개)...],
+      }
+    Firestore 미가용/오류 시 빈 메모리(생성은 정상 진행).
+    """
+    empty = {"tickers": [], "archetypes": []}
+    try:
+        from firebase_admin import firestore
+
+        from screener.db.firebase_client import get_db
+
+        db = get_db()
+        q = (
+            db.collection("marketing_drafts")
+            .order_by("created_at", direction=firestore.Query.DESCENDING)
+            .limit(max(1, min(limit, 200)))
+        )
+        tickers: list[str] = []
+        arche_counts: dict[str, int] = {}
+        for doc in q.stream():
+            dd = doc.to_dict() or {}
+            t = str(dd.get("ticker") or "").upper()
+            if t:
+                tickers.append(t)
+            a = str(dd.get("archetype") or "").strip()
+            if a:
+                arche_counts[a] = arche_counts.get(a, 0) + 1
+
+        # 중복 티커 제거(최신순 보존)
+        seen: set[str] = set()
+        uniq: list[str] = []
+        for t in tickers:
+            if t not in seen:
+                seen.add(t)
+                uniq.append(t)
+
+        # 과다 사용 유형 상위 2개만 회피(완전 차단 아님 — 데이터가 받쳐주면 작가가 무시).
+        over_used = sorted(arche_counts, key=lambda k: arche_counts[k], reverse=True)[:2]
+        return {"tickers": uniq, "archetypes": over_used}
+    except Exception as e:
+        logger.debug(f"[marketer] 연속성 메모리 조회 실패: {e}")
+        return empty

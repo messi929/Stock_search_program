@@ -47,6 +47,7 @@ export default function AdminMarketingPage() {
   const [selectedFormats, setSelectedFormats] = useState<string[] | null>(null);
   const [generating, setGenerating] = useState(false);
   const [briefingGenerating, setBriefingGenerating] = useState(false);
+  const [weekendGenerating, setWeekendGenerating] = useState(false);
   const [statusFilter, setStatusFilter] = useState("");
 
   const publishStatusQ = useQuery({
@@ -115,6 +116,19 @@ export default function AdminMarketingPage() {
       toast.error(e instanceof Error ? e.message : "브리핑 생성 실패");
     } finally {
       setBriefingGenerating(false);
+    }
+  };
+
+  const generateWeekendBriefing = async () => {
+    setWeekendGenerating(true);
+    try {
+      const res = await marketingApi.generateWeekendBriefing();
+      toast.success(`주말 브리핑 ${res.count}건 생성됨`);
+      draftsQ.refetch();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "주말 브리핑 생성 실패");
+    } finally {
+      setWeekendGenerating(false);
     }
   };
 
@@ -210,6 +224,25 @@ export default function AdminMarketingPage() {
           disabled={briefingGenerating}
         >
           {briefingGenerating ? "생성 중..." : "🌙 브리핑 생성"}
+        </Button>
+      </div>
+
+      {/* ── 주말 결산 브리핑 생성 ── */}
+      <div className="flex items-center justify-between gap-3 rounded-lg border p-4">
+        <div>
+          <p className="text-sm font-medium">🗓️ 주말 결산 브리핑</p>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            주말 주요 소식 + 지난 금요일 미국장 마감을 정리해 다음 거래일(월요일) 국내장
+            관전 포인트를 담은 글을 생성합니다. (일요일 밤 자동 발행 대상)
+          </p>
+        </div>
+        <Button
+          type="button"
+          variant="outline"
+          onClick={generateWeekendBriefing}
+          disabled={weekendGenerating}
+        >
+          {weekendGenerating ? "생성 중..." : "🗓️ 주말 브리핑 생성"}
         </Button>
       </div>
 

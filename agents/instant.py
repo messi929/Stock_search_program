@@ -77,8 +77,22 @@ def build_instant_snapshot(ticker: str) -> Optional[dict]:
         "roe": num("roe"),
         "sector": text("sector"),
         "vs_high_52w": num("vs_high_52w"),
+        "vs_low_52w": num("vs_low_52w"),
         "foreign_consecutive": int(num("foreign_consecutive", 0) or 0),
         "volume_ratio": num("volume_ratio"),
+        # ── 기술 지표(이미 collector가 계산·저장. 마케팅/요약에서 인용) ──
+        "vs_ma20_pct": num("vs_ma20_pct"),
+        "vs_ma60_pct": num("vs_ma60_pct"),
+        "ma_aligned": int(num("ma_aligned", 0) or 0),
+        "golden_cross": int(num("golden_cross", 0) or 0),
+        "death_cross": int(num("death_cross", 0) or 0),
+        "golden_cross_long": int(num("golden_cross_long", 0) or 0),
+        "consecutive_gains": int(num("consecutive_gains", 0) or 0),
+        "volume_trend": int(num("volume_trend", 0) or 0),
+        "accumulation": int(num("accumulation", 0) or 0),
+        "ma_squeeze": num("ma_squeeze"),
+        "volatility_20d": num("volatility_20d"),
+        "risk_grade": text("risk_grade"),
         # 데이터 기준 시각(ISO). 마케팅 글이 '오늘' 대신 정확한 일자로 쓰게 한다.
         "updated_at": text("updated_at"),
     }
@@ -156,8 +170,87 @@ _INSTANT_SYSTEM = """당신은 한국/미국 주식의 '첫인상 요약'을 작
 - 한국어, 군더더기 없이 2~3문장."""
 
 
+# 경기민감(사이클) 업종 — 이익이 사이클을 크게 타 단일 PER/PBR이 신호를 거꾸로 줄 수
+# 있는 업종군. 호황 이익 피크엔 PER이 낮게(저평가 착시), 불황 바닥엔 높게 보인다.
+_CYCLICAL_KEYWORDS = (
+    "반도체", "디스플레이", "화학", "정유", "에너지", "철강", "금속", "비철",
+    "조선", "해운", "자동차", "건설", "기계", "운송",
+)
+
+
+def _is_cyclical(sector: str) -> bool:
+    """섹터명이 경기민감 업종군에 속하는가(부분 일치)."""
+    s = (sector or "").replace(" ", "")
+    return any(k in s for k in _CYCLICAL_KEYWORDS)
+
+
+def _cycle_note(s: dict) -> str:
+    """사이클 업종이면 '단일 PER 함정' 경고 문구. 아니면 빈 문자열.
+
+    호황기엔 이익 피크로 PER이 낮게(저평가 착시), 불황기엔 이익 저점으로 높게 보인다.
+    """
+    if not _is_cyclical(s.get("sector", "")):
+        return ""
+    note = (
+        f"이 종목은 경기민감(사이클) 업종({s.get('sector')})이라 이익이 크게 출렁인다. "
+        "단일 PER/PBR로 저평가·고평가를 단정하면 신호가 거꾸로 나올 수 있다"
+    )
+    try:
+        per = float(s.get("per") or 0)
+    except (TypeError, ValueError):
+        per = 0.0
+    if 0 < per <= 12:
+        note += " — 낮은 PER이 호황기 '이익 피크'의 착시일 수 있으니 추세·수급과 함께 보라."
+    elif per >= 25:
+        note += " — 높은 PER이 불황기 '이익 저점'의 신호일 수 있으니 추세·수급과 함께 보라."
+    else:
+        note += ". 이익 사이클 위치에 따라 해석이 달라진다."
+    return note
+
+
+def _technical_facts(s: dict) -> list[str]:
+    """이미 계산된 기술 지표 → 글에 인용할 수 있는 한국어 기술분석 팩트 목록.
+
+    collector가 산출해 스냅샷에 들어온 추세·거래량·변동성 신호를 노출한다.
+    LEGAL: 사실 기술(技術) 관찰만 — '매수 신호' 등 권유 어휘는 쓰지 않는다.
+    """
+    t: list[str] = []
+    if s.get("ma_aligned"):
+        t.append("이동평균 정배열(5일>20일>60일) — 단기 상승 추세 구조")
+    if s.get("vs_ma20_pct") is not None:
+        t.append(f"20일 이동평균 대비: {s['vs_ma20_pct']:+.1f}%")
+    if s.get("vs_ma60_pct") is not None:
+        t.append(f"60일 이동평균 대비: {s['vs_ma60_pct']:+.1f}%")
+    if s.get("golden_cross"):
+        t.append("최근(5일 내) 골든크로스 — MA5가 MA20을 상향 돌파")
+    if s.get("death_cross"):
+        t.append("최근(5일 내) 데드크로스 — MA5가 MA20을 하향 돌파")
+    elif s.get("golden_cross_long"):
+        t.append("최근 장기 골든크로스 — MA20이 MA60을 상향 돌파")
+    if s.get("consecutive_gains"):
+        t.append(f"{s['consecutive_gains']}일 연속 상승")
+    if s.get("volume_trend"):
+        t.append(f"거래량 {s['volume_trend']}일 연속 증가")
+    if s.get("accumulation"):
+        t.append("매집 의심 신호 — 거래량 증가 + 가격 안정 동반")
+    ms = s.get("ma_squeeze")
+    if ms is not None and 0 < ms < 2.0:
+        t.append(f"이동평균 수렴(스프레드 {ms:.1f}%) — 변동성 응축 구간")
+    if s.get("volatility_20d"):
+        t.append(f"20일 변동성: {s['volatility_20d']:.1f}%")
+    if s.get("vs_low_52w"):
+        t.append(f"52주 저가 대비: {s['vs_low_52w']:+.1f}%")
+    if s.get("risk_grade") and s["risk_grade"] != "데이터없음":
+        t.append(f"변동성 등급: {s['risk_grade']}")
+    return t
+
+
 def _snapshot_facts(s: dict) -> str:
-    """스냅샷 dict → Haiku 입력용 한국어 팩트 목록."""
+    """스냅샷 dict → LLM 입력용 한국어 팩트 목록.
+
+    시세·밸류 기본 팩트에 더해, 이미 계산된 '기술적 분석' 섹션과 사이클 업종이면
+    '사이클 주의' 섹션을 덧붙인다(마케팅 글의 so-what 심화 + 단일 PER 함정 방어).
+    """
     unit = "원" if s.get("is_kr") else "달러"
     parts: list[str] = [f"종목: {s.get('name') or s.get('ticker')} ({s.get('ticker')})"]
     if s.get("sector"):
@@ -180,9 +273,17 @@ def _snapshot_facts(s: dict) -> str:
         parts.append(f"외국인 연속 순매수: {s['foreign_consecutive']}일")
     if s.get("volume_ratio"):
         parts.append(f"거래량비(평균 대비): {s['volume_ratio']:.1f}x")
-    return "다음 스냅샷으로 빠른 첫인상 요약을 작성하세요:\n" + "\n".join(
+
+    out = "다음 스냅샷으로 빠른 첫인상 요약을 작성하세요:\n" + "\n".join(
         "- " + p for p in parts
     )
+    tech = _technical_facts(s)
+    if tech:
+        out += "\n\n## 기술적 분석\n" + "\n".join("- " + p for p in tech)
+    note = _cycle_note(s)
+    if note:
+        out += "\n\n## 사이클 주의\n- " + note
+    return out
 
 
 async def instant_quick_take(snapshot: dict, uid: str = "") -> str:

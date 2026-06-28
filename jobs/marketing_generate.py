@@ -89,21 +89,30 @@ async def run_generate(
     dry_run: bool = False,
 ) -> dict:
     """일괄 생성 메인."""
-    from agents.marketer import DEFAULT_FORMATS, FORMATS, generate_batch, pick_hot_tickers
+    from agents.marketer import (
+        DEFAULT_FORMATS,
+        FORMATS,
+        generate_batch,
+        pick_hot_tickers,
+        recent_marketing_memory,
+    )
 
     _prime_name_store()
+
+    # 연속성 메모리(point 3): 최근 다룬 종목·과다 사용 앵글 유형을 회피.
+    memory = recent_marketing_memory()
 
     fmts = [f for f in (formats or []) if f in FORMATS] or list(DEFAULT_FORMATS)
     tks = [t.strip().upper() for t in (tickers or []) if t.strip()]
     if not tks:
-        tks = pick_hot_tickers(limit=max(1, min(hot, 10)))
+        tks = pick_hot_tickers(limit=max(1, min(hot, 10)), exclude=memory["tickers"])
     if not tks:
         logger.error("생성할 종목이 없습니다(스냅샷 미적재). --tickers로 직접 지정하세요.")
         return {"created": 0}
 
     tks = tks[:10]
-    logger.info(f"마케팅 글 생성 — 종목 {tks} × 포맷 {fmts} (dry_run={dry_run})")
-    posts = await generate_batch(tks, fmts)
+    logger.info(f"마케팅 글 생성 — 종목 {tks} × 포맷 {fmts} (dry_run={dry_run}, 회피유형={memory['archetypes']})")
+    posts = await generate_batch(tks, fmts, avoid_archetypes=memory["archetypes"])
 
     # 콘솔 출력 (.bat에서 chcp 65001 + PYTHONUTF8=1로 이모지 안전)
     for p in posts:

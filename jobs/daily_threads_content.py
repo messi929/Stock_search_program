@@ -62,11 +62,14 @@ async def run_daily(
 ) -> dict:
     """일일 콘텐츠 생성 메인."""
     from agents.briefing import generate_briefing
-    from agents.marketer import generate_batch, pick_hot_tickers
+    from agents.marketer import generate_batch, pick_hot_tickers, recent_marketing_memory
     from jobs.marketing_generate import _prime_name_store, _save_drafts
 
     # 종목 글은 실수치가 필요 → store 적재 (브리핑은 FDR이라 불필요)
     _prime_name_store()
+
+    # 연속성 메모리(point 3): 최근 다룬 종목·과다 사용 앵글 유형을 회피.
+    memory = recent_marketing_memory()
 
     posts: list[dict] = []
 
@@ -81,11 +84,13 @@ async def run_daily(
 
     # 2) 화제 종목 '양쪽 관점'(contrarian)
     if stocks > 0:
-        tickers = pick_hot_tickers(limit=max(1, min(stocks, 5)))
+        tickers = pick_hot_tickers(limit=max(1, min(stocks, 5)), exclude=memory["tickers"])
         if tickers:
-            stock_posts = await generate_batch(tickers, ["contrarian"])
+            stock_posts = await generate_batch(
+                tickers, ["contrarian"], avoid_archetypes=memory["archetypes"]
+            )
             posts.extend(stock_posts)
-            logger.info(f"[daily] 종목 글 {len(stock_posts)}편 생성: {tickers}")
+            logger.info(f"[daily] 종목 글 {len(stock_posts)}편 생성: {tickers} (회피유형={memory['archetypes']})")
         else:
             logger.warning("[daily] 화제 종목 선정 실패(스냅샷 미적재)")
 

@@ -15,7 +15,14 @@ from fastapi import APIRouter, Request
 from loguru import logger
 from starlette.responses import JSONResponse
 
-from agents.marketer import DEFAULT_FORMATS, FORMATS, THREADS_MAX, generate_batch, pick_hot_tickers
+from agents.marketer import (
+    DEFAULT_FORMATS,
+    FORMATS,
+    THREADS_MAX,
+    generate_batch,
+    pick_hot_tickers,
+    recent_marketing_memory,
+)
 from screener.api.admin_routes import _forbid, _is_admin
 from utils import threads_client
 
@@ -52,6 +59,7 @@ def _serialize(doc_id: str, d: dict) -> dict:
         "warnings": d.get("warnings", []) or [],   # 독자시점/길이 가드(하네스 v2)
         "score": int(d.get("score", 0) or 0),       # 편집 자가채점(0~30)
         "angle": d.get("angle", "") or "",          # 글의 핵심 긴장(하네스 v2)
+        "archetype": d.get("archetype", "") or "",  # 앵글 유형(다양성 추적, point 2)
         "source": d.get("source", "haiku"),
         "permalink": d.get("permalink", ""),
         "published_at": _iso(d.get("published_at")),
@@ -121,9 +129,14 @@ async def generate_drafts(request: Request):
     formats = [f for f in (body.get("formats") or []) if f in FORMATS]
     if not formats:
         formats = list(DEFAULT_FORMATS)
+
+    # 연속성 메모리(point 3): 최근 다룬 종목·과다 사용 앵글 유형을 회피.
+    memory = recent_marketing_memory()
+
     if not tickers:
         hot_count = int(body.get("hot_count", 3) or 3)
-        tickers = pick_hot_tickers(limit=max(1, min(hot_count, 10)))
+        # 자동 선정 시에만 최근 종목 제외(관리자가 직접 입력하면 존중).
+        tickers = pick_hot_tickers(limit=max(1, min(hot_count, 10)), exclude=memory["tickers"])
     if not tickers:
         return JSONResponse(
             status_code=400,
@@ -136,7 +149,9 @@ async def generate_drafts(request: Request):
     if len(tickers) * len(formats) > 30:
         tickers = tickers[: max(1, 30 // max(1, len(formats)))]
 
-    posts = await generate_batch(tickers, formats, uid=uid)
+    posts = await generate_batch(
+        tickers, formats, uid=uid, avoid_archetypes=memory["archetypes"]
+    )
     if not posts:
         return JSONResponse(
             status_code=422,
@@ -209,6 +224,47 @@ async def generate_briefing_draft(request: Request):
         return JSONResponse(status_code=500, content={"detail": "초안 저장 실패"})
 
     logger.info(f"[marketing] 브리핑 초안 생성 by {user.get('email', '?')}")
+    return {"created": [serialized], "count": 1}
+
+
+@router.post("/weekend-briefing/generate")
+async def generate_weekend_briefing_draft(request: Request):
+    """주말 결산 브리핑 초안 1건 생성 → Firestore 저장.
+
+    주말 주요 소식 + 지난 금요일 미국장 마감 → 다음 거래일(월요일) 국내장 관전.
+    Sonnet 1회. 종목 입력 불필요.
+    """
+    if not _is_admin(request):
+        return _forbid()
+
+    user = getattr(request.state, "user", None) or {}
+    uid = user.get("uid", "") if isinstance(user, dict) else ""
+
+    from agents.weekend_briefing import generate_weekend_briefing
+
+    post = await generate_weekend_briefing(uid=uid)
+    if not post:
+        return JSONResponse(
+            status_code=502,
+            content={"detail": "주말 브리핑 생성 실패(지수·뉴스 결손 또는 AI 응답 없음)"},
+        )
+
+    from firebase_admin import firestore
+
+    from screener.db.firebase_client import get_db
+
+    db = get_db()
+    now = firestore.SERVER_TIMESTAMP
+    try:
+        ref = db.collection(_COLLECTION).document()
+        ref.set({**post, "status": "draft", "created_at": now, "updated_at": now})
+        doc = ref.get()
+        serialized = _serialize(ref.id, doc.to_dict() or post)
+    except Exception as e:
+        logger.warning(f"[marketing] 주말 브리핑 저장 실패: {e}")
+        return JSONResponse(status_code=500, content={"detail": "초안 저장 실패"})
+
+    logger.info(f"[marketing] 주말 브리핑 초안 생성 by {user.get('email', '?')}")
     return {"created": [serialized], "count": 1}
 
 

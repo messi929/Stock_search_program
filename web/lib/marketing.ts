@@ -22,6 +22,7 @@ export interface MarketingDraft {
   warnings: string[]; // 독자시점/길이 가드 경고 (하네스 v2)
   score: number; // 편집 자가채점 0~30 (하네스 v2)
   angle: string; // 글의 핵심 긴장 (하네스 v2)
+  archetype: string; // 앵글 유형 (다양화 point 2)
   source: string;
   permalink: string;
   published_at: string | null;
@@ -60,6 +61,11 @@ export const marketingApi = {
   generateBriefing: () =>
     apiCall<{ created: MarketingDraft[]; count: number }>(
       "/api/admin/marketing/briefing/generate",
+      { method: "POST" },
+    ),
+  generateWeekendBriefing: () =>
+    apiCall<{ created: MarketingDraft[]; count: number }>(
+      "/api/admin/marketing/weekend-briefing/generate",
       { method: "POST" },
     ),
   update: (id: string, patch: { text?: string; status?: DraftStatus }) =>

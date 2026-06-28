@@ -130,3 +130,76 @@ def fetch_overnight_us_news(limit: int = 8, timeout: float = 5.0) -> list[dict]:
         _US_CACHE["at"] = now
         _US_CACHE["items"] = items
     return items[:limit]
+
+
+# ──────────────────────────────────────────────
+# 주말 브리핑 뉴스 — 주말 주요 소식 + 다음주 전망 (Google News RSS 검색)
+# ──────────────────────────────────────────────
+
+# 주말엔 시장이 닫혀 '데이터'가 아니라 '뉴스'가 핵심. 주말 새 글로벌 이슈 +
+# 다가오는 주(週) 증시 전망 헤드라인을 모아, 주말 브리핑의 '무슨일/다음주 일정'을 채운다.
+_WEEKEND_QUERIES: tuple[str, ...] = (
+    "주말 증시",
+    "이번주 증시 전망",
+    "코스피 전망",
+    "글로벌 경제",
+)
+
+_WEEKEND_CACHE: dict[str, object] = {"at": 0.0, "items": []}
+
+
+def fetch_weekend_news(limit: int = 10, timeout: float = 5.0) -> list[dict]:
+    """주말 주요 소식 + 다음주 증시 전망 한국어 헤드라인. 실패 시 빈 리스트.
+
+    Google News RSS 검색('주말 증시', '이번주 증시 전망' 등)으로 모은다. 헤드라인만
+    사용하며, 주말 브리핑 에이전트가 '근거 있을 때만' 원인·일정을 인용한다(추측 금지).
+    """
+    now = time.time()
+    cached = _WEEKEND_CACHE.get("items") or []
+    if cached and (now - float(_WEEKEND_CACHE.get("at", 0.0))) < _TTL_SEC:
+        return list(cached)[:limit]
+
+    items: list[dict] = []
+    seen: set[str] = set()
+    headers = {"User-Agent": "AxisResearch/1.0 (+https://axislytics.com)"}
+    for q in _WEEKEND_QUERIES:
+        try:
+            r = httpx.get(
+                _GNEWS_RSS,
+                params={"q": q, "hl": "ko", "gl": "KR", "ceid": "KR:ko"},
+                timeout=timeout,
+                headers=headers,
+                follow_redirects=True,
+            )
+            if r.status_code != 200 or not r.content:
+                continue
+            root = ElementTree.fromstring(r.content)
+            count = 0
+            for item in root.iter("item"):
+                title = (item.findtext("title") or "").strip()
+                if not title or title in seen:
+                    continue
+                seen.add(title)
+                src = "구글뉴스"
+                if " - " in title:
+                    head, _, tail = title.rpartition(" - ")
+                    if head and tail:
+                        title, src = head.strip(), tail.strip()
+                items.append(
+                    {
+                        "headline": title,
+                        "source": src,
+                        "published_at": (item.findtext("pubDate") or "").strip(),
+                        "link": (item.findtext("link") or "").strip(),
+                    }
+                )
+                count += 1
+                if count >= 5:  # 쿼리별 최대 5
+                    break
+        except Exception as e:
+            logger.debug(f"[news_rss] 주말 '{q}' 실패: {type(e).__name__}: {str(e)[:80]}")
+
+    if items:
+        _WEEKEND_CACHE["at"] = now
+        _WEEKEND_CACHE["items"] = items
+    return items[:limit]

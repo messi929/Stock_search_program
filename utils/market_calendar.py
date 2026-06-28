@@ -10,7 +10,7 @@
 
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from typing import Optional
 
 from loguru import logger
@@ -61,4 +61,36 @@ def kr_market_status_hint(d: Optional[date] = None) -> str:
         "오늘은 한국 증시 정상 거래일입니다. 한국 증시는 낮(09:00~15:30)에 열리므로 "
         "'오늘 밤 국내장' 같은 표현은 틀립니다 — '오늘 국내 증시(낮)'로 표현하고, "
         "간밤 미국장이 오늘 국내장에 줄 관찰 포인트를 1줄 중립적으로 적으세요."
+    )
+
+
+def next_kr_trading_day(d: Optional[date] = None) -> date:
+    """주어진 날짜(포함 안 함) 이후의 첫 한국 증시 개장일.
+
+    주말 브리핑(일요일 밤)이 '다음 거래일(보통 월요일)'을 정확히 가리키게 한다.
+    공휴일이 낀 월요일이면 그 다음 개장일을 찾는다. 안전상 최대 10일만 탐색.
+    """
+    d = d or datetime.now().date()
+    cur = d
+    for _ in range(10):
+        cur = cur + timedelta(days=1)
+        closed, _reason = kr_market_closed(cur)
+        if not closed:
+            return cur
+    return d + timedelta(days=1)  # 폴백(이론상 도달 안 함)
+
+
+def kr_next_session_hint(d: Optional[date] = None) -> str:
+    """주말/휴장 브리핑용 — '다음 거래일' 한국 증시 개장 지시문.
+
+    발행 시점(일요일 밤 등)에서 다음 개장일을 계산해 LLM이 '오늘 국내장'이 아니라
+    '다음 거래일(○월 ○일, ○요일) 국내장' 관점으로 쓰게 한다.
+    """
+    nd = next_kr_trading_day(d)
+    weekday_kr = ("월", "화", "수", "목", "금", "토", "일")[nd.weekday()]
+    return (
+        f"다음 한국 증시 개장일은 {nd.month}월 {nd.day}일({weekday_kr})입니다. "
+        "한국 증시는 낮(09:00~15:30)에 열립니다. '오늘 국내장'이라 쓰지 말고 "
+        f"'{nd.month}월 {nd.day}일({weekday_kr}) 국내장' 또는 '다음 거래일 국내 증시'로 표현하세요. "
+        "주말/마감된 미국장 흐름이 그날 국내장에 줄 관찰 포인트를 중립적으로 적으세요."
     )
