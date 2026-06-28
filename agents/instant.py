@@ -81,6 +81,10 @@ def build_instant_snapshot(ticker: str) -> Optional[dict]:
         "foreign_consecutive": int(num("foreign_consecutive", 0) or 0),
         "volume_ratio": num("volume_ratio"),
         # ── 기술 지표(이미 collector가 계산·저장. 마케팅/요약에서 인용) ──
+        # 이동평균선 '실제 가격'(원/달러) — 기술 포맷이 구체적 가격대로 차트를 읽게 한다.
+        "ma5": num("ma5"),
+        "ma20": num("ma20"),
+        "ma60": num("ma60"),
         "vs_ma20_pct": num("vs_ma20_pct"),
         "vs_ma60_pct": num("vs_ma60_pct"),
         "ma_aligned": int(num("ma_aligned", 0) or 0),
@@ -208,19 +212,47 @@ def _cycle_note(s: dict) -> str:
     return note
 
 
+def _price_level(value: float, is_kr: bool) -> str:
+    """가격 → 표기 문자열. KR=정수 '원', US=소수 '달러'."""
+    return f"{value:,.0f}원" if is_kr else f"{value:,.2f}달러"
+
+
 def _technical_facts(s: dict) -> list[str]:
     """이미 계산된 기술 지표 → 글에 인용할 수 있는 한국어 기술분석 팩트 목록.
 
     collector가 산출해 스냅샷에 들어온 추세·거래량·변동성 신호를 노출한다.
-    LEGAL: 사실 기술(技術) 관찰만 — '매수 신호' 등 권유 어휘는 쓰지 않는다.
+    **주요 가격대(이동평균선·52주 고저)를 '실제 가격(원/달러)'으로 먼저 제시**해
+    기술 포맷이 구체적 가격으로 차트를 읽게 한다(이격 %만으론 가격이 추상적).
+    LEGAL: 사실 기술(技術) 관찰만 — 목표가/매수가/손절가·'매수 신호' 등 처방/권유 금지.
     """
     t: list[str] = []
+    is_kr = bool(s.get("is_kr"))
+    price = s.get("price")
+
+    # ── 주요 가격대(구체적 가격 — 기술 포맷 핵심) ──
+    if s.get("ma20"):
+        vs = f" (현재가 대비 {s['vs_ma20_pct']:+.1f}%)" if s.get("vs_ma20_pct") is not None else ""
+        t.append(f"20일 이동평균선: {_price_level(s['ma20'], is_kr)}{vs}")
+    elif s.get("vs_ma20_pct") is not None:
+        t.append(f"20일 이동평균 대비: {s['vs_ma20_pct']:+.1f}%")
+    if s.get("ma60"):
+        vs = f" (현재가 대비 {s['vs_ma60_pct']:+.1f}%)" if s.get("vs_ma60_pct") is not None else ""
+        t.append(f"60일 이동평균선: {_price_level(s['ma60'], is_kr)}{vs}")
+    elif s.get("vs_ma60_pct") is not None:
+        t.append(f"60일 이동평균 대비: {s['vs_ma60_pct']:+.1f}%")
+    # 52주 고가/저가 — 현재가와 이격%로 절대 가격을 역산해 제시.
+    if price and s.get("vs_high_52w") is not None:
+        denom = 1 + s["vs_high_52w"] / 100
+        if denom:
+            t.append(f"52주 고가: {_price_level(price / denom, is_kr)} (현재가 {s['vs_high_52w']:+.1f}%)")
+    if price and s.get("vs_low_52w"):
+        denom = 1 + s["vs_low_52w"] / 100
+        if denom:
+            t.append(f"52주 저가: {_price_level(price / denom, is_kr)} (현재가 {s['vs_low_52w']:+.1f}%)")
+
+    # ── 추세/거래량/변동성 신호 ──
     if s.get("ma_aligned"):
         t.append("이동평균 정배열(5일>20일>60일) — 단기 상승 추세 구조")
-    if s.get("vs_ma20_pct") is not None:
-        t.append(f"20일 이동평균 대비: {s['vs_ma20_pct']:+.1f}%")
-    if s.get("vs_ma60_pct") is not None:
-        t.append(f"60일 이동평균 대비: {s['vs_ma60_pct']:+.1f}%")
     if s.get("golden_cross"):
         t.append("최근(5일 내) 골든크로스 — MA5가 MA20을 상향 돌파")
     if s.get("death_cross"):
@@ -238,8 +270,6 @@ def _technical_facts(s: dict) -> list[str]:
         t.append(f"이동평균 수렴(스프레드 {ms:.1f}%) — 변동성 응축 구간")
     if s.get("volatility_20d"):
         t.append(f"20일 변동성: {s['volatility_20d']:.1f}%")
-    if s.get("vs_low_52w"):
-        t.append(f"52주 저가 대비: {s['vs_low_52w']:+.1f}%")
     if s.get("risk_grade") and s["risk_grade"] != "데이터없음":
         t.append(f"변동성 등급: {s['risk_grade']}")
     return t
