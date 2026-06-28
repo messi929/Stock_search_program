@@ -530,6 +530,23 @@ class MarketerAgent(BaseAgent):
         # 기준일을 facts에 동봉 → 앵글·작가·편집 3단계 모두 '오늘' 대신 일자로 쓰게 함.
         facts = _snapshot_facts(snapshot) + "\n\n" + _date_note(_as_of_label(snapshot))
 
+        # 밸류에이션 밴드(1b/1c) — KR 한정, 백필된 밴드가 있으면 역사 분위수 + EPS 사이클을
+        # facts에 주입(현황 단일 PER 함정을 자기 역사로 방어). 없으면 조용히 생략.
+        if snapshot.get("is_kr"):
+            try:
+                from screener.core.fundamental_band import band_facts, cycle_assessment
+                from screener.db.repository import load_fundamental_band
+
+                band = load_fundamental_band(snapshot.get("ticker", ticker))
+                bf = band_facts(band, snapshot.get("per"), snapshot.get("pbr"))
+                if bf:
+                    facts += "\n\n" + bf
+                ca = cycle_assessment(band, snapshot.get("per"))
+                if ca:
+                    facts += "\n\n## 사이클 판정(밴드 기반)\n- " + ca
+            except Exception as e:
+                logger.debug(f"[marketer] 밴드 주입 실패 {name}: {e}")
+
         # ① 앵글 (실패해도 진행 — 앵글 없으면 빈 브리핑)
         angle = await self._find_angle(facts, fmt, name, uid, avoid_archetypes=avoid_archetypes)
         angle_brief = _angle_brief(angle) if angle else "# 편집 앵글\n(앵글 추출 실패 — 수치의 가장 강한 긴장 하나를 직접 잡아라)"

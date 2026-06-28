@@ -692,6 +692,57 @@ def load_supply_history(ticker: str) -> list[dict]:
     return []
 
 
+# ──────────────────────────────────────────────
+# 밸류에이션 밴드 (fundamental_band/{ticker}) — 1b/1c
+# 백필 잡이 종목별 '밴드 요약'(PER/PBR 분위수 + EPS 사이클)을 적재한다.
+# ──────────────────────────────────────────────
+
+def save_fundamental_band(bands: dict) -> int:
+    """밸류에이션 밴드 요약 저장 (종목당 1문서, 덮어쓰기). 저장 수 반환.
+
+    Args:
+        bands: {ticker: band_dict} — compute_band() 출력. updated_at은 여기서 부여.
+    """
+    if not bands:
+        return 0
+    db = get_db()
+    col = db.collection("fundamental_band")
+    now = datetime.now().isoformat()
+    tickers = list(bands.keys())
+    saved = 0
+    import time as _time
+
+    for i in range(0, len(tickers), _BATCH_LIMIT):
+        batch = db.batch()
+        chunk = tickers[i:i + _BATCH_LIMIT]
+        for t in chunk:
+            band = {**(bands[t] or {}), "updated_at": now}
+            batch.set(col.document(str(t)), band)
+        for attempt in range(3):
+            try:
+                batch.commit(timeout=30)
+                saved += len(chunk)
+                break
+            except Exception as e:
+                if "429" in str(e) or "exceeded" in str(e).lower():
+                    _time.sleep((attempt + 1) * 5)
+                else:
+                    logger.warning(f"fundamental_band 배치 저장 실패: {e}")
+                    break
+    logger.info(f"fundamental_band 저장: {saved}/{len(tickers)}종목")
+    return saved
+
+
+def load_fundamental_band(ticker: str) -> Optional[dict]:
+    """단일 종목 밸류에이션 밴드 요약 로드. 없으면 None."""
+    try:
+        doc = get_db().collection("fundamental_band").document(str(ticker)).get()
+        return doc.to_dict() if doc.exists else None
+    except Exception as e:
+        logger.debug(f"[repo] fundamental_band 조회 실패 {ticker}: {e}")
+        return None
+
+
 def load_all_supply_history() -> dict:
     """전체 종목 수급 이력 로드."""
     db = get_db()
