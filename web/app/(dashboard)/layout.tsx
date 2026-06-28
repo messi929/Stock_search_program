@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect } from "react";
 
 import { AnalysisProgressBar } from "@/components/dashboard/AnalysisProgressBar";
+import { SiteFooter } from "@/components/layout/SiteFooter";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
 import { useIsAdmin } from "@/hooks/useIsAdmin";
@@ -122,6 +123,8 @@ export default function DashboardLayout({
         {/* 분석 진행중 전역 표시기 (running 있을 때만 노출) */}
         <AnalysisProgressBar />
         {children}
+        {/* 로그인 후에도 가격·약관·개인정보·환불 정책에 접근하도록 페이지 최하단 푸터 */}
+        <SiteFooter />
       </main>
 
       {/* Mobile bottom nav — 항상 화면 하단 고정(긴 페이지에서도 노출). 5개 항목 + 활성 표시 + iOS safe-area. */}
