@@ -27,6 +27,13 @@ export async function signInWithGoogle() {
 }
 
 export async function signOut() {
+  // 계정 전환 시 이전 사용자의 로컬 캐시(최근 분석 등) 누수 방지 — 로그아웃 전에 비운다.
+  try {
+    const { useAnalysisStore } = await import("@/store/analysisStore");
+    useAnalysisStore.getState().clearOnLogout();
+  } catch {
+    // store 미로딩/SSR 등 — 무시.
+  }
   return fbSignOut(auth);
 }
 

@@ -168,6 +168,8 @@ interface AnalysisStore {
    * (live patch는 자신의 controller만 갱신, restore는 controller를 만들지 않음).
    */
   restore: (ticker: string, result: SavedAnalysisResult) => void;
+  /** 로그아웃/계정 전환 시 진행 중 스트림 중단 + 최근 분석 캐시 비우기(사용자 간 누수 방지). */
+  clearOnLogout: () => void;
 }
 
 // AbortController는 직렬화·렌더와 무관하므로 store state 밖 모듈 레벨에 보관.
@@ -416,6 +418,13 @@ export const useAnalysisStore = create<AnalysisStore>()(
       upgradeUrl: null,
     };
     set((s) => ({ runs: { ...s.runs, [key]: restored } }));
+  },
+
+  clearOnLogout: () => {
+    // 계정 전환/로그아웃 시 이전 사용자의 진행 스트림·최근 분석 캐시를 비운다.
+    controllers.forEach((ac) => ac.abort());
+    controllers.clear();
+    set({ runs: {}, recents: [] });
   },
     }),
     {
