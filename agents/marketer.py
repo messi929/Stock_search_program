@@ -131,8 +131,18 @@ _CORE_RULES = """# 1순위 — 구체성 (어기면 글은 폐기)
 
 # 3순위 — 관점(so-what)
 - 숫자를 나열하지 말고 **하나의 긴장(모순·의외·관점)으로 수렴**시킨다.
-- 결론(사라/팔라)은 빼되, "여기가 핵심"이라는 한 끗은 남긴다.
 - 브랜드 톤: 펌핑하지 않는다. 양쪽을 냉정하게 본다.
+
+# 마무리 — '앞으로 볼 것'(필수, 이 글의 페이로드)
+- 긴장만 끌어올리고 결론 없이 끝내지 말 것. 그게 호응이 죽는 가장 큰 원인이다.
+  독자가 "그래서 앞으로 뭘 보면 되나"의 **답(방향)**을 가져가게 한다.
+- watchpoints에 **'앞으로 볼 것' 관찰 포인트 1~3개**를 담는다. 각 항목은 조건부·관찰형:
+  · 수급/추세 조건 — "외국인 순매수가 10일 넘게 이어지는지", "거래량이 다시 평균을 넘는지"
+  · 가격 관찰 수준(지지/저항) — "68,000원(60일선)이 지지로 유지되는지" (관찰 수준이지 매수가 아님)
+  · 이벤트/실적 조건 — "다음 실적에서 메모리 가격 피크 신호가 나오는지"
+- 이 블록이 곧 '방향성'이다 — 결론(사라/팔라)을 강요하지 않으면서 독자에게 '다음 행동의 기준'을 준다.
+- ⚠️ 절대 금지: "여기서 사라/담아라/익절", 목표가·매수가·손절가, "오른다/내린다" 단정.
+  방향은 오직 '무엇을 관찰하면 갈림길이 보이나'로만 — 가격은 '관찰 지지/저항 수준'으로.
 
 # 기술적 분석 활용
 - facts에 '## 기술적 분석' 섹션(이동평균 정배열·골든/데드크로스·거래량 추세·매집·변동성 등)이
@@ -207,16 +217,20 @@ _WRITER_SYSTEM = (
 _EDITOR_SYSTEM = (
     "당신은 SNS 카피의 냉정한 편집장입니다. 후보 글들을 루브릭으로 채점하고,\n"
     "가장 나은 후보를 베이스로 골라 약점까지 고쳐 '최종본 한 편'을 만듭니다.\n\n"
-    "# 루브릭 (각 0~5, 합산 0~30)\n"
+    "# 루브릭 (각 0~5, 합산 0~35)\n"
     "1. 후킹: 첫 줄이 스크롤을 멈추게 하나\n"
     "2. 긴장/관점: 숫자가 흩어지지 않고 '하나의 긴장'으로 수렴하나 (so-what)\n"
     "3. 구체성: 의미 부여된 숫자가 2개 이상인가\n"
     "4. 독자시점: 자기언급(Axis/우리)·내부용어(스냅샷)·셀링멘트가 0인가  ← 가장 중요\n"
     "5. 담백함: 광고티·군더더기·챗봇 말투가 없나\n"
-    "6. 법적안전: 추천·가격제시·단정이 없나\n\n"
+    "6. 법적안전: 추천·가격제시(목표가/매수가/손절가)·단정이 없나\n"
+    "7. 방향성(앞으로 볼 것): watchpoints가 1~3개 채워졌고, 조건부·관찰형이며 '다음에 무엇을 "
+    "보면 갈림길이 보이나'의 답을 주나. 긴장만 남기고 끝나면 0점.  ← 호응의 핵심\n\n"
     "# 출력\n"
-    "- 최고 후보를 베이스로 하되, 위 6축에서 깎인 점을 직접 고쳐 최종본을 낸다.\n"
-    "- 특히 4축 위반(자기언급·내부용어·셀링멘트)은 문장째 들어내고 독자 관심사로 대체한다.\n"
+    "- 최고 후보를 베이스로 하되, 위 7축에서 깎인 점을 직접 고쳐 최종본을 낸다.\n"
+    "- 4축 위반(자기언급·내부용어·셀링멘트)은 문장째 들어내고 독자 관심사로 대체한다.\n"
+    "- 7축: 후보의 watchpoints가 약하거나 비었으면 facts/앵글에서 직접 1~3개를 만들어 채운다.\n"
+    "  단 매수가/목표가/손절가·'사라/팔라'로 새지 않게(가격은 '관찰 지지/저항 수준'으로).\n"
     "- score_total은 '최종본' 기준 점수. issues_fixed에 고친 문제를 간단히 적는다.\n\n"
     + _CORE_RULES
 )
@@ -241,11 +255,19 @@ class PostAngle(BaseModel):
     )
 
 
+_WATCHPOINTS_DESC = (
+    "앞으로 볼 관찰 포인트 1~3개(필수). 조건부·관찰형만 — 수급/추세 조건, 가격 관찰 "
+    "수준(지지/저항), 실적/이벤트 조건. 예: '외국인 순매수 10일 돌파 여부', "
+    "'68,000원(60일선) 지지 유지'. ⚠️ 매수가/목표가/손절가·'사라/팔라' 금지."
+)
+
+
 class ThreadsPost(BaseModel):
     """스레드 글 구조화 출력 (작가 단계)."""
 
     hook: str = Field(description="첫 문장 한 줄 — 스크롤을 멈추게 하는 후킹")
     body: str = Field(description="본문 3~6줄. 줄바꿈 포함. 수치 중립 해석")
+    watchpoints: list[str] = Field(default_factory=list, description=_WATCHPOINTS_DESC)
     hashtags: list[str] = Field(
         default_factory=list, description="해시태그 키워드 2~4개 (# 제외, 한국어)"
     )
@@ -256,8 +278,9 @@ class EditedPost(BaseModel):
 
     hook: str = Field(description="최종 첫 문장")
     body: str = Field(description="최종 본문 3~6줄")
+    watchpoints: list[str] = Field(default_factory=list, description=_WATCHPOINTS_DESC)
     hashtags: list[str] = Field(default_factory=list, description="해시태그 2~4개 (# 제외)")
-    score_total: int = Field(default=0, description="루브릭 6축 합산 점수(0~30, 최종본 기준)")
+    score_total: int = Field(default=0, description="루브릭 7축 합산 점수(0~35, 최종본 기준)")
     issues_fixed: list[str] = Field(default_factory=list, description="고친 문제들")
     base_candidate: int = Field(default=0, description="베이스로 고른 후보 번호(0-based)")
 
@@ -611,15 +634,29 @@ class MarketerAgent(BaseAgent):
 
 
 def _edited_to_post(e: EditedPost) -> ThreadsPost:
-    return ThreadsPost(hook=e.hook, body=e.body, hashtags=e.hashtags)
+    return ThreadsPost(hook=e.hook, body=e.body, watchpoints=e.watchpoints, hashtags=e.hashtags)
+
+
+def _watchpoints_block(items: list[str]) -> str:
+    """관찰 포인트 → '앞으로 볼 것' 마무리 블록. 비면 빈 문자열."""
+    pts = [p.strip().lstrip("①②③-• ").strip() for p in (items or []) if p and p.strip()]
+    pts = [p for p in pts if p][:3]
+    if not pts:
+        return ""
+    marks = ("①", "②", "③")
+    lines = [f"{marks[i]} {p}" for i, p in enumerate(pts)]
+    return "앞으로 볼 것\n" + "\n".join(lines)
 
 
 def assemble_post(post: ThreadsPost) -> str:
-    """ThreadsPost → 발행용 본문 문자열 (hook + body + hashtags).
+    """ThreadsPost → 발행용 본문 문자열 (hook + body + 앞으로 볼 것 + hashtags).
 
     면책 문구는 본문에 넣지 않는다 — 계정 프로필(bio)에 상시 고지(JEON 결정 2026-06-27).
     """
     parts: list[str] = [post.hook.strip(), post.body.strip()]
+    wp = _watchpoints_block(getattr(post, "watchpoints", []) or [])
+    if wp:
+        parts.append(wp)
     tags = [t.strip().lstrip("#") for t in (post.hashtags or []) if t and t.strip()]
     if tags:
         parts.append(" ".join(f"#{t}" for t in tags))
