@@ -12,7 +12,7 @@ LEGAL: 추천/매수·매도/목표가/단정 금지. 관찰·참고·중립 해
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from typing import Optional
 
 from loguru import logger
@@ -73,6 +73,35 @@ def fetch_us_market_snapshot() -> dict:
         except Exception as e:
             logger.debug(f"[briefing] 지수 수집 실패 {label}({sym}): {e}")
     return out
+
+
+def latest_us_session_date(snap: dict) -> Optional[date]:
+    """스냅샷에서 가장 최근 미국 종가일(date). 없으면 None."""
+    dates: list[date] = []
+    for d in snap.values():
+        ds = d.get("date")
+        if not ds:
+            continue
+        try:
+            dates.append(date.fromisoformat(ds))
+        except (ValueError, TypeError):
+            continue
+    return max(dates) if dates else None
+
+
+def us_session_is_stale(snap: dict, today: Optional[date] = None) -> bool:
+    """간밤 미국 세션이 '신규'가 아니면(=묵은 종가) True.
+
+    미국장은 주말·미 공휴일에 쉰다. 그런 날 다음 아침(KST 월요일·일요일 등)엔 직전
+    미국 세션이 없어 FDR이 금요일 등 묵은 종가를 준다 — 그걸 '간밤 미국장'으로 브리핑하면
+    오정보. KST 기준 직전 거래일 종가(diff=1)면 신선, 2일 이상 벌어지면 묵은 것으로 본다.
+    (미 종가일은 날짜변경선상 KST보다 항상 하루 뒤 → 신선=diff 1.)
+    """
+    last = latest_us_session_date(snap)
+    if last is None:
+        return True  # 데이터 없음 → 생성 의미 없음
+    today = today or datetime.now().date()
+    return (today - last).days >= 2
 
 
 def _fmt_index_lines(snap: dict) -> str:
@@ -168,6 +197,15 @@ class BriefingAgent(BaseAgent):
         snap = fetch_us_market_snapshot()
         if not snap:
             logger.warning("[briefing] 지수 스냅샷 비어 있음 — 생성 중단")
+            return None
+
+        # 간밤 미국 세션이 없으면(주말·미 공휴일 직후 = KST 월/일 아침 등) 묵은 종가를
+        # '간밤 미국장'으로 내보내지 않는다. 스케줄(화~토)의 2차 안전망 + 미 공휴일 대응.
+        if us_session_is_stale(snap):
+            last = latest_us_session_date(snap)
+            logger.info(
+                f"[briefing] 간밤 신규 미국 세션 없음(최근 종가일 {last}) — 브리핑 생략"
+            )
             return None
 
         index_block = _fmt_index_lines(snap)

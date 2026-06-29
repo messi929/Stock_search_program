@@ -4,11 +4,13 @@
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 #
 # Job (메인 이미지, python -m jobs.daily_threads_content):
-#   axis-threads-daily    평일 07:30 KST — 새벽 미국장 브리핑 + 양쪽관점 종목글 생성
+#   axis-threads-daily    화~토 07:30 KST — 새벽 미국장 브리핑만 생성(검수 큐)
 #
-# 기본은 **검수 큐 모드**(생성만, 발행 X) → /admin/marketing에서 검수 후 수동 발행.
-# 완전 자동발행으로 전환하려면 아래 ARGS에 ,--publish 를 추가하고 재실행.
-# (자동발행은 THREADS_ACCESS_TOKEN/THREADS_USER_ID 시크릿이 있어야 동작)
+# 스케줄=화~토(2-6): 간밤 미국 세션이 있는 아침만. 미국은 주말 휴장이라 KST 월·일 아침엔
+#   직전 세션이 없음(월요일 국내장 길잡이는 일요일밤 주말 브리핑이 담당). 브리핑 코드에도
+#   신선도 가드가 있어 미 공휴일 직후엔 자동 생략.
+# 종목글(--stocks)은 자동 생성에서 제외(JEON 수동 운영) — 코드는 남아 있어 수동 실행 시
+#   `--stocks N`으로 생성 가능. 검수 큐 모드(생성만)라 무해. 자동발행은 끝에 ,--publish.
 #
 # 사용법:
 #   chmod +x deploy-threads-job.sh
@@ -27,10 +29,10 @@ REGION="asia-northeast3"
 TIMEZONE="Asia/Seoul"
 IMAGE_NAME="stock-screener"
 JOB_NAME="axis-threads-daily"
-SCHED_CRON="30 7 * * 1-5"   # 평일 07:30 KST
+SCHED_CRON="30 7 * * 2-6"   # 화~토 07:30 KST (간밤 미국 세션이 있는 아침만)
 
-# 검수 큐 모드(기본). 완전 자동발행은 끝에 ,--publish 추가.
-JOB_ARGS="-m,jobs.daily_threads_content,--stocks,1"
+# 브리핑 전용(--stocks 0). 종목글은 수동 운영. 검수 큐 모드(생성만), 자동발행은 끝에 ,--publish.
+JOB_ARGS="-m,jobs.daily_threads_content,--stocks,0"
 
 SKIP_BUILD=false
 for arg in "$@"; do
