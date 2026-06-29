@@ -75,11 +75,17 @@ def fetch_us_market_snapshot() -> dict:
     return out
 
 
+# 신선도 판단은 미국 '주식' 세션 기준만 — usdkrw(원/달러)는 24/5 FX라 월요일 아침
+# (KST)엔 이미 당일 날짜를 가져, 미 주식 휴장 여부를 흐린다. 그래서 FX는 제외한다.
+# (VIX는 Cboe 미 정규장 시간 상품이라 주식 세션과 정렬됨 → 포함.)
+_US_EQUITY_KEYS = ("sp500", "nasdaq", "dow", "sox", "vix")
+
+
 def latest_us_session_date(snap: dict) -> Optional[date]:
-    """스냅샷에서 가장 최근 미국 종가일(date). 없으면 None."""
+    """스냅샷의 미국 '주식' 지표 중 가장 최근 종가일(date). 없으면 None. FX(usdkrw) 제외."""
     dates: list[date] = []
-    for d in snap.values():
-        ds = d.get("date")
+    for key in _US_EQUITY_KEYS:
+        ds = (snap.get(key) or {}).get("date")
         if not ds:
             continue
         try:
