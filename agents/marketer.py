@@ -267,7 +267,7 @@ class ThreadsPost(BaseModel):
 
     hook: str = Field(description="첫 문장 한 줄 — 스크롤을 멈추게 하는 후킹")
     body: str = Field(description="본문 3~6줄. 줄바꿈 포함. 수치 중립 해석")
-    watchpoints: list[str] = Field(default_factory=list, description=_WATCHPOINTS_DESC)
+    watchpoints: list[str] = Field(description=_WATCHPOINTS_DESC)  # 필수(구조화 스키마 required)
     hashtags: list[str] = Field(
         default_factory=list, description="해시태그 키워드 2~4개 (# 제외, 한국어)"
     )
@@ -278,7 +278,7 @@ class EditedPost(BaseModel):
 
     hook: str = Field(description="최종 첫 문장")
     body: str = Field(description="최종 본문 3~6줄")
-    watchpoints: list[str] = Field(default_factory=list, description=_WATCHPOINTS_DESC)
+    watchpoints: list[str] = Field(description=_WATCHPOINTS_DESC)  # 필수(구조화 스키마 required)
     hashtags: list[str] = Field(default_factory=list, description="해시태그 2~4개 (# 제외)")
     score_total: int = Field(default=0, description="루브릭 7축 합산 점수(0~35, 최종본 기준)")
     issues_fixed: list[str] = Field(default_factory=list, description="고친 문제들")
@@ -585,25 +585,43 @@ class MarketerAgent(BaseAgent):
         if edited is None:
             # 편집 실패 시 첫 후보를 graceful fallback으로 사용.
             best = candidates[0]
-            edited = EditedPost(hook=best.hook, body=best.body, hashtags=best.hashtags)
+            edited = EditedPost(
+                hook=best.hook, body=best.body,
+                watchpoints=best.watchpoints, hashtags=best.hashtags,
+            )
 
         text = assemble_post(_edited_to_post(edited))
 
         # ④ 결정론적 가드
-        # 4-1. 자기언급/내부용어 → 걸리면 1회 재편집
+        # 4-1. 자기언급/내부용어 + 빈 watchpoints → 한 번의 재편집으로 함께 고친다.
         warnings = guard_reader_first(text)
+        repair_reasons: list[str] = []
         if warnings:
-            logger.info(f"[marketer] 독자시점 위반 {name}/{fmt}: {warnings} — 1회 재편집")
+            repair_reasons.append(
+                "다음 표현을 문장째 제거하고 독자 관심사로 대체: " + ", ".join(warnings)
+            )
+        if not (edited.watchpoints or []):
+            # 종목글의 페이로드 = '앞으로 볼 것'. 비면 호응이 죽으므로 반드시 채운다.
+            repair_reasons.append(
+                "'앞으로 볼 것'(watchpoints)이 비었다 — facts/앵글에서 조건부·관찰형 관찰 포인트 "
+                "1~3개를 반드시 채워라(수급/추세 조건, 지지/저항 관찰 수준, 실적 조건). "
+                "매수가/목표가/손절가·'사라/팔라' 금지."
+            )
+        if repair_reasons:
+            logger.info(f"[marketer] 가드 재편집 {name}/{fmt}: {repair_reasons}")
             repaired = await self._edit_and_pick(
                 candidates, facts, angle_brief, fmt, name, uid,
-                repair_note="다음 표현을 문장째 제거하고 독자 관심사로 대체: " + ", ".join(warnings),
+                repair_note=" / ".join(repair_reasons),
             )
             if repaired is not None:
                 edited = repaired
                 text = assemble_post(_edited_to_post(edited))
                 warnings = guard_reader_first(text)
-                if warnings:
-                    logger.warning(f"[marketer] 재편집 후에도 잔존 {name}/{fmt}: {warnings}")
+                if warnings or not (edited.watchpoints or []):
+                    logger.warning(
+                        f"[marketer] 재편집 후에도 잔존 {name}/{fmt}: "
+                        f"reader={warnings} watchpoints_empty={not (edited.watchpoints or [])}"
+                    )
 
         # 4-2. 법적 필터(비협상 — 하드 치환)
         text, found = BaseAgent.filter_forbidden(text)
