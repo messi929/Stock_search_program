@@ -68,8 +68,9 @@ if [ "$SKIP_BUILD" = false ]; then
 fi
 
 # ── Cloud Run Job ─────────────────────────────
-# 인증 KRX 펀더멘탈 fetch ~10~12초/종목 → 3년·300종목 실측 ~56분. 끝에서 일괄 저장 구조라
-# 중도 타임아웃 = 전손 → 타임아웃 80분(실측 대비 ~24분 마진), 재시도 0.
+# 인증 KRX 펀더멘탈 fetch ~10~12초/종목 → 3년·300종목 실측 ~56분. 50종목마다 증분 저장
+# (jobs/backfill_fundamental_band.py --flush-every)이라 중도 타임아웃에도 직전까지 보존.
+# 그래도 완주 위해 타임아웃 80분(실측 대비 ~24분 마진), 재시도 0.
 TASK_TIMEOUT=4800
 MAX_RETRIES=0
 echo ""; echo "  Job 배포: ${JOB_NAME}  (args: ${JOB_ARGS})"
