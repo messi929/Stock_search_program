@@ -68,9 +68,9 @@ if [ "$SKIP_BUILD" = false ]; then
 fi
 
 # ── Cloud Run Job ─────────────────────────────
-# 인증 KRX 펀더멘탈 fetch ~12초/종목(5년) → 3년·300종목 ≈ 40분. 타임아웃 60분, 재시도 0
-# (끝에서 일괄 저장 구조라 중도 타임아웃 시 손실 → 넉넉히).
-TASK_TIMEOUT=3600
+# 인증 KRX 펀더멘탈 fetch ~10~12초/종목 → 3년·300종목 실측 ~56분. 끝에서 일괄 저장 구조라
+# 중도 타임아웃 = 전손 → 타임아웃 80분(실측 대비 ~24분 마진), 재시도 0.
+TASK_TIMEOUT=4800
 MAX_RETRIES=0
 echo ""; echo "  Job 배포: ${JOB_NAME}  (args: ${JOB_ARGS})"
 if gcloud run jobs describe "${JOB_NAME}" --region="${REGION}" --project="${PROJECT_ID}" --quiet >/dev/null 2>&1; then
