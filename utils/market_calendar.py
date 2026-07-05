@@ -42,6 +42,29 @@ def kr_market_closed(d: Optional[date] = None) -> tuple[bool, str]:
     return False, ""
 
 
+def us_market_closed(d: Optional[date] = None) -> tuple[bool, str]:
+    """미국 증시(NYSE) 휴장 여부. 반환 (closed, reason).
+
+    d는 **미 동부(ET) 기준 날짜**. reason: 'weekend' | 'holiday:<이름>' | '' (개장).
+    NYSE 고유 휴장(Good Friday·Juneteenth·독립기념일 관측휴장 등)까지 포함하려
+    federal(`US`)이 아니라 `financial_holidays('NYSE')`를 쓴다. 라이브러리 미가용/오류
+    시엔 주말만 판별하는 보수적 폴백(틀린 단정 대신).
+    """
+    d = d or datetime.now().date()
+    if d.weekday() >= 5:  # 5=토, 6=일
+        return True, "weekend"
+    try:
+        import holidays
+
+        nyse = holidays.financial_holidays("NYSE", years=d.year)
+        name = nyse.get(d)
+        if name:
+            return True, f"holiday:{name}"
+    except Exception as e:
+        logger.debug(f"[market_calendar] NYSE 휴장 조회 불가(주말만 판별): {e}")
+    return False, ""
+
+
 def kr_market_status_hint(d: Optional[date] = None) -> str:
     """브리핑 프롬프트에 주입할 '한국 증시 개장 상태' 지시문.
 

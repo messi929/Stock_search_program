@@ -132,6 +132,56 @@ def fetch_overnight_us_news(limit: int = 8, timeout: float = 5.0) -> list[dict]:
     return items[:limit]
 
 
+def fetch_news_search(
+    queries: tuple[str, ...] | list[str], limit: int = 6, timeout: float = 5.0
+) -> list[dict]:
+    """임의 쿼리들로 Google News RSS 검색 → 한국어 헤드라인 목록. 실패 시 빈 리스트.
+
+    지수 차트 글 등에서 '코스피 마감' 같은 주제 특화 헤드라인을 끌어오는 범용 헬퍼.
+    캐시는 두지 않는다(쿼리가 호출마다 가변). 헤드라인만 사용한다(추측 금지).
+    """
+    items: list[dict] = []
+    seen: set[str] = set()
+    headers = {"User-Agent": "AxisResearch/1.0 (+https://axislytics.com)"}
+    for q in queries:
+        try:
+            r = httpx.get(
+                _GNEWS_RSS,
+                params={"q": q, "hl": "ko", "gl": "KR", "ceid": "KR:ko"},
+                timeout=timeout,
+                headers=headers,
+                follow_redirects=True,
+            )
+            if r.status_code != 200 or not r.content:
+                continue
+            root = ElementTree.fromstring(r.content)
+            count = 0
+            for item in root.iter("item"):
+                title = (item.findtext("title") or "").strip()
+                if not title or title in seen:
+                    continue
+                seen.add(title)
+                src = "구글뉴스"
+                if " - " in title:
+                    head, _, tail = title.rpartition(" - ")
+                    if head and tail:
+                        title, src = head.strip(), tail.strip()
+                items.append(
+                    {
+                        "headline": title,
+                        "source": src,
+                        "published_at": (item.findtext("pubDate") or "").strip(),
+                        "link": (item.findtext("link") or "").strip(),
+                    }
+                )
+                count += 1
+                if count >= 4:  # 쿼리별 최대 4
+                    break
+        except Exception as e:
+            logger.debug(f"[news_rss] search '{q}' 실패: {type(e).__name__}: {str(e)[:80]}")
+    return items[:limit]
+
+
 # ──────────────────────────────────────────────
 # 주말 브리핑 뉴스 — 주말 주요 소식 + 다음주 전망 (Google News RSS 검색)
 # ──────────────────────────────────────────────

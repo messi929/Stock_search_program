@@ -4,11 +4,13 @@
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 #
 # Job (메인 이미지, python -m jobs.daily_threads_content):
-#   axis-threads-daily    화~토 07:30 KST — 새벽 미국장 브리핑만 생성(검수 큐)
+#   axis-threads-daily    매일 07:30 KST — 새벽 미국장 브리핑 + 교육 글 1편 생성(검수 큐)
 #
-# 스케줄=화~토(2-6): 간밤 미국 세션이 있는 아침만. 미국은 주말 휴장이라 KST 월·일 아침엔
-#   직전 세션이 없음(월요일 국내장 길잡이는 일요일밤 주말 브리핑이 담당). 브리핑 코드에도
-#   신선도 가드가 있어 미 공휴일 직후엔 자동 생략.
+# 스케줄=매일(* * *): 교육 글은 evergreen이라 7일 발행(0→1 일관된 존재감). 브리핑은 간밤
+#   미국 세션이 있는 날만 필요한데, 코드의 신선도 가드(NYSE 캘린더 + 데이터 2중 방어)가
+#   주말·미 공휴일 직후(KST 일·월 아침 등)엔 자동 생략하므로 매일 돌려도 안전.
+#   → 결과: 브리핑은 사실상 화~토만 나가고, 교육은 매일. (월요일 길잡이·주말 결산은
+#   별도 axis-weekend-briefing 일요일밤 잡이 담당.)
 # 종목글(--stocks)은 자동 생성에서 제외(JEON 수동 운영) — 코드는 남아 있어 수동 실행 시
 #   `--stocks N`으로 생성 가능. 검수 큐 모드(생성만)라 무해. 자동발행은 끝에 ,--publish.
 #
@@ -29,10 +31,10 @@ REGION="asia-northeast3"
 TIMEZONE="Asia/Seoul"
 IMAGE_NAME="stock-screener"
 JOB_NAME="axis-threads-daily"
-SCHED_CRON="30 7 * * 2-6"   # 화~토 07:30 KST (간밤 미국 세션이 있는 아침만)
+SCHED_CRON="30 7 * * *"   # 매일 07:30 KST (교육=매일, 브리핑=가드가 세션일만 통과)
 
-# 브리핑 전용(--stocks 0). 종목글은 수동 운영. 검수 큐 모드(생성만), 자동발행은 끝에 ,--publish.
-JOB_ARGS="-m,jobs.daily_threads_content,--stocks,0"
+# 브리핑 + 교육1(--stocks 0 --edu 1). 종목글은 수동 운영. 검수 큐 모드(생성만), 자동발행은 끝에 ,--publish.
+JOB_ARGS="-m,jobs.daily_threads_content,--stocks,0,--edu,1"
 
 SKIP_BUILD=false
 for arg in "$@"; do

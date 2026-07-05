@@ -1,9 +1,12 @@
 """매일 스레드 콘텐츠 자동 생성 잡 (jobs.daily_threads_content).
 
 마케팅 콘텐츠 공장의 일일 엔진. 매일 아침 1회 실행하여:
-  1) 🌙 새벽 미국시장 브리핑 1편 (FDR 지수 + RSS → Haiku)
-  2) 📊 오늘 화제 종목 '양쪽 관점' N편 (marketer contrarian 포맷)
+  1) 🌙 새벽 미국시장 브리핑 1편 (FDR 지수 + RSS → Sonnet)
+  2) 🎓 교육 글 N편 (투자 심리 함정·지표 읽는 법, 개념+화제종목 실수치 삽화 → Sonnet)
+  3) 📊 오늘 화제 종목 '양쪽 관점' N편 (marketer contrarian 포맷)
 를 생성해 Firestore `marketing_drafts`에 status=draft로 적재한다(검수 큐).
+
+교육 글은 브리핑 성공 여부와 무관하게 생성돼 미 휴장일의 콘텐츠 공백도 메운다.
 
 기본은 **검수 큐**(생성만, 발행 X) — 관리자가 /admin/marketing에서 보고 발행.
 `--publish` 플래그를 주면 생성 직후 Threads 자동 발행까지 수행(THREADS_* 필요).
@@ -11,11 +14,13 @@
 필요 env: ANTHROPIC_API_KEY, Firebase 자격증명. (자동발행 시 THREADS_ACCESS_TOKEN/USER_ID)
 
 실행:
-  python -m jobs.daily_threads_content                 # 브리핑 + 종목2, 저장만(검수큐)
-  python -m jobs.daily_threads_content --stocks 3      # 종목 글 개수
-  python -m jobs.daily_threads_content --no-briefing   # 브리핑 생략
-  python -m jobs.daily_threads_content --publish       # 생성 후 즉시 자동발행
-  python -m jobs.daily_threads_content --dry-run       # 생성·출력만, 저장 X
+  python -m jobs.daily_threads_content                    # 브리핑 + 교육1 + 종목1, 저장만(검수큐)
+  python -m jobs.daily_threads_content --stocks 3         # 종목 글 개수
+  python -m jobs.daily_threads_content --no-briefing      # 브리핑 생략
+  python -m jobs.daily_threads_content --edu 2            # 교육 글 개수(0=생략)
+  python -m jobs.daily_threads_content --edu-series metric  # 교육 시리즈 한정
+  python -m jobs.daily_threads_content --publish          # 생성 후 즉시 자동발행
+  python -m jobs.daily_threads_content --dry-run          # 생성·출력만, 저장 X
 """
 
 from __future__ import annotations
@@ -57,15 +62,18 @@ async def _publish_posts(posts: list[dict]) -> int:
 async def run_daily(
     stocks: int = 1,
     briefing: bool = True,
+    edu: int = 1,
+    edu_series: Optional[list[str]] = None,
     publish: bool = False,
     dry_run: bool = False,
 ) -> dict:
     """일일 콘텐츠 생성 메인."""
     from agents.briefing import generate_briefing
+    from agents.education import generate_education, recent_education_keys
     from agents.marketer import generate_batch, pick_hot_tickers, recent_marketing_memory
     from jobs.marketing_generate import _prime_name_store, _save_drafts
 
-    # 종목 글은 실수치가 필요 → store 적재 (브리핑은 FDR이라 불필요)
+    # 종목 글·교육 하이브리드 삽화는 실수치가 필요 → store 적재 (브리핑은 FDR이라 불필요)
     _prime_name_store()
 
     # 연속성 메모리(point 3): 최근 다룬 종목·과다 사용 앵글 유형을 회피.
@@ -80,7 +88,23 @@ async def run_daily(
             posts.append(b)
             logger.info(f"[daily] 브리핑 생성: {b['char_count']}자, 필터 {b['filtered']}")
         else:
-            logger.warning("[daily] 브리핑 생성 실패(지수/AI)")
+            logger.warning("[daily] 브리핑 생성 실패/생략(휴장·데이터)")
+
+    # 1.5) 교육 콘텐츠 — 브리핑 성공 여부와 무관하게 진행(휴장일 콘텐츠 공백도 메움).
+    #      최근 다룬 토픽은 회피해 다양성 확보. 하이브리드(개념+화제종목 실수치 삽화).
+    if edu > 0:
+        avoid_keys = recent_education_keys()
+        for i in range(edu):
+            e = await generate_education(series=edu_series, avoid_keys=avoid_keys)
+            if e:
+                posts.append(e)
+                avoid_keys.append(e["topic_key"])  # 같은 배치 내 중복도 회피
+                logger.info(
+                    f"[daily] 교육 생성: [{e['fmt_label']}] {e['name']} · {e['char_count']}자"
+                    f"{' ⚠필터:' + str(e['filtered']) if e.get('filtered') else ''}"
+                )
+            else:
+                logger.warning("[daily] 교육 생성 실패")
 
     # 2) 화제 종목 '양쪽 관점'(contrarian)
     if stocks > 0:
@@ -136,6 +160,13 @@ def main(argv: Optional[list[str]] = None) -> int:
     parser = argparse.ArgumentParser(description="매일 스레드 콘텐츠 자동 생성")
     parser.add_argument("--stocks", type=int, default=1, help="양쪽관점 종목 글 개수(0=생략)")
     parser.add_argument("--no-briefing", action="store_true", help="새벽 미국장 브리핑 생략")
+    parser.add_argument("--edu", type=int, default=1, help="교육 글 개수(0=생략)")
+    parser.add_argument(
+        "--edu-series",
+        choices=["psychology", "metric"],
+        action="append",
+        help="교육 시리즈 한정(반복 지정 가능, 미지정=둘 다): psychology|metric",
+    )
     parser.add_argument("--publish", action="store_true", help="생성 후 Threads 즉시 자동발행")
     parser.add_argument("--dry-run", action="store_true", help="생성·출력만, 저장/발행 X")
     args = parser.parse_args(argv)
@@ -144,6 +175,8 @@ def main(argv: Optional[list[str]] = None) -> int:
         run_daily(
             stocks=args.stocks,
             briefing=not args.no_briefing,
+            edu=args.edu,
+            edu_series=args.edu_series,
             publish=args.publish,
             dry_run=args.dry_run,
         )

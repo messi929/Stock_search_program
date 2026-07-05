@@ -8,7 +8,8 @@ export type DraftStatus = "draft" | "approved" | "archived" | "published";
 
 export interface MarketingDraft {
   id: string;
-  kind: "stock" | "briefing";
+  kind: "stock" | "briefing" | "index" | "education";
+  index_key?: string; // 지수 차트 글의 지수 식별자 (KS11 등)
   ticker: string;
   name: string;
   market: string;
@@ -47,6 +48,12 @@ export interface GenerateReq {
   hot_count?: number;
 }
 
+export interface IndexChoice {
+  key: string;
+  name: string;
+  is_kr: boolean;
+}
+
 export const marketingApi = {
   formats: () => apiCall<MarketingFormatsResp>("/api/admin/marketing/formats"),
   drafts: (status = "") =>
@@ -67,6 +74,15 @@ export const marketingApi = {
     apiCall<{ created: MarketingDraft[]; count: number }>(
       "/api/admin/marketing/weekend-briefing/generate",
       { method: "POST" },
+    ),
+  indices: () =>
+    apiCall<{ indices: IndexChoice[] }>(
+      "/api/admin/marketing/index-chart/indices",
+    ),
+  generateIndexChart: (keys: string[]) =>
+    apiCall<{ created: MarketingDraft[]; count: number }>(
+      "/api/admin/marketing/index-chart/generate",
+      { method: "POST", body: JSON.stringify({ keys }) },
     ),
   update: (id: string, patch: { text?: string; status?: DraftStatus }) =>
     apiCall<{ ok: boolean; draft: MarketingDraft }>(

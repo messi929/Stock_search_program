@@ -48,7 +48,15 @@ export default function AdminMarketingPage() {
   const [generating, setGenerating] = useState(false);
   const [briefingGenerating, setBriefingGenerating] = useState(false);
   const [weekendGenerating, setWeekendGenerating] = useState(false);
+  const [selectedIndices, setSelectedIndices] = useState<string[]>([]);
+  const [indexGenerating, setIndexGenerating] = useState(false);
   const [statusFilter, setStatusFilter] = useState("");
+
+  const indicesQ = useQuery({
+    queryKey: ["admin", "marketing", "indices"],
+    queryFn: marketingApi.indices,
+    staleTime: 60 * 60_000,
+  });
 
   const publishStatusQ = useQuery({
     queryKey: ["admin", "marketing", "publish-status"],
@@ -129,6 +137,29 @@ export default function AdminMarketingPage() {
       toast.error(e instanceof Error ? e.message : "주말 브리핑 생성 실패");
     } finally {
       setWeekendGenerating(false);
+    }
+  };
+
+  const toggleIndex = (key: string) => {
+    setSelectedIndices((prev) =>
+      prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key],
+    );
+  };
+
+  const generateIndexChart = async () => {
+    if (selectedIndices.length === 0) {
+      toast.error("지수를 1개 이상 선택하세요");
+      return;
+    }
+    setIndexGenerating(true);
+    try {
+      const res = await marketingApi.generateIndexChart(selectedIndices);
+      toast.success(`지수 차트 글 ${res.count}건 생성됨`);
+      draftsQ.refetch();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "지수 차트 생성 실패");
+    } finally {
+      setIndexGenerating(false);
     }
   };
 
@@ -246,6 +277,50 @@ export default function AdminMarketingPage() {
         </Button>
       </div>
 
+      {/* ── 지수 차트 글 생성 ── */}
+      <div className="space-y-3 rounded-lg border p-4">
+        <div>
+          <p className="text-sm font-medium">📈 지수 차트 글</p>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            코스피·코스닥·나스닥 등 지수의 차트 국면(이동평균·52주 고저·RSI·추세)을 구체적
+            지수 레벨로 읽고 등락 배경 한 줄을 곁들입니다. 선택한 지수마다 개별 글로 생성됩니다.
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {(indicesQ.data?.indices ?? []).map((idx) => {
+            const on = selectedIndices.includes(idx.key);
+            return (
+              <button
+                key={idx.key}
+                type="button"
+                onClick={() => toggleIndex(idx.key)}
+                className={`px-3 py-1.5 rounded-full text-xs border transition ${
+                  on
+                    ? "border-primary bg-primary/10 text-primary font-medium"
+                    : "border-border text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                {on ? "✓ " : ""}
+                {idx.name}
+              </button>
+            );
+          })}
+        </div>
+        <div className="flex items-center justify-between">
+          <span className="text-xs text-muted-foreground">
+            지수 {selectedIndices.length}개 선택
+          </span>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={generateIndexChart}
+            disabled={indexGenerating}
+          >
+            {indexGenerating ? "생성 중... (수초 소요)" : "📈 지수 차트 생성"}
+          </Button>
+        </div>
+      </div>
+
       {!publishEnabled && (
         <p className="text-xs text-amber-400">
           ⚠ Threads 자동발행이 비활성 상태입니다(토큰 미설정). 지금은 복사 후 수동 발행만
@@ -326,6 +401,10 @@ function DraftCard({
   }
 
   const isBriefing = draft.kind === "briefing";
+  const isIndex = draft.kind === "index";
+  const isStock = draft.kind === "stock";
+  const isEducation = draft.kind === "education";
+  const kindEmoji = isBriefing ? "🌙 " : isIndex ? "📈 " : isEducation ? "🎓 " : "";
   const isPublished = draft.status === "published";
   const dirty = text !== draft.text;
   const over = text.length > maxChars;
@@ -402,10 +481,10 @@ function DraftCard({
       {/* 헤더 */}
       <div className="flex items-center gap-2 flex-wrap">
         <span className="font-semibold text-sm">
-          {isBriefing ? "🌙 " : ""}
+          {kindEmoji}
           {draft.name || draft.ticker}
         </span>
-        {!isBriefing && (
+        {isStock && (
           <span className="text-xs text-muted-foreground">{draft.ticker}</span>
         )}
         <span className="px-2 py-0.5 rounded-full text-[11px] bg-blue-500/15 text-blue-300">
@@ -486,7 +565,7 @@ function DraftCard({
           <Button size="sm" variant="outline" onClick={copy} disabled={over}>
             📋 복사
           </Button>
-          {!isBriefing && (
+          {isStock && (
             <Button
               size="sm"
               variant="outline"

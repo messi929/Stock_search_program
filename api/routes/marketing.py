@@ -45,7 +45,8 @@ def _iso(v):
 def _serialize(doc_id: str, d: dict) -> dict:
     return {
         "id": doc_id,
-        "kind": d.get("kind", "stock"),  # "stock"(종목글) | "briefing"(시황브리핑)
+        "kind": d.get("kind", "stock"),  # "stock"(종목글) | "briefing"(시황브리핑) | "index"(지수차트)
+        "index_key": d.get("index_key", ""),
         "ticker": d.get("ticker", ""),
         "name": d.get("name", ""),
         "market": d.get("market", ""),
@@ -266,6 +267,84 @@ async def generate_weekend_briefing_draft(request: Request):
 
     logger.info(f"[marketing] 주말 브리핑 초안 생성 by {user.get('email', '?')}")
     return {"created": [serialized], "count": 1}
+
+
+@router.get("/index-chart/indices")
+async def list_index_choices(request: Request):
+    """지수 차트 글로 만들 수 있는 지수 목록(프론트 선택용)."""
+    if not _is_admin(request):
+        return _forbid()
+    from agents.index_chart import list_indices
+
+    return {"indices": list_indices()}
+
+
+@router.post("/index-chart/generate")
+async def generate_index_chart_drafts(request: Request):
+    """지수 차트 글 초안 생성 → Firestore 저장. body: {keys: str[]}.
+
+    keys = ['KS11','KQ11','IXIC',...] (지수별 개별 글). 각 지수마다 FDR 시계열에서
+    차트 지표를 직접 계산 → marketer 4단계 하네스로 1편씩 생성.
+    """
+    if not _is_admin(request):
+        return _forbid()
+
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+
+    user = getattr(request.state, "user", None) or {}
+    uid = user.get("uid", "") if isinstance(user, dict) else ""
+
+    from agents.index_chart import INDICES, generate_index_chart
+
+    keys = [str(k).strip().upper() for k in (body.get("keys") or []) if str(k).strip()]
+    keys = [k for k in keys if k in INDICES][:6]  # 과부하 방지 상한
+    if not keys:
+        return JSONResponse(
+            status_code=400,
+            content={"detail": "생성할 지수를 선택하세요(예: KS11, KQ11, IXIC)."},
+        )
+
+    import asyncio
+
+    results = await asyncio.gather(
+        *(generate_index_chart(k, uid=uid) for k in keys), return_exceptions=True
+    )
+    posts = []
+    for k, r in zip(keys, results):
+        if isinstance(r, dict):
+            posts.append(r)
+        elif isinstance(r, Exception):
+            logger.warning(f"[marketing] 지수 차트 생성 예외 {k}: {r}")
+    if not posts:
+        return JSONResponse(
+            status_code=502,
+            content={"detail": "지수 차트 글 생성 실패(지수 데이터 또는 AI 응답 없음)"},
+        )
+
+    from firebase_admin import firestore
+
+    from screener.db.firebase_client import get_db
+
+    db = get_db()
+    now = firestore.SERVER_TIMESTAMP
+    created = []
+    for p in posts:
+        try:
+            ref = db.collection(_COLLECTION).document()
+            ref.set({**p, "status": "draft", "created_at": now, "updated_at": now})
+            doc = ref.get()
+            created.append(_serialize(ref.id, doc.to_dict() or p))
+        except Exception as e:
+            logger.warning(f"[marketing] 지수 초안 저장 실패 {p.get('name')}: {e}")
+
+    logger.info(
+        f"[marketing] 지수 차트 초안 {len(created)}건 생성 by {user.get('email', '?')} "
+        f"(지수 {keys})"
+    )
+    return {"created": created, "count": len(created)}
 
 
 @router.get("/publish-status")

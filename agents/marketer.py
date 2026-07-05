@@ -429,12 +429,11 @@ class MarketerAgent(BaseAgent):
     async def _find_angle(
         self,
         facts: str,
-        fmt: str,
+        guide: str,
         name: str,
         uid: str,
         avoid_archetypes: Optional[list[str]] = None,
     ) -> Optional[PostAngle]:
-        guide = FORMATS[fmt]["guide"]
         avoid_line = ""
         if avoid_archetypes:
             avoid_line = (
@@ -458,14 +457,13 @@ class MarketerAgent(BaseAgent):
             )
             return angle
         except Exception as e:
-            logger.warning(f"[marketer] 앵글 실패 {name}/{fmt}: {e} — 앵글 없이 진행")
+            logger.warning(f"[marketer] 앵글 실패 {name}: {e} — 앵글 없이 진행")
             return None
 
     # ── ② 작가 (best-of-N) ─────────────────
     async def _write_one(
-        self, facts: str, angle_brief: str, fmt: str, name: str, seed: str, uid: str
+        self, facts: str, angle_brief: str, guide: str, name: str, seed: str, uid: str
     ) -> Optional[ThreadsPost]:
-        guide = FORMATS[fmt]["guide"]
         user_msg = (
             f"{facts}\n\n{angle_brief}\n\n# 글 포맷\n{guide}\n\n"
             f"# 이 후보의 스타일\n{seed}\n\n"
@@ -481,15 +479,15 @@ class MarketerAgent(BaseAgent):
             )
             return post
         except Exception as e:
-            logger.warning(f"[marketer] 작가 후보 실패 {name}/{fmt}: {e}")
+            logger.warning(f"[marketer] 작가 후보 실패 {name}: {e}")
             return None
 
     async def _write_candidates(
-        self, facts: str, angle_brief: str, fmt: str, name: str, uid: str
+        self, facts: str, angle_brief: str, guide: str, name: str, uid: str
     ) -> list[ThreadsPost]:
         seeds = [_STYLE_SEEDS[i % len(_STYLE_SEEDS)] for i in range(WRITER_CANDIDATES)]
         results = await asyncio.gather(
-            *(self._write_one(facts, angle_brief, fmt, name, s, uid) for s in seeds),
+            *(self._write_one(facts, angle_brief, guide, name, s, uid) for s in seeds),
             return_exceptions=True,
         )
         out: list[ThreadsPost] = []
@@ -506,7 +504,7 @@ class MarketerAgent(BaseAgent):
         candidates: list[ThreadsPost],
         facts: str,
         angle_brief: str,
-        fmt: str,
+        guide: str,
         name: str,
         uid: str,
         repair_note: str = "",
@@ -516,7 +514,7 @@ class MarketerAgent(BaseAgent):
         )
         user_msg = (
             f"{facts}\n\n{angle_brief}\n\n"
-            f"# 포맷\n{FORMATS[fmt]['guide']}\n\n"
+            f"# 포맷\n{guide}\n\n"
             f"# 후보 글 ({len(candidates)}개)\n{listing}\n\n"
             f"위 후보들을 루브릭으로 채점하고, 최고를 베이스로 골라 약점까지 고쳐 "
             f"'{name}' 최종본 한 편을 출력하라. 종목명은 '{name}'만 사용."
@@ -537,7 +535,7 @@ class MarketerAgent(BaseAgent):
             )
             return edited
         except Exception as e:
-            logger.warning(f"[marketer] 편집 실패 {name}/{fmt}: {e}")
+            logger.warning(f"[marketer] 편집 실패 {name}: {e}")
             return None
 
     # ── 진입점 ─────────────────────────────
@@ -584,18 +582,60 @@ class MarketerAgent(BaseAgent):
             except Exception as e:
                 logger.debug(f"[marketer] 밴드 주입 실패 {name}: {e}")
 
+        result_base = {
+            "ticker": snapshot.get("ticker", ticker.upper()),
+            "name": name,
+            "market": snapshot.get("market", ""),
+            "is_kr": bool(snapshot.get("is_kr")),
+            "kind": "stock",
+            "source": "harness-v2",
+        }
+        return await self._run_harness(
+            facts=facts,
+            guide=FORMATS[fmt]["guide"],
+            name=name,
+            fmt=fmt,
+            fmt_label=FORMATS[fmt]["label"],
+            uid=uid,
+            result_base=result_base,
+            avoid_archetypes=avoid_archetypes,
+            enforce_watchpoints=(fmt != "cta"),
+        )
+
+    # ── 하네스 코어 (종목·지수 공용) ─────────────
+    async def _run_harness(
+        self,
+        *,
+        facts: str,
+        guide: str,
+        name: str,
+        fmt: str,
+        fmt_label: str,
+        uid: str,
+        result_base: dict,
+        avoid_archetypes: Optional[list[str]] = None,
+        enforce_watchpoints: bool = True,
+    ) -> Optional[dict]:
+        """완성된 facts → 4단계 하네스(앵글→작가 best-of-N→편집→가드) → 발행용 dict.
+
+        종목 경로(generate)와 지수 경로(agents/index_chart)가 공유한다. facts·guide만
+        다르고 품질 장치(best-of-N·편집 루브릭·독자시점/watchpoints/길이 가드·법적 필터)는
+        동일. result_base는 결과 dict에 병합될 메타(ticker/name/market/is_kr/kind/source).
+
+        enforce_watchpoints=False면 빈 '앞으로 볼 것'을 허용한다(cta처럼 마무리가 다른 경우).
+        """
         # ① 앵글 (실패해도 진행 — 앵글 없으면 빈 브리핑)
-        angle = await self._find_angle(facts, fmt, name, uid, avoid_archetypes=avoid_archetypes)
+        angle = await self._find_angle(facts, guide, name, uid, avoid_archetypes=avoid_archetypes)
         angle_brief = _angle_brief(angle) if angle else "# 편집 앵글\n(앵글 추출 실패 — 수치의 가장 강한 긴장 하나를 직접 잡아라)"
 
         # ② 작가 best-of-N
-        candidates = await self._write_candidates(facts, angle_brief, fmt, name, uid)
+        candidates = await self._write_candidates(facts, angle_brief, guide, name, uid)
         if not candidates:
-            logger.warning(f"[marketer] 후보 0개 — 생성 실패 {name}/{fmt}")
+            logger.warning(f"[marketer] 후보 0개 — 생성 실패 {name}")
             return None
 
         # ③ 편집/심판
-        edited = await self._edit_and_pick(candidates, facts, angle_brief, fmt, name, uid)
+        edited = await self._edit_and_pick(candidates, facts, angle_brief, guide, name, uid)
         if edited is None:
             # 편집 실패 시 첫 후보를 graceful fallback으로 사용.
             best = candidates[0]
@@ -614,9 +654,8 @@ class MarketerAgent(BaseAgent):
             repair_reasons.append(
                 "다음 표현을 문장째 제거하고 독자 관심사로 대체: " + ", ".join(warnings)
             )
-        if fmt != "cta" and not (edited.watchpoints or []):
-            # 종목글의 페이로드 = '앞으로 볼 것'. 비면 호응이 죽으므로 반드시 채운다.
-            # (cta는 예외 — 댓글 유도가 마무리라 watchpoints 비움을 허용)
+        if enforce_watchpoints and not (edited.watchpoints or []):
+            # 페이로드 = '앞으로 볼 것'. 비면 호응이 죽으므로 반드시 채운다.
             repair_reasons.append(
                 "'앞으로 볼 것'(watchpoints)이 비었다 — facts/앵글에서 조건부·관찰형 관찰 포인트 "
                 "1~3개를 반드시 채워라(수급/추세 조건, 지지/저항 관찰 수준, 실적 조건). "
@@ -629,46 +668,42 @@ class MarketerAgent(BaseAgent):
                 f"2개로 압축해 480자 이내로 만들어라(수치·관찰 포인트는 유지)."
             )
         if repair_reasons:
-            logger.info(f"[marketer] 가드 재편집 {name}/{fmt}: {repair_reasons}")
+            logger.info(f"[marketer] 가드 재편집 {name}: {repair_reasons}")
             repaired = await self._edit_and_pick(
-                candidates, facts, angle_brief, fmt, name, uid,
+                candidates, facts, angle_brief, guide, name, uid,
                 repair_note=" / ".join(repair_reasons),
             )
             if repaired is not None:
                 edited = repaired
                 text = assemble_post(_edited_to_post(edited))
                 warnings = guard_reader_first(text)
-                if warnings or not (edited.watchpoints or []):
+                if warnings or (enforce_watchpoints and not (edited.watchpoints or [])):
                     logger.warning(
-                        f"[marketer] 재편집 후에도 잔존 {name}/{fmt}: "
+                        f"[marketer] 재편집 후에도 잔존 {name}: "
                         f"reader={warnings} watchpoints_empty={not (edited.watchpoints or [])}"
                     )
 
         # 4-2. 법적 필터(비협상 — 하드 치환)
         text, found = BaseAgent.filter_forbidden(text)
         if found:
-            logger.warning(f"[marketer] 금지표현 필터됨 {name}/{fmt}: {found}")
+            logger.warning(f"[marketer] 금지표현 필터됨 {name}: {found}")
 
         # 4-3. 길이 경고
         if len(text) > THREADS_MAX:
             warnings = (warnings or []) + [f"길이초과({len(text)}>{THREADS_MAX})"]
 
         return {
-            "ticker": snapshot.get("ticker", ticker.upper()),
-            "name": name,
-            "market": snapshot.get("market", ""),
-            "is_kr": bool(snapshot.get("is_kr")),
+            **result_base,
             "fmt": fmt,
-            "fmt_label": FORMATS[fmt]["label"],
+            "fmt_label": fmt_label,
             "text": text,
             "char_count": len(text),
             "filtered": found,
             "warnings": warnings,           # 콘솔 노출용(자기언급/길이) — human-in-loop
-            "score": edited.score_total,    # 편집 자가채점(0~30)
+            "score": edited.score_total,    # 편집 자가채점(0~35)
             "candidates": len(candidates),
             "angle": angle.tension if angle else "",
             "archetype": (angle.archetype if angle else ""),  # 앵글 유형(다양성 추적/검수 노출)
-            "source": "harness-v2",
         }
 
 

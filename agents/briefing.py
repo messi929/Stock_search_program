@@ -12,15 +12,24 @@ LEGAL: 추천/매수·매도/목표가/단정 금지. 관찰·참고·중립 해
 
 from __future__ import annotations
 
-from datetime import date, datetime, timezone
+from collections import Counter
+from datetime import date, datetime, timedelta, timezone
 from typing import Optional
+from zoneinfo import ZoneInfo
 
 from loguru import logger
 
 from agents.base import BaseAgent
 from agents.marketer import ThreadsPost, assemble_post
 from utils.claude_client import MODEL_SONNET
-from utils.market_calendar import kr_market_status_hint
+from utils.market_calendar import kr_market_status_hint, us_market_closed
+
+_KST = ZoneInfo("Asia/Seoul")
+
+
+def _kst_today() -> date:
+    """현재 KST 날짜. 컨테이너 TZ 설정에 의존하지 않도록 명시적으로 Asia/Seoul을 쓴다."""
+    return datetime.now(timezone.utc).astimezone(_KST).date()
 
 
 # ──────────────────────────────────────────────
@@ -83,31 +92,71 @@ _US_EQUITY_KEYS = ("sp500", "nasdaq", "dow", "sox", "vix")
 
 def latest_us_session_date(snap: dict) -> Optional[date]:
     """스냅샷의 미국 '주식' 지표 중 가장 최근 종가일(date). 없으면 None. FX(usdkrw) 제외."""
-    dates: list[date] = []
+    dates = _equity_dates(snap)
+    return max(dates) if dates else None
+
+
+def _equity_dates(snap: dict) -> list[date]:
+    """스냅샷 미국 '주식' 지표들의 종가일 목록(FX 제외, 파싱 실패는 생략)."""
+    out: list[date] = []
     for key in _US_EQUITY_KEYS:
         ds = (snap.get(key) or {}).get("date")
         if not ds:
             continue
         try:
-            dates.append(date.fromisoformat(ds))
+            out.append(date.fromisoformat(ds))
         except (ValueError, TypeError):
             continue
-    return max(dates) if dates else None
+    return out
 
 
-def us_session_is_stale(snap: dict, today: Optional[date] = None) -> bool:
-    """간밤 미국 세션이 '신규'가 아니면(=묵은 종가) True.
+def consensus_us_session_date(snap: dict) -> Optional[date]:
+    """미국 '주식' 지표들의 '합의' 종가일. 없으면 None. FX(usdkrw) 제외.
 
-    미국장은 주말·미 공휴일에 쉰다. 그런 날 다음 아침(KST 월요일·일요일 등)엔 직전
-    미국 세션이 없어 FDR이 금요일 등 묵은 종가를 준다 — 그걸 '간밤 미국장'으로 브리핑하면
-    오정보. KST 기준 직전 거래일 종가(diff=1)면 신선, 2일 이상 벌어지면 묵은 것으로 본다.
-    (미 종가일은 날짜변경선상 KST보다 항상 하루 뒤 → 신선=diff 1.)
+    max()가 아니라 **최빈값(mode)** 을 쓴다 — FDR 소스가 지수마다 달라서 어느 한 지표가
+    휴장일에 팬텀 바(예: 관측휴장일 종가)를 뱉어도, 다수 지표의 합의 날짜가 그 이상치에
+    끌려가지 않게 한다. (max()는 지표 1개만 오염돼도 신선하다고 오판했다.)
+    동률이면 보수적으로 더 이른(작은) 날짜를 택한다 — 신선하다고 과신하지 않기 위해.
     """
-    last = latest_us_session_date(snap)
-    if last is None:
-        return True  # 데이터 없음 → 생성 의미 없음
-    today = today or datetime.now().date()
-    return (today - last).days >= 2
+    dates = _equity_dates(snap)
+    if not dates:
+        return None
+    counts = Counter(dates)
+    top = max(counts.values())
+    return min(d for d, c in counts.items() if c == top)
+
+
+def us_session_is_stale(snap: dict, today: Optional[date] = None) -> tuple[bool, str]:
+    """간밤 브리핑할 '신규' 미국 세션이 없으면 (True, 사유). 있으면 (False, "").
+
+    2중 방어:
+      (1) 캘린더(정밀·주력): KST '오늘'의 간밤에 해당하는 미 세션일(= 오늘−1일, ET)이
+          NYSE 휴장(주말·미 공휴일·Good Friday 등)이면 애초에 브리핑할 실장이 없다 →
+          stale. 이것이 미 공휴일(예: 독립기념일 관측휴장 다음 KST 토요일 아침)을 원천
+          차단한다. 데이터 신선도 추론에 앞서 '달력상 장이 열렸나'를 먼저 본다.
+      (2) 데이터 신선도(백업): 스냅샷 합의 종가일이 KST 오늘보다 2일 이상 과거면 묵은
+          값 → stale. 캘린더 라이브러리가 결손돼 (1)이 놓쳐도 단일 휴장은 여기서 걸린다.
+          (미 종가일은 날짜변경선상 KST보다 하루 뒤 → 정상=diff 1.)
+
+    today(KST 날짜)를 명시 인자로 받는다. 기본값은 컨테이너 TZ에 의존하지 않는 KST.
+    """
+    today = today or _kst_today()
+
+    # (1) 간밤 미 세션 캘린더 확인 — KST 오늘의 직전 미 세션은 ET 기준 (오늘−1)일.
+    overnight_et = today - timedelta(days=1)
+    closed, reason = us_market_closed(overnight_et)
+    if closed:
+        return True, f"overnight_closed:{overnight_et}({reason})"
+
+    # (2) 데이터 신선도 백업.
+    sess = consensus_us_session_date(snap)
+    if sess is None:
+        return True, "no_data"
+    diff = (today - sess).days
+    if diff >= 2:
+        return True, f"stale_data:{sess}(diff={diff})"
+
+    return False, ""
 
 
 def _fmt_index_lines(snap: dict) -> str:
@@ -206,13 +255,12 @@ class BriefingAgent(BaseAgent):
             logger.warning("[briefing] 지수 스냅샷 비어 있음 — 생성 중단")
             return None
 
-        # 간밤 미국 세션이 없으면(주말·미 공휴일 직후 = KST 월/일 아침 등) 묵은 종가를
-        # '간밤 미국장'으로 내보내지 않는다. 스케줄(화~토)의 2차 안전망 + 미 공휴일 대응.
-        if us_session_is_stale(snap):
-            last = latest_us_session_date(snap)
-            logger.info(
-                f"[briefing] 간밤 신규 미국 세션 없음(최근 종가일 {last}) — 브리핑 생략"
-            )
+        # 간밤 미국 세션이 없으면(주말·미 공휴일 직후 = KST 월/일/공휴일 다음 아침 등) 묵은
+        # 종가를 '간밤 미국장'으로 내보내지 않는다. NYSE 캘린더 + 데이터 신선도 2중 방어
+        # (스케줄 화~토의 최종 안전망). 자동발행 신뢰도의 핵심 가드.
+        stale, reason = us_session_is_stale(snap)
+        if stale:
+            logger.info(f"[briefing] 간밤 신규 미국 세션 없음({reason}) — 브리핑 생략")
             return None
 
         index_block = _fmt_index_lines(snap)
