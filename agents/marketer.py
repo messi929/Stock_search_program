@@ -17,6 +17,14 @@
 
 0→1 마케팅 목적. 관리자가 콘솔에서 검수·수정 후 복사(또는 자동 발행)한다.
 
+발행 문구 구성 (JEON 결정 2026-07-12):
+  - **해시태그 제거** — Threads는 해시태그 유입이 사실상 없는데 500자 예산만 먹었다.
+    그 예산을 본문/관찰 포인트로 돌린다.
+  - **본문 끝에 서비스 홍보 1줄(CTA)** — 단, LLM에게 홍보를 맡기지 않는다. 홍보를 쓰게
+    하면 과장·톤붕괴·법적 리스크가 생기고, 본문 품질을 지탱하는 '독자시점' 루브릭과
+    자기언급 가드가 통째로 무너진다. 그래서 본문은 그대로 독자 관심사로 쓰게 두고,
+    **모든 LLM 단계와 가드가 끝난 뒤** 사람이 고정한 문구(PROMO_TEXT)를 덧붙인다.
+
 LEGAL: 추천/매수·매도/목표가/매수가/손절가 절대 금지. 관찰·참고·중립 해석만.
 면책은 계정 프로필(bio)에 상시 고지하므로 본문에는 넣지 않는다(JEON 결정 2026-06-27).
 """
@@ -48,6 +56,51 @@ MIN_NUMERIC_FACTS = 2
 
 THREADS_MAX = 500  # Threads 글자 수 제한
 # 면책은 본문이 아니라 계정 프로필(bio)에 상시 고지한다(JEON 결정 2026-06-27).
+
+
+# ──────────────────────────────────────────────
+# 본문 홍보(CTA) — 결정론적. LLM이 쓰지 않는다 (JEON 결정 2026-07-12)
+# ──────────────────────────────────────────────
+
+# MARKETING_PROMO=0 이면 홍보 없이(기존 동작) 발행. A/B로 도달 변화를 보려면 이 토글로.
+PROMO_ENABLED = (os.getenv("MARKETING_PROMO", "1") or "1").strip().lower() not in (
+    "0", "false", "off", "no",
+)
+
+# 문구는 한 곳에서만 고친다. 법적 안전 유지: '추천/매수·매도/수익' 등 권유 표현 금지 —
+# 파는 것은 '판단 재료'지 종목이 아니다.
+PROMO_TEXT = (
+    os.getenv("MARKETING_PROMO_TEXT")
+    or "──\n📊 종목 하나를 강점·약점 양쪽 수치로 정리해 봅니다 — axislytics.com\n추천 없이, 판단 재료만."
+)
+
+
+def promo_block() -> str:
+    """본문 뒤에 붙일 홍보 블록(앞 빈 줄 포함). 비활성이면 빈 문자열."""
+    if not PROMO_ENABLED:
+        return ""
+    text = (PROMO_TEXT or "").strip()
+    return f"\n\n{text}" if text else ""
+
+
+def append_promo(text: str) -> str:
+    """완성된 본문에 홍보 블록을 덧붙인다.
+
+    ⚠️ 반드시 **모든 LLM 단계 + 가드(자기언급/법적 필터)가 끝난 뒤** 호출할 것.
+    가드보다 먼저 붙이면 홍보 문구의 'Axis/axislytics'가 자기언급 가드에 걸리고,
+    편집 단계 후보 목록(assemble_post)에 섞이면 모델이 홍보를 흉내 내기 시작한다.
+    """
+    block = promo_block()
+    return f"{text.rstrip()}{block}" if block else text
+
+
+# LLM이 쓸 수 있는 글자 예산 = 한도 − 홍보 블록 − 안전 여백.
+# 프롬프트(작가/편집/브리핑/교육)에 이 숫자를 주입해 홍보를 붙여도 500자를 넘기지 않게 한다.
+def _llm_budget() -> int:
+    return max(200, THREADS_MAX - len(promo_block()) - 20)
+
+
+LLM_BUDGET = _llm_budget()
 
 
 # ──────────────────────────────────────────────
@@ -109,7 +162,7 @@ DEFAULT_FORMATS = ("contrarian", "curiosity", "cta", "technical")
 # ──────────────────────────────────────────────
 
 # 작가·편집이 공유하는 불변 규칙(법적·구체성·독자시점). 두 system 앞에 붙인다.
-_CORE_RULES = """# 1순위 — 구체성 (어기면 글은 폐기)
+_CORE_RULES = f"""# 1순위 — 구체성 (어기면 글은 폐기)
 - 스냅샷의 **실제 숫자를 최소 2개 이상 그대로 인용**한다.
   예: "RSI 72", "외국인 8일 연속 순매수", "거래량 평소의 2.3배", "PER 14.1", "52주 고가 대비 -8%"
 - 숫자에는 의미를 붙인다. 예: "RSI 72 — 과열권", "PER 14는 업종 평균보다 낮은 편"
@@ -170,12 +223,15 @@ _CORE_RULES = """# 1순위 — 구체성 (어기면 글은 폐기)
 
 # 문체
 - 짧은 문장, 줄바꿈, 이모지 0~3개. 표/마크다운 금지.
-- hook(첫 문장)은 가장 강한 수치/긴장 하나로 시작. body는 **3~5줄로 짧게**, hashtags 2~4개(한국어, # 제외).
+- hook(첫 문장)은 가장 강한 수치/긴장 하나로 시작. body는 **3~5줄로 짧게**.
+- **해시태그를 쓰지 마라**(# 로 시작하는 태그 줄 금지). 유입에 도움이 안 되고 글자만 먹는다.
 
 # 길이 예산 (필수 — 어기면 발행 불가)
-- **hook + body + '앞으로 볼 것'(1~3개) + 해시태그를 모두 합쳐 480자 이내**(Threads 500자 한도).
+- **hook + body + '앞으로 볼 것'(1~3개)을 모두 합쳐 {LLM_BUDGET}자 이내.**
+  (발행 시 글 맨 끝에 서비스 안내 1줄이 자동으로 붙는다 — 그 몫을 뺀 예산이다.
+   그 안내는 시스템이 붙이므로 **네가 쓰지 마라**. 본문에서 서비스·링크를 언급하지 마라.)
 - 페이로드는 '앞으로 볼 것'이다 → body는 긴장 제시까지만 짧게 쓰고, 결론·전망 설명은
-  watchpoints로 넘긴다. body가 길면 줄을 쳐내서라도 480자를 지킨다.
+  watchpoints로 넘긴다. body가 길면 줄을 쳐내서라도 예산을 지킨다.
 - 길이가 빠듯하면 watchpoints를 2개로 줄이고 각 항목을 더 압축한다(개수보다 길이 준수 우선).
 - 면책은 본문에 넣지 않는다(프로필 bio 상시 고지)."""
 
@@ -242,8 +298,10 @@ _EDITOR_SYSTEM = (
     "- 7축: 후보의 watchpoints가 약하거나 비었으면 facts/앵글에서 직접 1~3개를 만들어 채운다.\n"
     "  단 매수가/목표가/손절가·'사라/팔라'로 새지 않게(가격은 '관찰 지지/저항 수준'으로).\n"
     "  watchpoints 각 항목은 35자 내외로 간결히.\n"
-    "- 길이(필수): hook+body+watchpoints+해시태그 합산 480자 이내. 넘치면 body를 줄이고\n"
-    "  watchpoints를 2개로 압축해서라도 맞춘다(발행 한도 500자).\n"
+    f"- 길이(필수): hook+body+watchpoints 합산 {LLM_BUDGET}자 이내. 넘치면 body를 줄이고\n"
+    "  watchpoints를 2개로 압축해서라도 맞춘다(발행 한도 500자 — 끝에 서비스 안내 1줄이\n"
+    "  자동으로 붙으므로 그 몫이 이미 빠진 예산이다. 안내 문구를 직접 쓰지 마라).\n"
+    "- 해시태그를 넣지 마라(# 태그 줄 금지).\n"
     "- score_total은 '최종본' 기준 점수. issues_fixed에 고친 문제를 간단히 적는다.\n\n"
     + _CORE_RULES
 )
@@ -282,9 +340,8 @@ class ThreadsPost(BaseModel):
     hook: str = Field(description="첫 문장 한 줄 — 스크롤을 멈추게 하는 후킹")
     body: str = Field(description="본문 3~6줄. 줄바꿈 포함. 수치 중립 해석")
     watchpoints: list[str] = Field(description=_WATCHPOINTS_DESC)  # 필수(구조화 스키마 required)
-    hashtags: list[str] = Field(
-        default_factory=list, description="해시태그 키워드 2~4개 (# 제외, 한국어)"
-    )
+    # 해시태그 필드 없음 — Threads 유입 기여 0인데 글자 예산만 먹어 제거(2026-07-12).
+    # 서비스 홍보 1줄도 여기 없다: LLM이 쓰지 않고 append_promo()가 발행 직전에 붙인다.
 
 
 class EditedPost(BaseModel):
@@ -293,7 +350,6 @@ class EditedPost(BaseModel):
     hook: str = Field(description="최종 첫 문장")
     body: str = Field(description="최종 본문 3~6줄")
     watchpoints: list[str] = Field(description=_WATCHPOINTS_DESC)  # 필수(구조화 스키마 required)
-    hashtags: list[str] = Field(default_factory=list, description="해시태그 2~4개 (# 제외)")
     score_total: int = Field(default=0, description="루브릭 7축 합산 점수(0~35, 최종본 기준)")
     issues_fixed: list[str] = Field(default_factory=list, description="고친 문제들")
     base_candidate: int = Field(default=0, description="베이스로 고른 후보 번호(0-based)")
@@ -640,8 +696,7 @@ class MarketerAgent(BaseAgent):
             # 편집 실패 시 첫 후보를 graceful fallback으로 사용.
             best = candidates[0]
             edited = EditedPost(
-                hook=best.hook, body=best.body,
-                watchpoints=best.watchpoints, hashtags=best.hashtags,
+                hook=best.hook, body=best.body, watchpoints=best.watchpoints,
             )
 
         text = assemble_post(_edited_to_post(edited))
@@ -661,11 +716,11 @@ class MarketerAgent(BaseAgent):
                 "1~3개를 반드시 채워라(수급/추세 조건, 지지/저항 관찰 수준, 실적 조건). "
                 "매수가/목표가/손절가·'사라/팔라' 금지."
             )
-        if len(text) > THREADS_MAX:
-            # Threads 500자 하드 한도 초과 → 압축 재편집(발행 불가 방지).
+        if len(text) > LLM_BUDGET:
+            # 홍보 블록을 붙이면 500자를 넘긴다 → 압축 재편집(발행 불가 방지).
             repair_reasons.append(
-                f"전체 길이 {len(text)}자로 한도({THREADS_MAX}) 초과 — body를 줄이고 watchpoints를 "
-                f"2개로 압축해 480자 이내로 만들어라(수치·관찰 포인트는 유지)."
+                f"전체 길이 {len(text)}자로 예산({LLM_BUDGET}) 초과 — body를 줄이고 watchpoints를 "
+                f"2개로 압축해 {LLM_BUDGET}자 이내로 만들어라(수치·관찰 포인트는 유지)."
             )
         if repair_reasons:
             logger.info(f"[marketer] 가드 재편집 {name}: {repair_reasons}")
@@ -688,7 +743,10 @@ class MarketerAgent(BaseAgent):
         if found:
             logger.warning(f"[marketer] 금지표현 필터됨 {name}: {found}")
 
-        # 4-3. 길이 경고
+        # 4-3. 홍보 블록 — 가드/필터를 모두 통과한 뒤에 붙인다(자기언급 가드 대상 아님).
+        text = append_promo(text)
+
+        # 4-4. 길이 경고 (홍보 포함 최종 길이 기준)
         if len(text) > THREADS_MAX:
             warnings = (warnings or []) + [f"길이초과({len(text)}>{THREADS_MAX})"]
 
@@ -708,7 +766,7 @@ class MarketerAgent(BaseAgent):
 
 
 def _edited_to_post(e: EditedPost) -> ThreadsPost:
-    return ThreadsPost(hook=e.hook, body=e.body, watchpoints=e.watchpoints, hashtags=e.hashtags)
+    return ThreadsPost(hook=e.hook, body=e.body, watchpoints=e.watchpoints)
 
 
 def _watchpoints_block(items: list[str]) -> str:
@@ -723,17 +781,17 @@ def _watchpoints_block(items: list[str]) -> str:
 
 
 def assemble_post(post: ThreadsPost) -> str:
-    """ThreadsPost → 발행용 본문 문자열 (hook + body + 앞으로 볼 것 + hashtags).
+    """ThreadsPost → **LLM이 쓴 본문** 문자열 (hook + body + 앞으로 볼 것).
 
-    면책 문구는 본문에 넣지 않는다 — 계정 프로필(bio)에 상시 고지(JEON 결정 2026-06-27).
+    홍보 블록은 여기서 붙이지 않는다 — 이 함수는 편집 단계의 후보 목록 렌더링에도
+    쓰이므로, 홍보를 넣으면 모델이 그걸 학습해 본문에 흉내 낸다. 홍보는 가드까지
+    끝난 최종 단계에서 append_promo()로 붙인다.
+    해시태그는 제거됐다(2026-07-12). 면책은 프로필 bio 상시 고지(2026-06-27).
     """
     parts: list[str] = [post.hook.strip(), post.body.strip()]
     wp = _watchpoints_block(getattr(post, "watchpoints", []) or [])
     if wp:
         parts.append(wp)
-    tags = [t.strip().lstrip("#") for t in (post.hashtags or []) if t and t.strip()]
-    if tags:
-        parts.append(" ".join(f"#{t}" for t in tags))
     text = "\n\n".join(p for p in parts if p)
     return text.strip()
 

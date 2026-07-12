@@ -64,9 +64,10 @@
 ### 아키텍처
 ```
 [종목] → build_instant_snapshot (스크리너 스냅샷, 실수치 PER/RSI/등락)
-       → MarketerAgent (기본 Sonnet, 구조화출력 ThreadsPost{hook,body,hashtags})
+       → MarketerAgent (기본 Sonnet, 구조화출력 ThreadsPost{hook,body,watchpoints})
        → _numeric_fact_count 가드(실수치 2개 미만이면 생성 스킵 — 헛글 차단)
-       → filter_forbidden (추천·목표가 가드) + 압축 면책 1줄
+       → guard_reader_first (자기언급/셀링멘트) + filter_forbidden (추천·목표가)
+       → append_promo (서비스 홍보 1줄 — 가드 통과 후에만)
        → Firestore marketing_drafts/{id} (status: draft|approved|archived)
        → 관리자 검수 UI / 일괄생성 CLI
 ```
@@ -88,9 +89,20 @@
 ### 비용
 - 종목 × 포맷 1건당 **Sonnet ~35원**(품질 우선 기본값). 비용 절감 필요 시 `MARKETER_MODEL=haiku`(~5원).
 
+### 발행 문구 구성 (JEON 결정 2026-07-12)
+글 = `hook + body + 앞으로 볼 것` **+ 서비스 홍보 1줄**. 4개 생성기(marketer/briefing/weekend/education) 공통.
+
+- **해시태그 제거** — Threads는 해시태그 유입이 사실상 없는데 500자 예산만 먹었다. 그 예산을 본문·관찰 포인트로 돌림. `ThreadsPost.hashtags` 필드 삭제.
+- **본문 끝 홍보 1줄(CTA)** — `agents/marketer.py`의 `PROMO_TEXT` 상수. **LLM이 쓰지 않는다**: 홍보를 모델에 맡기면 과장·톤붕괴가 생기고, 본문 품질을 지탱하는 '독자시점' 루브릭과 자기언급 가드가 무너진다. 그래서 본문은 그대로 독자 관심사로 쓰게 두고, **모든 LLM 단계 + 가드 + 법적 필터가 끝난 뒤** `append_promo()`가 붙인다.
+  - ⚠️ **순서 불변**: 홍보를 가드보다 먼저 붙이면 문구의 `axislytics`/`Axis`가 `guard_reader_first`에 걸리고, 편집 단계 후보 목록(`assemble_post`)에 섞이면 모델이 본문에서 홍보를 흉내 낸다.
+  - 글자 예산: `LLM_BUDGET = 500 − 홍보(66자) − 여백 20 = 414자`. 프롬프트 4곳에 주입되고 길이 초과 시 재편집을 유발한다.
+- **토글**: `MARKETING_PROMO=0`이면 홍보 없이 발행(도달 A/B용). 문구 교체는 `MARKETING_PROMO_TEXT`.
+- ⚠️ Threads는 외부 링크가 있는 글의 도달을 낮추는 경향이 있다. 도달이 눈에 띄게 떨어지면 `MARKETING_PROMO=0`으로 돌리고 링크를 **첫 댓글**로 옮기는 안을 검토할 것.
+
 ### 법적 안전
 - **본문 면책 없음**(JEON 결정 2026-06-27) — 면책은 계정 프로필(bio)에 상시 고지로 대체. 광고 톤 회피 + 500자 확보. ⚠️ **bio 면책 줄은 절대 제거 금지**(투자자문업 면허 없음, [LEGAL.md](LEGAL.md)). marketer/briefing 공통 진입점 `assemble_post()`에서 본문 면책 제거.
 - `filter_forbidden`로 추천/매수·매도/목표가/시그널 등 자동 치환. 검수 시 `filtered` 뱃지로 경고 노출.
+- 홍보 1줄은 **서비스 광고이지 투자 권유가 아니다** — 파는 것은 '판단 재료'지 종목이 아니므로 추천 금지 원칙과 충돌하지 않는다. `PROMO_TEXT`를 고칠 때 '추천/매수/수익률' 류 표현을 넣지 말 것.
 
 ---
 
