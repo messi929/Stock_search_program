@@ -22,7 +22,11 @@ const TIERS = [
     name: "Free",
     price: "0원",
     period: "",
+    was: null,
+    off: null,
     yearly: null,
+    yearlyWas: null,
+    yearlyOff: null,
     desc: "처음 시작하는 투자자",
     cta: "🚀 무료로 시작",
     ctaHref: "/login",
@@ -38,9 +42,13 @@ const TIERS = [
   {
     id: "pro",
     name: "Pro",
-    price: "39,000원",
+    price: "29,000원",
     period: "/월",
-    yearly: "연 398,000원 · 약 2개월 할인",
+    was: "39,000원",
+    off: "26% 할인",
+    yearly: "연 319,000원",
+    yearlyWas: "398,000원",
+    yearlyOff: "20% 할인",
     desc: "꾸준히 분석하는 투자자",
     cta: "💎 Pro 시작",
     ctaHref: "/login",
@@ -92,6 +100,18 @@ export default function PricingPage() {
                   <p className="text-xs text-muted-foreground mt-1">{t.desc}</p>
                 </div>
                 <div>
+                  {t.was && (
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="text-sm text-muted-foreground line-through">
+                        {t.was}
+                      </span>
+                      {t.off && (
+                        <span className="text-xs font-semibold px-1.5 py-0.5 rounded bg-red-500/15 text-red-500">
+                          {t.off}
+                        </span>
+                      )}
+                    </div>
+                  )}
                   <div className="flex items-end gap-1">
                     <span className="text-3xl font-bold">{t.price}</span>
                     {t.period && (
@@ -101,7 +121,22 @@ export default function PricingPage() {
                     )}
                   </div>
                   {t.yearly && (
-                    <p className="text-xs text-muted-foreground mt-1">{t.yearly}</p>
+                    <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1.5">
+                      {t.yearlyWas && (
+                        <span className="line-through">{t.yearlyWas}</span>
+                      )}
+                      <span className="text-foreground">{t.yearly}</span>
+                      {t.yearlyOff && (
+                        <span className="font-semibold text-red-500">
+                          {t.yearlyOff}
+                        </span>
+                      )}
+                    </p>
+                  )}
+                  {t.was && (
+                    <p className="text-[11px] text-muted-foreground mt-1">
+                      한정 기간 할인가
+                    </p>
                   )}
                 </div>
                 <ul className="space-y-2 text-sm">
@@ -152,8 +187,9 @@ export default function PricingPage() {
             기간이 끝나기 전 언제든 해지하면 요금이 청구되지 않습니다.
           </FaqItem>
           <FaqItem q="연 구독이 더 저렴한가요?">
-            네. 연 구독은 약 2개월치가 할인됩니다 — Pro 연 398,000원(월 환산
-            약 33,200원). 12개월 구독을 약 10개월 가격에 이용하시는 셈입니다.
+            네. 한정 기간 할인가로 연 319,000원(정가 398,000원, 20% 할인)이며 월
+            환산 약 26,583원입니다. 할인가 기준 월 구독(29,000원)으로 12개월을
+            이용할 때보다 약 1개월치가 더 절약됩니다.
           </FaqItem>
           <FaqItem q="환불 정책은 어떻게 되나요?">
             결제 후 7일 이내 전액 환불해 드립니다. 상세 조건은 환불 정책

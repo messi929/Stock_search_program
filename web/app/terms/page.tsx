@@ -76,9 +76,9 @@ export default function TermsPage() {
         <Section n="제4조" title="요금제 및 결제">
           <ol className="list-decimal pl-5 space-y-2">
             <li>
-              본 서비스는 무료(Free)와 Pro(월 39,000원 또는 연 398,000원)
-              요금제로 운영되며, 연 구독은 약 2개월치가 할인됩니다. Pro는 신규
-              가입 시 첫 7일 무료 체험을 제공합니다.
+              본 서비스는 무료(Free)와 Pro(월 29,000원 또는 연 319,000원)
+              요금제로 운영되며, 연 구독은 월 구독 12개월 대비 약 1개월치가
+              할인됩니다. Pro는 신규 가입 시 첫 7일 무료 체험을 제공합니다.
             </li>
             <li>
               유료 요금제는 <strong>월 또는 연 단위 자동 갱신 구독</strong>이며, 결제·청구·
