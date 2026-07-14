@@ -20,7 +20,7 @@ from zoneinfo import ZoneInfo
 from loguru import logger
 
 from agents.base import BaseAgent
-from agents.marketer import LLM_BUDGET, ThreadsPost, append_promo, assemble_post
+from agents.marketer import LLM_BUDGET, ThreadsPost, assemble_post, finalize_parts
 from utils.claude_client import MODEL_SONNET
 from utils.market_calendar import kr_market_status_hint, us_market_closed
 
@@ -228,8 +228,8 @@ _SYSTEM = f"""당신은 한국 주식 정보 서비스 'Axis'의 SNS(스레드) 
 - 한국 증시 개장 여부를 임의로 가정하지 말 것 — 제공된 '한국 증시 개장 상태'만 따른다.
 - **해시태그를 쓰지 마라**(# 태그 줄 금지 — 유입 기여 0인데 글자만 먹는다)
 - watchpoints: **비워 둔다([])**. 국내장 관전포인트는 위 body ③에 이미 포함하므로 따로 만들지 않는다.
-- 전체가 {LLM_BUDGET}자를 넘지 않도록(Threads 500자 제한 — 발행 시 끝에 서비스 안내 1줄이
-  자동으로 붙으므로 그 몫이 빠진 예산이다. 그 안내를 직접 쓰지 마라. 본문 면책 없음, 면책은 프로필 bio)"""
+- 전체가 {LLM_BUDGET}자를 넘지 않도록(Threads 글 1개 500자 제한 — 서비스 안내는 별도 댓글로
+  시스템이 붙이므로 **네가 쓰지 마라**. 본문 면책 없음, 면책은 프로필 bio)"""
 
 
 class BriefingAgent(BaseAgent):
@@ -294,7 +294,7 @@ class BriefingAgent(BaseAgent):
         text, found = BaseAgent.filter_forbidden(text)
         if found:
             logger.warning(f"[briefing] 금지표현 필터됨: {found}")
-        text = append_promo(text)  # 홍보는 필터 통과 후에만 붙인다
+        parts, text = finalize_parts(text)  # 홍보는 필터 통과 후 별도 파트로
 
         return {
             "kind": "briefing",
@@ -304,8 +304,9 @@ class BriefingAgent(BaseAgent):
             "is_kr": False,
             "fmt": "us_briefing",
             "fmt_label": "새벽 미국시장 브리핑",
+            "parts": parts,
             "text": text,
-            "char_count": len(text),
+            "char_count": len(parts[0]),
             "filtered": found,
             "source": "haiku",
             "indices": snap,  # 검수 화면에서 원본 수치 참고용

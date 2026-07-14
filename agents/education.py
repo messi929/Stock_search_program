@@ -31,8 +31,8 @@ from agents.marketer import (
     LLM_BUDGET,
     ThreadsPost,
     _as_of_label,
-    append_promo,
     assemble_post,
+    finalize_parts,
     guard_reader_first,
     pick_hot_tickers,
 )
@@ -275,8 +275,8 @@ _SYSTEM = f"""당신은 한국 주식 정보 서비스 'Axis'의 SNS(스레드) 
 - 마지막 줄: 독자가 스스로 판단하도록 되짚는 질문 한 줄(teach의 '되짚을 질문/핵심'을 활용).
 - **해시태그를 쓰지 마라**(# 태그 줄 금지 — 유입 기여 0인데 글자만 먹는다).
 - watchpoints: **반드시 비운다([])**. 교육 글의 마무리는 '되짚는 질문'이지 종목 관찰 포인트가 아니다.
-- 전체가 {LLM_BUDGET}자를 넘지 않도록(Threads 500자 제한 — 발행 시 끝에 서비스 안내 1줄이
-  자동으로 붙으므로 그 몫이 빠진 예산이다. 그 안내를 직접 쓰지 마라. 본문 면책 없음, 면책은 프로필 bio)."""
+- 전체가 {LLM_BUDGET}자를 넘지 않도록(Threads 글 1개 500자 제한 — 서비스 안내는 별도 댓글로
+  시스템이 붙이므로 **네가 쓰지 마라**. 본문 면책 없음, 면책은 프로필 bio)."""
 
 
 class EducationAgent(BaseAgent):
@@ -345,8 +345,8 @@ class EducationAgent(BaseAgent):
         warnings = guard_reader_first(text)
         if warnings:
             logger.warning(f"[education] 자기언급/셀링 경고: {warnings}")
-        # 홍보는 자기언급 가드를 통과한 뒤에 붙인다(가드 대상 아님).
-        text = append_promo(text)
+        # 홍보는 자기언급 가드를 통과한 뒤 별도 파트로 붙인다(가드 대상 아님).
+        parts, text = finalize_parts(text)
 
         return {
             "kind": "education",
@@ -356,8 +356,9 @@ class EducationAgent(BaseAgent):
             "is_kr": False,
             "fmt": f"edu_{topic['series']}",
             "fmt_label": f"교육 · {_SERIES_LABEL[topic['series']]}",
+            "parts": parts,
             "text": text,
-            "char_count": len(text),
+            "char_count": len(parts[0]),
             "filtered": found,
             "warnings": warnings,
             "source": "sonnet",

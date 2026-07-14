@@ -20,10 +20,12 @@
 발행 문구 구성 (JEON 결정 2026-07-12):
   - **해시태그 제거** — Threads는 해시태그 유입이 사실상 없는데 500자 예산만 먹었다.
     그 예산을 본문/관찰 포인트로 돌린다.
-  - **본문 끝에 서비스 홍보 1줄(CTA)** — 단, LLM에게 홍보를 맡기지 않는다. 홍보를 쓰게
-    하면 과장·톤붕괴·법적 리스크가 생기고, 본문 품질을 지탱하는 '독자시점' 루브릭과
+  - **서비스 홍보 1줄(CTA)** — 단, LLM에게 홍보를 맡기지 않는다. 홍보를 쓰게 하면
+    과장·톤붕괴·법적 리스크가 생기고, 본문 품질을 지탱하는 '독자시점' 루브릭과
     자기언급 가드가 통째로 무너진다. 그래서 본문은 그대로 독자 관심사로 쓰게 두고,
-    **모든 LLM 단계와 가드가 끝난 뒤** 사람이 고정한 문구(PROMO_TEXT)를 덧붙인다.
+    **모든 LLM 단계와 가드가 끝난 뒤** 사람이 고정한 문구(PROMO_TEXT)를 붙인다.
+  - **홍보는 별도 파트(=첫 댓글)** (2026-07-14) — 본문 문자열에 결합하지 않는다. 링크가
+    본문에서 빠지고 본문 예산도 되찾는다. 상세: docs/axis/THREADS_FORMAT.md §7-4
 
 LEGAL: 추천/매수·매도/목표가/매수가/손절가 절대 금지. 관찰·참고·중립 해석만.
 면책은 계정 프로필(bio)에 상시 고지하므로 본문에는 넣지 않는다(JEON 결정 2026-06-27).
@@ -42,6 +44,7 @@ from pydantic import BaseModel, Field
 from agents.base import BaseAgent
 from agents.instant import build_instant_snapshot, resolve_ticker, _snapshot_facts
 from utils.claude_client import MODEL_HAIKU, MODEL_SONNET
+from utils.threads_client import join_parts
 
 # 마케팅 글 = 서비스의 얼굴 → 품질 우선 기본 Sonnet. 비용 절감 시 MARKETER_MODEL=haiku.
 MARKETER_MODEL = MODEL_HAIKU if os.getenv("MARKETER_MODEL", "").lower() == "haiku" else MODEL_SONNET
@@ -78,29 +81,37 @@ PROMO_TEXT = (
 )
 
 
-def promo_block() -> str:
-    """본문 뒤에 붙일 홍보 블록(앞 빈 줄 포함). 비활성이면 빈 문자열."""
+def promo_part() -> str:
+    """홍보를 담은 **별도 파트**(타래의 마지막 글 = 첫 댓글). 비활성이면 빈 문자열.
+
+    2026-07-14: 본문 문자열에 결합하던 것을 파트로 분리했다(docs/axis/THREADS_FORMAT.md §7-4).
+    링크가 본문에서 빠지고, LLM 본문 예산도 홍보가 먹던 만큼 되찾는다.
+    """
     if not PROMO_ENABLED:
         return ""
     text = (PROMO_TEXT or "").strip()
-    return f"\n\n{text}" if text else ""
+    # 단일 글 시절 본문과 홍보를 갈라주던 구분선은 별도 파트에선 의미가 없다.
+    return re.sub(r"^[─—\-_]{2,}[ \t]*\n", "", text).strip()
 
 
-def append_promo(text: str) -> str:
-    """완성된 본문에 홍보 블록을 덧붙인다.
+def finalize_parts(text: str) -> tuple[list[str], str]:
+    """가드를 통과한 본문 → (발행할 파트 배열, 검수/복사용 단일 text).
 
     ⚠️ 반드시 **모든 LLM 단계 + 가드(자기언급/법적 필터)가 끝난 뒤** 호출할 것.
-    가드보다 먼저 붙이면 홍보 문구의 'Axis/axislytics'가 자기언급 가드에 걸리고,
+    가드보다 먼저 홍보를 붙이면 'Axis/axislytics'가 자기언급 가드에 걸리고,
     편집 단계 후보 목록(assemble_post)에 섞이면 모델이 홍보를 흉내 내기 시작한다.
     """
-    block = promo_block()
-    return f"{text.rstrip()}{block}" if block else text
+    parts = [text.strip()]
+    promo = promo_part()
+    if promo:
+        parts.append(promo)
+    return parts, join_parts(parts)
 
 
-# LLM이 쓸 수 있는 글자 예산 = 한도 − 홍보 블록 − 안전 여백.
-# 프롬프트(작가/편집/브리핑/교육)에 이 숫자를 주입해 홍보를 붙여도 500자를 넘기지 않게 한다.
+# LLM이 쓸 수 있는 글자 예산 = 파트 1개 한도 − 안전 여백.
+# 홍보가 별도 파트로 빠지면서 예산을 되찾았다(구: 한도 − 홍보 − 여백).
 def _llm_budget() -> int:
-    return max(200, THREADS_MAX - len(promo_block()) - 20)
+    return max(200, THREADS_MAX - 20)
 
 
 LLM_BUDGET = _llm_budget()
@@ -231,8 +242,8 @@ _CORE_RULES = f"""# 1순위 — 구체성 (어기면 글은 폐기)
 
 # 길이 예산 (필수 — 어기면 발행 불가)
 - **hook + body + '앞으로 볼 것'(1~3개)을 모두 합쳐 {LLM_BUDGET}자 이내.**
-  (발행 시 글 맨 끝에 서비스 안내 1줄이 자동으로 붙는다 — 그 몫을 뺀 예산이다.
-   그 안내는 시스템이 붙이므로 **네가 쓰지 마라**. 본문에서 서비스·링크를 언급하지 마라.)
+  (Threads 글 1개의 한도 500자에서 여백을 뺀 값이다. 서비스 안내는 별도 댓글로 시스템이
+   붙이므로 **네가 쓰지 마라**. 본문에서 서비스·링크를 언급하지 마라.)
 - 페이로드는 '앞으로 볼 것'이다 → body는 긴장 제시까지만 짧게 쓰고, 결론·전망 설명은
   watchpoints로 넘긴다. body가 길면 줄을 쳐내서라도 예산을 지킨다.
 - 길이가 빠듯하면 watchpoints를 2개로 줄이고 각 항목을 더 압축한다(개수보다 길이 준수 우선).
@@ -302,8 +313,8 @@ _EDITOR_SYSTEM = (
     "  단 매수가/목표가/손절가·'사라/팔라'로 새지 않게(가격은 '관찰 지지/저항 수준'으로).\n"
     "  watchpoints 각 항목은 35자 내외로 간결히.\n"
     f"- 길이(필수): hook+body+watchpoints 합산 {LLM_BUDGET}자 이내. 넘치면 body를 줄이고\n"
-    "  watchpoints를 2개로 압축해서라도 맞춘다(발행 한도 500자 — 끝에 서비스 안내 1줄이\n"
-    "  자동으로 붙으므로 그 몫이 이미 빠진 예산이다. 안내 문구를 직접 쓰지 마라).\n"
+    "  watchpoints를 2개로 압축해서라도 맞춘다(Threads 글 1개 한도 500자 — 서비스 안내는\n"
+    "  별도 댓글로 시스템이 붙이므로 안내 문구를 직접 쓰지 마라).\n"
     "- 해시태그를 넣지 마라(# 태그 줄 금지).\n"
     "- score_total은 '최종본' 기준 점수. issues_fixed에 고친 문제를 간단히 적는다.\n\n"
     + _CORE_RULES
@@ -344,7 +355,7 @@ class ThreadsPost(BaseModel):
     body: str = Field(description="본문 3~6줄. 줄바꿈 포함. 수치 중립 해석")
     watchpoints: list[str] = Field(description=_WATCHPOINTS_DESC)  # 필수(구조화 스키마 required)
     # 해시태그 필드 없음 — Threads 유입 기여 0인데 글자 예산만 먹어 제거(2026-07-12).
-    # 서비스 홍보 1줄도 여기 없다: LLM이 쓰지 않고 append_promo()가 발행 직전에 붙인다.
+    # 서비스 홍보 1줄도 여기 없다: LLM이 쓰지 않고 finalize_parts()가 별도 파트로 붙인다.
 
 
 class EditedPost(BaseModel):
@@ -746,19 +757,21 @@ class MarketerAgent(BaseAgent):
         if found:
             logger.warning(f"[marketer] 금지표현 필터됨 {name}: {found}")
 
-        # 4-3. 홍보 블록 — 가드/필터를 모두 통과한 뒤에 붙인다(자기언급 가드 대상 아님).
-        text = append_promo(text)
+        # 4-3. 홍보 파트 — 가드/필터를 모두 통과한 뒤에 붙인다(자기언급 가드 대상 아님).
+        parts, text = finalize_parts(text)
 
-        # 4-4. 길이 경고 (홍보 포함 최종 길이 기준)
-        if len(text) > THREADS_MAX:
-            warnings = (warnings or []) + [f"길이초과({len(text)}>{THREADS_MAX})"]
+        # 4-4. 길이 경고 — 파트별 한도. 발행은 파트 단위이므로 합계가 아니라 각각을 본다.
+        for i, p in enumerate(parts, 1):
+            if len(p) > THREADS_MAX:
+                warnings = (warnings or []) + [f"{i}번째 파트 길이초과({len(p)}>{THREADS_MAX})"]
 
         return {
             **result_base,
             "fmt": fmt,
             "fmt_label": fmt_label,
+            "parts": parts,
             "text": text,
-            "char_count": len(text),
+            "char_count": len(parts[0]),
             "filtered": found,
             "warnings": warnings,           # 콘솔 노출용(자기언급/길이) — human-in-loop
             "score": edited.score_total,    # 편집 자가채점(0~35)
@@ -786,9 +799,9 @@ def _watchpoints_block(items: list[str]) -> str:
 def assemble_post(post: ThreadsPost) -> str:
     """ThreadsPost → **LLM이 쓴 본문** 문자열 (hook + body + 앞으로 볼 것).
 
-    홍보 블록은 여기서 붙이지 않는다 — 이 함수는 편집 단계의 후보 목록 렌더링에도
+    홍보는 여기서 붙이지 않는다 — 이 함수는 편집 단계의 후보 목록 렌더링에도
     쓰이므로, 홍보를 넣으면 모델이 그걸 학습해 본문에 흉내 낸다. 홍보는 가드까지
-    끝난 최종 단계에서 append_promo()로 붙인다.
+    끝난 최종 단계에서 finalize_parts()가 **별도 파트**로 붙인다.
     해시태그는 제거됐다(2026-07-12). 면책은 프로필 bio 상시 고지(2026-06-27).
     """
     parts: list[str] = [post.hook.strip(), post.body.strip()]

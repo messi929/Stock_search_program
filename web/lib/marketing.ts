@@ -4,7 +4,25 @@
  */
 import { apiCall } from "@/lib/api";
 
-export type DraftStatus = "draft" | "approved" | "archived" | "published";
+/** partial = 타래 중간에서 발행이 끊긴 상태. Threads는 글삭제 API가 없어 되돌릴 수 없고,
+ *  복구는 '이어서 발행'뿐이다(docs/axis/THREADS_FORMAT.md §7-3). */
+export type DraftStatus =
+  | "draft"
+  | "approved"
+  | "archived"
+  | "published"
+  | "partial";
+
+/** 파트 경계 — 본문에서 이 줄 하나가 글을 가른다(백엔드 threads_client.PART_SEP와 동일). */
+export const PART_SEP = "---";
+
+/** 검수 textarea 문자열 → 파트 배열. 백엔드 split_parts와 같은 규칙. */
+export function splitParts(text: string): string[] {
+  return text
+    .split(/^[ \t]*-{3,}[ \t]*$/m)
+    .map((p) => p.trim())
+    .filter(Boolean);
+}
 
 export interface MarketingDraft {
   id: string;
@@ -16,7 +34,11 @@ export interface MarketingDraft {
   is_kr: boolean;
   fmt: string;
   fmt_label: string;
-  text: string;
+  text: string; // 파트를 `---` 줄로 이어붙인 검수/복사용 문자열
+  parts: string[]; // 실제 발행 단위. 2개 이상이면 타래(각 파트가 직전 글의 답글)
+  part_count: number;
+  published_upto: number; // 이어서 발행 지점 — status=partial일 때 여기부터 재개
+  published_ids: string[];
   char_count: number;
   status: DraftStatus;
   filtered: string[];
@@ -84,7 +106,10 @@ export const marketingApi = {
       "/api/admin/marketing/index-chart/generate",
       { method: "POST", body: JSON.stringify({ keys }) },
     ),
-  update: (id: string, patch: { text?: string; status?: DraftStatus }) =>
+  update: (
+    id: string,
+    patch: { text?: string; parts?: string[]; status?: DraftStatus },
+  ) =>
     apiCall<{ ok: boolean; draft: MarketingDraft }>(
       `/api/admin/marketing/drafts/${id}`,
       { method: "PATCH", body: JSON.stringify(patch) },

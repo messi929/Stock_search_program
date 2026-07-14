@@ -14,7 +14,9 @@ import { Input } from "@/components/ui/input";
 import {
   DraftStatus,
   MarketingDraft,
+  PART_SEP,
   marketingApi,
+  splitParts,
 } from "@/lib/marketing";
 
 const STATUS_FILTERS: { key: string; label: string }[] = [
@@ -22,13 +24,18 @@ const STATUS_FILTERS: { key: string; label: string }[] = [
   { key: "draft", label: "초안" },
   { key: "approved", label: "승인됨" },
   { key: "published", label: "발행됨" },
+  { key: "partial", label: "발행 끊김" },
   { key: "archived", label: "보관" },
 ];
+
+// 백엔드 threads_client.MAX_PARTS와 같은 값. 파트가 많을수록 발행 중간에 끊길 지점도 늘어난다.
+const MAX_PARTS = 6;
 
 const STATUS_BADGE: Record<DraftStatus, string> = {
   draft: "bg-slate-500/15 text-slate-300",
   approved: "bg-emerald-500/15 text-emerald-300",
   published: "bg-sky-500/15 text-sky-300",
+  partial: "bg-rose-500/15 text-rose-300",
   archived: "bg-zinc-500/15 text-zinc-400",
 };
 
@@ -36,6 +43,7 @@ const STATUS_LABEL: Record<DraftStatus, string> = {
   draft: "초안",
   approved: "승인됨",
   published: "발행됨",
+  partial: "발행 끊김",
   archived: "보관",
 };
 
@@ -406,19 +414,31 @@ function DraftCard({
   const isEducation = draft.kind === "education";
   const kindEmoji = isBriefing ? "🌙 " : isIndex ? "📈 " : isEducation ? "🎓 " : "";
   const isPublished = draft.status === "published";
+  const isPartial = draft.status === "partial"; // 타래 중간에서 끊김 → 이어서 발행만 가능
   const dirty = text !== draft.text;
-  const over = text.length > maxChars;
+
+  // 발행 단위는 파트다. 500자는 글 전체가 아니라 **파트 하나**의 한도.
+  const parts = useMemo(() => splitParts(text), [text]);
+  const overIdx = parts.findIndex((p) => p.length > maxChars);
+  const over = overIdx >= 0 || parts.length === 0 || parts.length > MAX_PARTS;
+
   const ogUrl = useMemo(
     () => `/stocks/${encodeURIComponent(draft.ticker)}/opengraph-image`,
     [draft.ticker],
   );
 
   const publish = async () => {
-    if (!confirm("이 글을 Threads에 지금 발행할까요? (되돌릴 수 없습니다)")) return;
+    const remaining = draft.part_count - draft.published_upto;
+    const msg = isPartial
+      ? `남은 ${remaining}개 파트를 마지막 글에 이어서 발행할까요?`
+      : parts.length > 1
+        ? `${parts.length}개 파트를 타래로 발행할까요? (되돌릴 수 없습니다 — Threads는 글삭제 API가 없습니다)`
+        : "이 글을 Threads에 지금 발행할까요? (되돌릴 수 없습니다)";
+    if (!confirm(msg)) return;
     setBusy(true);
     try {
-      const res = await marketingApi.publish(draft.id);
-      toast.success("Threads에 발행됨" + (res.draft?.permalink ? "" : ""));
+      await marketingApi.publish(draft.id);
+      toast.success(parts.length > 1 ? "타래로 발행됨" : "Threads에 발행됨");
       onChanged();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "발행 실패");
@@ -541,21 +561,49 @@ function DraftCard({
         </p>
       )}
 
-      {/* 편집 textarea */}
+      {/* 발행이 중간에 끊긴 초안 — 이미 나간 파트는 지울 수 없다(Threads 글삭제 API 없음) */}
+      {isPartial && (
+        <p className="rounded-md bg-rose-500/10 px-3 py-2 text-xs text-rose-300">
+          {draft.part_count}개 파트 중 <b>{draft.published_upto}개까지 발행</b>된 상태로
+          끊겼습니다. 이미 나간 글은 코드로 지울 수 없습니다(앱에서 수동 삭제). 남은 파트를
+          고친 뒤 <b>이어서 발행</b>하면 마지막 글에 이어 붙습니다.
+        </p>
+      )}
+
+      {/* 편집 textarea — `---` 단독 줄이 파트(글) 경계 */}
       <textarea
         value={text}
         onChange={(e) => setText(e.target.value)}
         rows={8}
         className="w-full rounded-md border bg-background px-3 py-2 text-sm leading-relaxed resize-y focus:outline-none focus:ring-1 focus:ring-primary"
       />
+      <p className="text-[11px] text-muted-foreground">
+        <code>{PART_SEP}</code> 단독 줄 = 글 경계. 파트가 2개 이상이면 각 파트가 직전 글의
+        답글로 붙어 <b>타래</b>가 됩니다(서비스 안내 줄이 마지막 파트 = 첫 댓글).
+      </p>
 
-      {/* 글자수 + 액션 */}
+      {/* 파트별 글자수 + 액션 — 500자는 글 전체가 아니라 파트 하나의 한도다 */}
       <div className="flex items-center gap-2 flex-wrap">
-        <span
-          className={`text-xs tabular-nums ${over ? "text-red-500 font-semibold" : "text-muted-foreground"}`}
-        >
-          {text.length} / {maxChars}자{over ? " (초과!)" : ""}
+        <span className="text-xs tabular-nums text-muted-foreground">
+          {parts.map((p, i) => (
+            <span
+              key={i}
+              className={
+                p.length > maxChars ? "text-red-500 font-semibold" : undefined
+              }
+            >
+              {i > 0 && " · "}
+              {parts.length > 1 && `${i + 1}/${parts.length} `}
+              {p.length}자
+            </span>
+          ))}
+          {parts.length > 1 && ` (한도 ${maxChars}자/파트)`}
         </span>
+        {parts.length > MAX_PARTS && (
+          <span className="text-xs text-red-500">
+            파트 {parts.length}개 — 최대 {MAX_PARTS}개
+          </span>
+        )}
         <div className="ml-auto flex items-center gap-2">
           {dirty && !isPublished && (
             <Button size="sm" variant="outline" onClick={save} disabled={busy}>
@@ -579,10 +627,16 @@ function DraftCard({
               size="sm"
               onClick={publish}
               disabled={busy || over || dirty}
-              title={dirty ? "수정사항을 먼저 저장하세요" : "Threads에 발행"}
+              title={
+                dirty
+                  ? "수정사항을 먼저 저장하세요"
+                  : isPartial
+                    ? "끊긴 지점부터 남은 파트를 마지막 글에 이어 붙입니다"
+                    : "Threads에 발행"
+              }
               className="bg-sky-600 hover:bg-sky-500"
             >
-              🚀 발행
+              {isPartial ? "▶ 이어서 발행" : "🚀 발행"}
             </Button>
           )}
           {!isPublished &&

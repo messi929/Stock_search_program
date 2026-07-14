@@ -29,7 +29,17 @@ from utils import threads_client
 router = APIRouter(prefix="/api/admin/marketing")
 
 _COLLECTION = "marketing_drafts"
-_VALID_STATUS = ("draft", "approved", "archived", "published")
+# partial = 타래 중간에서 발행이 끊긴 상태. Threads는 글삭제 API가 없어 되돌릴 수 없으므로
+# 복구는 '지우기'가 아니라 '이어서 발행'뿐이다(docs/axis/THREADS_FORMAT.md §7-3).
+_VALID_STATUS = ("draft", "approved", "archived", "published", "partial")
+
+
+def _parts_of(d: dict) -> list[str]:
+    """초안 문서 → 발행할 파트 배열. parts가 없는 옛 초안은 text 1개짜리로 취급."""
+    parts = [str(p) for p in (d.get("parts") or []) if str(p).strip()]
+    if parts:
+        return parts
+    return threads_client.split_parts(str(d.get("text") or ""))
 
 
 def _iso(v):
@@ -43,8 +53,13 @@ def _iso(v):
 
 
 def _serialize(doc_id: str, d: dict) -> dict:
+    parts = _parts_of(d)
     return {
         "id": doc_id,
+        "parts": parts,
+        "part_count": len(parts),
+        "published_upto": int(d.get("published_upto", 0) or 0),  # 이어서 발행 지점
+        "published_ids": list(d.get("published_ids") or []),
         "kind": d.get("kind", "stock"),  # "stock"(종목글) | "briefing"(시황브리핑) | "index"(지수차트)
         "index_key": d.get("index_key", ""),
         "ticker": d.get("ticker", ""),
@@ -357,9 +372,13 @@ async def publish_status(request: Request):
 
 @router.post("/drafts/{draft_id}/publish")
 async def publish_draft(request: Request, draft_id: str):
-    """초안을 Threads에 발행 → status=published + permalink 기록.
+    """초안을 Threads에 발행. 파트가 여러 개면 **타래**로 순차 발행한다.
 
-    Threads 미설정(토큰 없음)이면 503. 발행 실패 시 502(초안은 그대로 유지).
+    - 발행 시작 전에 **전 파트를 검증**한다(길이·금지표현). 하나라도 걸리면 아무것도
+      발행하지 않는다 — Threads는 글삭제 API가 없어 반쪽 타래를 되돌릴 수 없다.
+    - 파트가 나갈 때마다 즉시 Firestore에 기록한다. 중간에 끊기면 status=partial이 되고,
+      같은 엔드포인트를 다시 호출하면 끊긴 지점부터 **이어서 발행**한다.
+    - 미설정(토큰 없음) 503 / 검증 실패 422 / 발행 실패 502.
     """
     if not _is_admin(request):
         return _forbid()
@@ -383,32 +402,77 @@ async def publish_draft(request: Request, draft_id: str):
     if data.get("status") == "published":
         return JSONResponse(status_code=409, content={"detail": "이미 발행된 초안입니다"})
 
-    text = str(data.get("text") or "").strip()
-    if not text:
-        return JSONResponse(status_code=400, content={"detail": "본문이 비어 있습니다"})
+    try:
+        parts = threads_client.validate_parts(_parts_of(data))
+    except Exception as e:
+        return JSONResponse(status_code=400, content={"detail": str(e)})
 
-    # 발행 직전 금지표현 재검증(이중 안전)
+    # 발행 직전 금지표현 재검증(이중 안전) — 전 파트를 본다.
     from agents.base import BaseAgent
 
-    _filtered_text, found = BaseAgent.filter_forbidden(text)
-    if found:
-        return JSONResponse(
-            status_code=422,
-            content={"detail": f"금지표현 검출({found}) — 수정 후 발행하세요"},
-        )
+    for i, p in enumerate(parts, 1):
+        _filtered, found = BaseAgent.filter_forbidden(p)
+        if found:
+            return JSONResponse(
+                status_code=422,
+                content={"detail": f"{i}번째 파트에 금지표현({found}) — 수정 후 발행하세요"},
+            )
+
+    # 이어서 발행(복구): 앞서 나간 파트는 건너뛰고 마지막 글에 체인한다.
+    done_ids = [str(x) for x in (data.get("published_ids") or []) if x]
+    start = min(int(data.get("published_upto", 0) or 0), len(done_ids), len(parts))
+    remaining = parts[start:]
+    if not remaining:
+        return JSONResponse(status_code=409, content={"detail": "이미 모든 파트가 발행됐습니다"})
+
+    published: list[dict] = []
+
+    async def _record(i: int, r: dict) -> None:
+        """파트 하나가 나갈 때마다 즉시 영속화 — 여기서 죽어도 어디까지 갔는지 남는다."""
+        published.append(r)
+        patch = {
+            "published_ids": firestore.ArrayUnion([r.get("id", "")]),
+            "published_upto": start + i + 1,
+            "updated_at": firestore.SERVER_TIMESTAMP,
+        }
+        if start == 0 and i == 0:  # 루트 = 타래의 대표 링크
+            patch["permalink"] = r.get("permalink", "")
+            patch["threads_post_id"] = r.get("id", "")
+        try:
+            ref.set(patch, merge=True)
+        except Exception as e:  # 기록 실패가 발행을 막지는 않는다(이미 나갔다)
+            logger.error(f"[marketing] 파트 기록 실패 {draft_id} part={start + i + 1}: {e}")
 
     try:
-        result = await threads_client.publish_text(text)
+        await threads_client.publish_thread(
+            remaining,
+            reply_to_id=done_ids[-1] if start > 0 and done_ids else None,
+            on_part=_record,
+        )
     except Exception as e:
-        logger.warning(f"[marketing] 발행 실패 {draft_id}: {e}")
-        return JSONResponse(status_code=502, content={"detail": f"발행 실패: {e}"})
+        done = start + len(published)
+        logger.warning(f"[marketing] 발행 실패 {draft_id} ({done}/{len(parts)}파트): {e}")
+        try:
+            ref.set({"status": "partial", "updated_at": firestore.SERVER_TIMESTAMP}, merge=True)
+        except Exception:
+            pass
+        return JSONResponse(
+            status_code=502,
+            content={
+                "detail": (
+                    f"{len(parts)}파트 중 {done}개까지 발행되고 끊겼습니다: {e} — "
+                    "Threads는 글삭제 API가 없어 되돌릴 수 없습니다. "
+                    "'이어서 발행'으로 남은 파트를 마저 보내세요."
+                ),
+                "published_upto": done,
+                "part_count": len(parts),
+            },
+        )
 
     try:
         ref.set(
             {
                 "status": "published",
-                "permalink": result.get("permalink", ""),
-                "threads_post_id": result.get("id", ""),
                 "published_at": firestore.SERVER_TIMESTAMP,
                 "updated_at": firestore.SERVER_TIMESTAMP,
             },
@@ -418,18 +482,27 @@ async def publish_draft(request: Request, draft_id: str):
     except Exception as e:
         logger.warning(f"[marketing] 발행 후 상태 저장 실패 {draft_id}: {e}")
         # 발행 자체는 성공했으므로 permalink는 반환
-        return {"ok": True, "permalink": result.get("permalink", ""), "warning": "상태 저장 실패"}
+        return {
+            "ok": True,
+            "permalink": published[0].get("permalink", "") if published else "",
+            "warning": "상태 저장 실패",
+        }
 
+    user = getattr(request.state, "user", {}) or {}
     logger.info(
-        f"[marketing] 발행 완료 {draft_id} by {getattr(request.state, 'user', {}) or {}} "
-        f"{result.get('permalink', '')}"
+        f"[marketing] 발행 완료 {draft_id} ({len(parts)}파트) by {user.get('email', '?')} "
+        f"{(doc.to_dict() or {}).get('permalink', '')}"
     )
     return {"ok": True, "draft": _serialize(draft_id, doc.to_dict() or {})}
 
 
 @router.patch("/drafts/{draft_id}")
 async def update_draft(request: Request, draft_id: str):
-    """초안 수정. body: {text?: str, status?: str}."""
+    """초안 수정. body: {text?: str, parts?: str[], status?: str}.
+
+    text는 `---` 단독 줄을 파트 경계로 보고 parts를 다시 만든다(검수 화면 textarea 그대로).
+    parts를 직접 주면 그쪽이 우선. 둘은 항상 같이 갱신돼 어긋나지 않는다.
+    """
     if not _is_admin(request):
         return _forbid()
 
@@ -449,10 +522,14 @@ async def update_draft(request: Request, draft_id: str):
         return JSONResponse(status_code=404, content={"detail": "초안 없음"})
 
     patch: dict = {"updated_at": firestore.SERVER_TIMESTAMP}
-    if "text" in body:
-        text = str(body.get("text") or "")
-        patch["text"] = text
-        patch["char_count"] = len(text)
+    if "parts" in body or "text" in body:
+        if body.get("parts"):
+            parts = [str(p).strip() for p in body["parts"] if str(p).strip()]
+        else:
+            parts = threads_client.split_parts(str(body.get("text") or ""))
+        patch["parts"] = parts
+        patch["text"] = threads_client.join_parts(parts)
+        patch["char_count"] = len(parts[0]) if parts else 0
     if "status" in body:
         st = str(body.get("status") or "")
         if st not in _VALID_STATUS:
