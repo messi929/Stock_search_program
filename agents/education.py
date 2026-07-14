@@ -28,14 +28,13 @@ from loguru import logger
 from agents.base import BaseAgent
 from agents.instant import build_instant_snapshot, resolve_ticker
 from agents.marketer import (
-    LLM_BUDGET,
     ThreadsPost,
     _as_of_label,
     assemble_post,
-    finalize_parts,
-    guard_reader_first,
+    guard_post,
     pick_hot_tickers,
 )
+from agents.threads_style import LLM_BUDGET, VOICE_RULES, finalize_thread
 from agents.instant import _snapshot_facts  # noqa: E402  (내부 팩트 포매터 재활용)
 from utils.claude_client import MODEL_SONNET
 
@@ -243,16 +242,11 @@ _SERIES_LABEL = {
 # 시스템 프롬프트
 # ──────────────────────────────────────────────
 
-_SYSTEM = f"""당신은 한국 주식 정보 서비스 'Axis'의 SNS(스레드) 교육 카피라이터입니다.
-계정 정체성은 "추천하지 않습니다. 판단하는 법을 알려드립니다"입니다.
+_SYSTEM = f"""당신은 한국 주식 스레드(Threads) 계정의 화자입니다.
 투자 개념 하나를 골라, 한국 투자자가 1분 안에 읽고 '아, 그래서 이렇게 봐야 하는구나'를
-가져가는 **교육 스레드 글**을 씁니다. 종목을 추천하는 글이 절대 아닙니다.
+가져가는 **교육 글**을 씁니다. 종목을 평가하는 글이 절대 아닙니다.
 
-## 절대 원칙 (법적 안전 — 어기면 서비스가 위법)
-- 금지: 추천/추천합니다, 사세요, 매수·매도, 매수가/목표가/손절가 등 가격 제시,
-  "매수 신호/시그널", "반드시·확실히 오른다", "유망주" 등 권유·단정 표현
-- 금지: 광고·홍보 문구, "가입하세요/구독하세요" 등 CTA, 서비스 자기홍보("Axis는~", "우리는~")
-- 허용: 개념의 중립적 설명, '관찰', '참고', '~로 보입니다', 질문형
+{VOICE_RULES}
 
 ## 교육 내용의 정확성 (검증 브랜드의 생명선)
 - 개념 설명은 **반드시 주어진 '가르칠 핵심(teach)' 안에서만** 한다. teach에 없는 수치·정의·
@@ -267,16 +261,12 @@ _SYSTEM = f"""당신은 한국 주식 정보 서비스 'Axis'의 SNS(스레드) 
 - 예시 수치가 없거나 개념과 안 맞으면 **억지로 넣지 말고** 개념만으로 담백하게 쓴다.
 - 시점 있는 수치엔 '오늘/지금/현재' 대신 주어진 기준일을 쓴다(한 번만).
 
-## 문체 (스레드 감성)
-- 짧은 문장, 줄바꿈으로 호흡. 이모지 0~2개. 광고 티 0. 표/마크다운 금지.
-- **순한국어로만 작성**(한자·중국어·일본어 글자 금지). 영문 약어는 지표명(RSI/PER/PBR/ROE)만 허용.
-- hook(첫 줄): 독자가 겪는 상황이나 오해를 콕 찌르는 한 줄(예: "'PER 9배, 개꿀 저평가'라고요?").
+## 구성 (스레드에서 읽히는 형태)
+- hook(첫 줄): 독자가 겪는 상황이나 오해를 콕 찌르는 한 줄(예: "'PER 9배면 싸다'고 생각했지?").
 - body: 개념을 3~5줄로 쉽게. '무슨 오해 → 실제로는 → 그래서 이렇게 보라' 흐름.
 - 마지막 줄: 독자가 스스로 판단하도록 되짚는 질문 한 줄(teach의 '되짚을 질문/핵심'을 활용).
-- **해시태그를 쓰지 마라**(# 태그 줄 금지 — 유입 기여 0인데 글자만 먹는다).
 - watchpoints: **반드시 비운다([])**. 교육 글의 마무리는 '되짚는 질문'이지 종목 관찰 포인트가 아니다.
-- 전체가 {LLM_BUDGET}자를 넘지 않도록(Threads 글 1개 500자 제한 — 서비스 안내는 별도 댓글로
-  시스템이 붙이므로 **네가 쓰지 마라**. 본문 면책 없음, 면책은 프로필 bio)."""
+- 전체가 {LLM_BUDGET}자 이내(Threads 글 1개 한도 500자)."""
 
 
 class EducationAgent(BaseAgent):
@@ -328,7 +318,7 @@ class EducationAgent(BaseAgent):
             post, _meta = await self.call_claude_json(
                 user_message=user_msg,
                 schema=ThreadsPost,
-                max_tokens=900,
+                max_tokens=1200,  # 반말 전환으로 문장이 길어짐 — 잘리면 구조화 JSON이 깨진다
                 uid=uid,
                 structured_output=True,
             )
@@ -339,14 +329,17 @@ class EducationAgent(BaseAgent):
         # 교육 글은 종목 관찰 포인트가 없다 → watchpoints 강제 비움(모델이 채워도 무시).
         post.watchpoints = []
         text = assemble_post(post)
-        text, found = BaseAgent.filter_forbidden(text)
+
+        # ④ 결정론적 가드 — 자기언급·사족·존댓말 혼입 + **미확인 수치**(teach·삽화에 없는 숫자).
+        # 교육 글은 개념이 미묘하게 틀리면 브랜드에 치명적이라 수치 창작을 특히 경계한다.
+        warnings = guard_post(text, user_msg)
+        if warnings:
+            logger.warning(f"[education] 가드 경고: {warnings}")
+
+        # 홍보는 가드를 통과한 뒤 별도 파트로 붙인다(가드 대상 아님).
+        parts, text, found = finalize_thread([text])
         if found:
             logger.warning(f"[education] 금지표현 필터됨: {found}")
-        warnings = guard_reader_first(text)
-        if warnings:
-            logger.warning(f"[education] 자기언급/셀링 경고: {warnings}")
-        # 홍보는 자기언급 가드를 통과한 뒤 별도 파트로 붙인다(가드 대상 아님).
-        parts, text = finalize_parts(text)
 
         return {
             "kind": "education",

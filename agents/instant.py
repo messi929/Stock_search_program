@@ -230,25 +230,42 @@ def _technical_facts(s: dict) -> list[str]:
     price = s.get("price")
 
     # ── 주요 가격대(구체적 가격 — 기술 포맷 핵심) ──
+    # ⚠️ 라벨의 **주어를 반드시 '현재가'로 명시**한다. "20일선: 315,200원 (현재가 대비 +16.6%)"는
+    #    주어가 20일선인지 현재가인지 모호해서 모델이 방향을 거꾸로 읽었다("20일선이 현재가 위
+    #    16.6%에 떠 있어" — 실제는 정반대). 부호는 price/ma-1이므로 주어는 언제나 현재가다.
     if s.get("ma20"):
-        vs = f" (현재가 대비 {s['vs_ma20_pct']:+.1f}%)" if s.get("vs_ma20_pct") is not None else ""
+        vs = (
+            f" (현재가가 20일선 대비 {s['vs_ma20_pct']:+.1f}%)"
+            if s.get("vs_ma20_pct") is not None
+            else ""
+        )
         t.append(f"20일 이동평균선: {_price_level(s['ma20'], is_kr)}{vs}")
     elif s.get("vs_ma20_pct") is not None:
-        t.append(f"20일 이동평균 대비: {s['vs_ma20_pct']:+.1f}%")
+        t.append(f"현재가가 20일 이동평균 대비: {s['vs_ma20_pct']:+.1f}%")
     if s.get("ma60"):
-        vs = f" (현재가 대비 {s['vs_ma60_pct']:+.1f}%)" if s.get("vs_ma60_pct") is not None else ""
+        vs = (
+            f" (현재가가 60일선 대비 {s['vs_ma60_pct']:+.1f}%)"
+            if s.get("vs_ma60_pct") is not None
+            else ""
+        )
         t.append(f"60일 이동평균선: {_price_level(s['ma60'], is_kr)}{vs}")
     elif s.get("vs_ma60_pct") is not None:
-        t.append(f"60일 이동평균 대비: {s['vs_ma60_pct']:+.1f}%")
+        t.append(f"현재가가 60일 이동평균 대비: {s['vs_ma60_pct']:+.1f}%")
     # 52주 고가/저가 — 현재가와 이격%로 절대 가격을 역산해 제시.
     if price and s.get("vs_high_52w") is not None:
         denom = 1 + s["vs_high_52w"] / 100
         if denom:
-            t.append(f"52주 고가: {_price_level(price / denom, is_kr)} (현재가 {s['vs_high_52w']:+.1f}%)")
+            t.append(
+                f"52주 고가: {_price_level(price / denom, is_kr)} "
+                f"(현재가가 고가 대비 {s['vs_high_52w']:+.1f}%)"
+            )
     if price and s.get("vs_low_52w"):
         denom = 1 + s["vs_low_52w"] / 100
         if denom:
-            t.append(f"52주 저가: {_price_level(price / denom, is_kr)} (현재가 {s['vs_low_52w']:+.1f}%)")
+            t.append(
+                f"52주 저가: {_price_level(price / denom, is_kr)} "
+                f"(현재가가 저가 대비 {s['vs_low_52w']:+.1f}%)"
+            )
 
     # ── 추세/거래량/변동성 신호 ──
     if s.get("ma_aligned"):

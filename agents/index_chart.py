@@ -205,16 +205,26 @@ def _index_facts(snap: dict, macro_line: str) -> str:
         parts.append(f"RSI(14): {snap['rsi']:.0f}")
 
     tech: list[str] = []
+    # ⚠️ 주어를 '지수'로 명시한다. "20일 이동평균: X (현재 대비 +A%)"는 주어가 이평선인지
+    #    지수인지 모호해 모델이 방향을 뒤집는다. 부호는 price/ma-1이므로 주어는 언제나 지수다.
     if snap.get("ma20"):
-        vs = f" (현재 대비 {snap['vs_ma20_pct']:+.1f}%)" if snap.get("vs_ma20_pct") is not None else ""
+        vs = (
+            f" (지수가 20일선 대비 {snap['vs_ma20_pct']:+.1f}%)"
+            if snap.get("vs_ma20_pct") is not None
+            else ""
+        )
         tech.append(f"20일 이동평균: {_pt(snap['ma20'])}{vs}")
     if snap.get("ma60"):
-        vs = f" (현재 대비 {snap['vs_ma60_pct']:+.1f}%)" if snap.get("vs_ma60_pct") is not None else ""
+        vs = (
+            f" (지수가 60일선 대비 {snap['vs_ma60_pct']:+.1f}%)"
+            if snap.get("vs_ma60_pct") is not None
+            else ""
+        )
         tech.append(f"60일 이동평균: {_pt(snap['ma60'])}{vs}")
     if snap.get("high_52w") and snap.get("vs_high_52w") is not None:
-        tech.append(f"52주 고점: {_pt(snap['high_52w'])} (현재 {snap['vs_high_52w']:+.1f}%)")
+        tech.append(f"52주 고점: {_pt(snap['high_52w'])} (지수가 고점 대비 {snap['vs_high_52w']:+.1f}%)")
     if snap.get("low_52w") and snap.get("vs_low_52w") is not None:
-        tech.append(f"52주 저점: {_pt(snap['low_52w'])} (현재 {snap['vs_low_52w']:+.1f}%)")
+        tech.append(f"52주 저점: {_pt(snap['low_52w'])} (지수가 저점 대비 {snap['vs_low_52w']:+.1f}%)")
     if snap.get("ma_aligned"):
         tech.append("이동평균 정배열(5일>20일>60일) — 단기 상승 추세 구조")
     c = snap.get("consecutive") or 0

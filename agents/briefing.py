@@ -20,7 +20,8 @@ from zoneinfo import ZoneInfo
 from loguru import logger
 
 from agents.base import BaseAgent
-from agents.marketer import LLM_BUDGET, ThreadsPost, assemble_post, finalize_parts
+from agents.marketer import ThreadsPost, assemble_post, guard_post
+from agents.threads_style import LLM_BUDGET, VOICE_RULES, finalize_thread
 from utils.claude_client import MODEL_SONNET
 from utils.market_calendar import kr_market_status_hint, us_market_closed
 
@@ -183,17 +184,11 @@ def _fmt_index_lines(snap: dict) -> str:
 # 시스템 프롬프트
 # ──────────────────────────────────────────────
 
-_SYSTEM = f"""당신은 한국 주식 정보 서비스 'Axis'의 SNS(스레드) 카피라이터입니다.
-계정 정체성은 "추천하지 않습니다. 양쪽 다 보여드립니다"입니다.
+_SYSTEM = f"""당신은 한국 주식 스레드(Threads) 계정의 화자입니다.
 간밤 미국 증시 데이터를 받아, 한국 투자자가 아침에 1분 안에 읽는 '새벽 미국시장 브리핑'
-스레드 글을 씁니다.
+글 한 편을 씁니다.
 
-## 절대 원칙 (법적 안전 — 어기면 서비스가 위법)
-- 금지: 추천/추천합니다, 사세요, 매수·매도, 매수가/목표가/손절가 등 가격 제시,
-  "매수 신호/시그널", "반드시·확실히 오른다", "유망주" 등 권유·단정 표현
-- 금지: 광고·홍보 문구, "가입하세요/구독하세요" 등 CTA, 서비스 자기홍보
-- 허용: 지수 수치의 중립적 전달, '관찰', '참고', '~로 보입니다', 질문형
-- 데이터에 없는 수치·종목은 창작 금지(주어진 지수·뉴스만 사용)
+{VOICE_RULES}
 
 ## 등락 '이유'(왜) + 근거 — 이 글의 핵심
 크게 움직인 부분(예: 반도체 급락, 빅테크 약세)은 단순 보도가 아니라 **간단한 분석**을 한다:
@@ -215,21 +210,16 @@ _SYSTEM = f"""당신은 한국 주식 정보 서비스 'Axis'의 SNS(스레드) 
 - 어떤 헤드라인도 원인을 설명하지 못하면, 추측 대신 "뚜렷한 재료는 확인되지 않았습니다"
   라고 솔직하게 적거나 원인 언급을 생략한다.
 
-## 문체 (스레드 감성)
-- 짧은 문장, 줄바꿈으로 호흡. 과한 이모지 금지(0~2개). 광고 티 0
-- 사람이 담백하게 쓴 듯. 표/마크다운 금지
-- **순한국어로만 작성**(한자·중국어·일본어 글자 금지). 영문 약어는 지수명(S&P500/SOXX/VIX)만 허용
-- hook(첫 줄): 오늘 날짜 + 간밤 시장 분위기 한 줄 (예: "[6/26 새벽 미국장]")
+## 구성 (스레드에서 읽히는 형태)
+- hook(첫 줄): 날짜 + 간밤 분위기 한 줄. 사실만 말하지 말고 **관점**을 준다.
+  예: "[7/14 새벽 미국장] 지수는 올랐는데, 오른 이유가 좀 불편해."
 - body: ① 주요 지수 등락 2~3줄 ② 가장 크게 움직인 부분의 '왜(분석)+근거' 2~3줄(핵심)
        ③ 국내 증시 관전포인트 1개 (중립·관찰) — **반드시 아래 '한국 증시 개장 상태'를 그대로 반영**.
           한국 증시는 낮(09:00~15:30)에 열린다. '오늘 밤 국내장' 같은 시간 표현은 금지.
           휴장일이면 '오늘 국내장'이라 쓰지 말고 '다음 거래일' 기준으로 적는다.
-- 마지막 줄: "숫자는 마감 기준, 장 열리면 또 달라집니다" 류의 검증 뉘앙스 1줄(선택)
 - 한국 증시 개장 여부를 임의로 가정하지 말 것 — 제공된 '한국 증시 개장 상태'만 따른다.
-- **해시태그를 쓰지 마라**(# 태그 줄 금지 — 유입 기여 0인데 글자만 먹는다)
 - watchpoints: **비워 둔다([])**. 국내장 관전포인트는 위 body ③에 이미 포함하므로 따로 만들지 않는다.
-- 전체가 {LLM_BUDGET}자를 넘지 않도록(Threads 글 1개 500자 제한 — 서비스 안내는 별도 댓글로
-  시스템이 붙이므로 **네가 쓰지 마라**. 본문 면책 없음, 면책은 프로필 bio)"""
+- 전체가 {LLM_BUDGET}자 이내(Threads 글 1개 한도 500자)."""
 
 
 class BriefingAgent(BaseAgent):
@@ -282,7 +272,7 @@ class BriefingAgent(BaseAgent):
             post, _meta = await self.call_claude_json(
                 user_message=user_msg,
                 schema=ThreadsPost,
-                max_tokens=900,
+                max_tokens=1200,  # 반말 전환으로 문장이 길어짐 — 잘리면 구조화 JSON이 깨진다
                 uid=uid,
                 structured_output=True,
             )
@@ -291,13 +281,20 @@ class BriefingAgent(BaseAgent):
             return None
 
         text = assemble_post(post)
-        text, found = BaseAgent.filter_forbidden(text)
+
+        # ④ 결정론적 가드 — 자기언급·사족·존댓말 혼입 + **미확인 수치**(지수·뉴스에 없는 숫자).
+        # 브리핑은 숫자가 전부라 지어낸 수치 하나가 브랜드를 무너뜨린다.
+        warnings = guard_post(text, user_msg)
+        if warnings:
+            logger.warning(f"[briefing] 가드 경고: {warnings}")
+
+        parts, text, found = finalize_thread([text])  # 필터 → 홍보 파트
         if found:
             logger.warning(f"[briefing] 금지표현 필터됨: {found}")
-        parts, text = finalize_parts(text)  # 홍보는 필터 통과 후 별도 파트로
 
         return {
             "kind": "briefing",
+            "warnings": warnings,
             "ticker": "",
             "name": "새벽 미국시장 브리핑",
             "market": "US",

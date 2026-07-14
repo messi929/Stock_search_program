@@ -29,33 +29,39 @@ from typing import Optional
 from loguru import logger
 from pydantic import BaseModel, Field
 
-from agents.base import BaseAgent
 from agents.instant import _snapshot_facts, build_instant_snapshot
 from agents.marketer import (
     ANGLE_MODEL,
     MARKETER_MODEL,
     WRITER_CANDIDATES,
     _as_of_label,
-    attach_promo,
-    guard_reader_first,
     pick_hot_tickers,
 )
-from utils.threads_client import MAX_TEXT
+from agents.threads_style import (  # 문체·가드·조립의 단일 출처
+    LLM_BUDGET,
+    VOICE_RULES,
+    EditedThread,
+    ThreadDraft,
+    finalize_thread,
+    guard_thread,
+    thread_rules,
+)
+from agents.base import BaseAgent
 
 # 파트 수 — 3~5. 루트가 노출을 거의 다 먹으므로 뒷파트는 read-through 신호 + 내용 전달용.
 # 상한을 낮게 잡는 또 다른 이유: 발행이 중간에 끊길 지점을 줄인다(글삭제 API가 없다).
 MIN_PARTS = 3
 MAX_NARRATIVE_PARTS = 5
 
-# 파트 1개의 글자 예산. 홍보는 별도 파트라 여기서 뺄 몫이 없다.
-PART_BUDGET = MAX_TEXT - 20
+# 파트 1개의 글자 예산.
+PART_BUDGET = LLM_BUDGET
 
 # 서사에 수치 삽화로 끌어 쓸 화제 종목 수.
 EXAMPLE_TICKERS = 2
 
 
 # ──────────────────────────────────────────────
-# 프롬프트
+# 프롬프트 — 문체·사족·법적안전은 VOICE_RULES(공통), 여기선 이 포맷 고유 규칙만
 # ──────────────────────────────────────────────
 
 _CORE = f"""# 0순위 — 이 글은 '종목 리포트'가 아니라 '세상에 대한 이야기'다
@@ -64,50 +70,14 @@ _CORE = f"""# 0순위 — 이 글은 '종목 리포트'가 아니라 '세상에 
 - 독자가 가져가는 건 종목이 아니라 **'다음에 이런 일이 생기면 뭘 갈라봐야 하나'** 라는 도구다.
 
 # 1순위 — 데이터 근거 (어기면 글은 폐기)
-- 수치는 **주어진 facts에 있는 것만** 쓴다. 없는 숫자를 지어내면 그 글은 즉시 폐기다.
-- 기억이나 추측으로 숫자를 만들지 마라. facts에 없으면 그 문장을 빼라.
 - 최소 한 파트는 **실측 수치를 의미와 함께** 담아야 한다. 이게 이 글이 남과 갈리는 유일한 지점이다.
   예: "외국인은 3,200억 순매도인데 기관은 1,100억 순매수", "PER은 업종 평균보다 낮은데 매출은 3분기째 감소"
 
-# 2순위 — 화자 (반말/구어체)
-- 반말로 쓴다. "~함/~임" 음슴체도 아니고 "~습니다" 존댓말도 아니다. 친구한테 말하듯 "~해", "~야", "~거든", "~지".
-- **반말은 훅과 해석에만.** 수치를 말할 때는 정확하게 쓴다.
-  ❌ "외국인이 좀 많이 팔았어"   ✅ "외국인이 3,200억 순매도했어"
-- 옆에서 같이 차트 보는 친구의 톤. "내가 정답을 알려줄게"가 아니라 "같이 숫자 까보자".
-- ㅋㅋ/ㅠㅠ 남발 금지. 담백하게.
+{VOICE_RULES}
 
-# 3순위 — 방어적 사족 금지 (자주 어긴다)
-- 절대 금지: "판단은 본인이 하는 거야", "추천은 안 해", "참고만 해", "책임은 못 져",
-  "투자 권유가 아니야" — 독자를 향한 말이 아니라 **우리를 향한 보험**이라 글이 죽는다.
-- 안 하는 것 대신 **하는 것**을 긍정형으로 쓴다.
-  ❌ "종목 추천은 안 해"   ✅ "좋은 숫자랑 나쁜 숫자를 같이 꺼내놔"
-- 면책은 프로필에 이미 있다. 본문에 넣지 마라.
-
-# 4순위 — 독자 시점
-- 글의 주어는 독자의 관심사다. 우리 서비스가 아니다.
-- 절대 금지(자기언급): "Axis는~", "우리는~", "이 서비스는~", "~에서 끝내지 않아", "검증까지가 기본".
-- 절대 금지(내부용어): "스냅샷", "데이터 기준". 독자는 그게 뭔지 모른다.
-- 절대 금지(AI 프레이밍): "AI한테 물어봤더니". 글의 주어는 '수치'다.
-
-# 법적 안전 (어기면 서비스가 위법)
-- 금지: 추천/추천해, 사라/팔아라, 매수·매도, 목표가·매수가·손절가, "매수 신호", "확실히 오른다", "유망주".
-- 허용: 수치의 중립적 해석, 관찰, 질문형.
-- 핵심: '추천하지 마라' ≠ '아무 말도 하지 마라'. 숫자는 구체적으로 쓰고 결론(사라/팔라)만 빼라.
-  그리고 그걸 **변명으로 적지 마라**(3순위).
-
-# 날짜 표기
-- 발행이 생성 당일이 아닐 수 있다. 시점 있는 수치에 "오늘/지금/현재" 금지. 주어진 기준일로 쓴다.
-- 기준일이 없으면 시점어 없이 수치만 제시한다.
-
-# 타래 구조 (필수)
-- 파트 {MIN_PARTS}~{MAX_NARRATIVE_PARTS}개. 각 파트는 **{PART_BUDGET}자 이내**(넘으면 발행이 안 된다).
-- **1번 파트가 노출을 거의 다 먹는다.** 사건 한 줄 + 관점 한 줄로 스크롤을 멈춰야 한다.
-  관점이 훅의 핵심이다 — "무서운 건 하락이 아니라, 왜 빠지는지 모른 채 버티는 거야" 같은.
-- 중간 파트: 흔한 설명이 왜 설명이 아닌지 → 갈라볼 질문 → **실측 수치로 시연**.
-- 마지막 파트: 우리가 뭘 하는지 한 줄(긍정형) + **궁금한 종목을 댓글로 부르는 초대**.
-- 파트 번호 (1/5) 같은 표기는 **쓰지 마라**. 시스템이 붙인다.
-- 해시태그·링크·서비스명을 쓰지 마라. 링크는 시스템이 별도 댓글로 붙인다.
-- 표/마크다운 금지. 이모지는 0~2개."""
+{thread_rules(MIN_PARTS, MAX_NARRATIVE_PARTS, closing="우리가 뭘 하는지 한 줄(긍정형) + **궁금한 종목을 댓글로 부르는 초대**.")}
+- 1번 파트의 관점이 훅의 핵심이다 — "무서운 건 하락이 아니라, 왜 빠지는지 모른 채 버티는 거야" 같은.
+- 중간 파트: 흔한 설명이 왜 설명이 아닌지 → 갈라볼 질문 → **실측 수치로 시연**."""
 
 _ANGLE_SYSTEM = """당신은 주식 SNS 타래의 '편집 앵글'을 잡는 에디터입니다.
 오늘의 사건과 실측 수치에서, 타래 한 편을 떠받칠 '단 하나의 관점'을 뽑습니다.
@@ -175,114 +145,13 @@ class NarrativeAngle(BaseModel):
     )
 
 
-_PARTS_DESC = (
-    f"타래 파트 {MIN_PARTS}~{MAX_NARRATIVE_PARTS}개. 각 파트는 {PART_BUDGET}자 이내의 완결된 글 "
-    "하나다(첫 파트=사건+관점, 중간=프레임과 실측 수치 시연, 마지막=긍정형 한 줄+댓글 초대). "
-    "파트 번호((1/5) 등)를 본문에 넣지 마라 — 시스템이 붙인다."
-)
-
-
-class NarrativeThread(BaseModel):
-    """② 작가 출력 — 타래 한 편."""
-
-    parts: list[str] = Field(description=_PARTS_DESC)
-
-
-class EditedThread(BaseModel):
-    """③ 편집 출력 — 최종본 + 메타."""
-
-    parts: list[str] = Field(description=_PARTS_DESC)
-    score_total: int = Field(default=0, description="루브릭 7축 합산(0~35, 최종본 기준)")
-    issues_fixed: list[str] = Field(default_factory=list, description="고친 문제들")
-    base_candidate: int = Field(default=0, description="베이스로 고른 후보 번호(0-based)")
-
-
-# ──────────────────────────────────────────────
-# 결정론적 가드 (④)
-# ──────────────────────────────────────────────
-
-# 방어적 사족·책임전가 — JEON이 두 번 지적한 패턴(becc450, 2026-07-13).
-# 독자를 향한 말이 아니라 우리를 향한 보험이라 글을 죽인다. 면책은 bio가 한다.
-_HEDGE_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
-    (re.compile(r"판단은\s*(본인|너|당신|여러분)"), "사족(판단은 본인)"),
-    (re.compile(r"추천(은|을)?\s*(안|하지\s*않)"), "사족(추천 안 함)"),
-    (re.compile(r"책임(은|을)?\s*(안|못|지지\s*않)"), "사족(책임 전가)"),
-    (re.compile(r"투자\s*권유(가|는)?\s*아니"), "사족(투자권유 아님)"),
-    (re.compile(r"참고만\s*(해|하)"), "사족(참고만)"),
-)
-
-# 반말 화자에 존댓말이 섞이는 것 — 톤 붕괴.
-_HONORIFIC_RE = re.compile(r"(습니다|입니다|하세요|해요|세요\b)")
-
-# 숫자 토큰: 1,234 / 3.5 / 72 등. 한 자리 수(개수·순서)는 오탐만 늘려서 보지 않는다.
-_NUM_RE = re.compile(r"\d[\d,]*(?:\.\d+)?")
-
-# 근사 허용 오차. "코스피 7000선"은 실제 6,941을 가리키는 수사적 표현이지 지어낸 수치가 아니다.
-# 이걸 잡으면 좋은 훅마다 경고가 떠서 ⓐ검수자가 경고를 무시하게 되고 ⓑ재편집이 훅을 지운다.
-_NUM_TOLERANCE = 0.02
-
-
-def _numbers(text: str) -> list[float]:
-    """텍스트의 수치(2자리 이상)를 float로. 쉼표 제거."""
-    out: list[float] = []
-    for m in _NUM_RE.finditer(text or ""):
-        raw = m.group().replace(",", "")
-        if len(raw.split(".")[0]) < 2:
-            continue  # 한 자리 수는 검사 대상 아님(개수·순서·(n/N) 등)
-        try:
-            out.append(float(raw))
-        except ValueError:
-            continue
-    return out
-
-
-def guard_hallucinated_numbers(text: str, facts: str) -> list[str]:
-    """본문 수치 중 facts에 근거가 없는 것 검출 — 이 글의 해자를 지키는 가드.
-
-    사건 훅과 반말은 누구나 복제한다. 우리가 남과 갈리는 건 뒷파트의 숫자가 **진짜**라는
-    것 하나뿐이라, 지어낸 숫자는 차별점 자체를 무너뜨린다.
-
-    반올림·근사(6,941 → "7000선")는 통과시킨다 — 그건 수사지 데이터 주장이 아니다.
-    사람이 검수하므로 경고만 남긴다(본문 강제 훼손 X).
-    """
-    known = _numbers(facts)
-    if not known:
-        return []
-    unknown: list[float] = []
-    for x in _numbers(text):
-        if any(abs(x - k) <= _NUM_TOLERANCE * max(abs(k), 1.0) for k in known):
-            continue
-        unknown.append(x)
-    if not unknown:
-        return []
-    shown = ", ".join(f"{x:g}" for x in unknown[:5])
-    return [f"미확인 수치({shown})"]
-
-
-def guard_hedging(text: str) -> list[str]:
-    """방어적 사족·책임전가 검출."""
-    return [label for pat, label in _HEDGE_PATTERNS if pat.search(text)]
-
-
-def guard_tone(text: str) -> list[str]:
-    """반말 화자에 존댓말 혼입 검출."""
-    return ["톤(존댓말 혼입)"] if _HONORIFIC_RE.search(text) else []
+class NarrativeThread(ThreadDraft):
+    """② 작가 출력 — 타래 한 편(공통 ThreadDraft)."""
 
 
 def guard_all(parts: list[str], facts: str) -> list[str]:
-    """④ 결정론적 가드 전체 — 경고 라벨 리스트."""
-    text = "\n".join(parts)
-    w: list[str] = []
-    w += guard_reader_first(text)      # 자기언급·내부용어·셀링멘트(기존 가드 재사용)
-    w += guard_hedging(text)
-    w += guard_tone(text)
-    w += guard_hallucinated_numbers(text, facts)
-    if not (MIN_PARTS <= len(parts) <= MAX_NARRATIVE_PARTS):
-        w.append(f"파트수({len(parts)} — {MIN_PARTS}~{MAX_NARRATIVE_PARTS} 권장)")
-    for i, p in enumerate(parts, 1):
-        if len(p) > MAX_TEXT:
-            w.append(f"{i}번째 파트 길이초과({len(p)}>{MAX_TEXT})")
-    return w
+    """④ 결정론적 가드 — 공통 guard_thread에 이 포맷의 파트 수 규칙을 얹는다."""
+    return guard_thread(parts, facts, min_parts=MIN_PARTS, max_parts=MAX_NARRATIVE_PARTS)
 
 
 # ──────────────────────────────────────────────
@@ -325,7 +194,8 @@ def _index_block() -> str:
         if s.get("change_pct") is not None:
             bits.append(f"{s['change_pct']:+.2f}%")
         if s.get("vs_ma20_pct") is not None:
-            bits.append(f"20일선 대비 {s['vs_ma20_pct']:+.1f}%")
+            # 주어를 명시한다 — "20일선 대비 -15.6%"는 방향이 뒤집혀 읽힌다.
+            bits.append(f"지수가 20일선 대비 {s['vs_ma20_pct']:+.1f}%")
         lines.append("- " + ", ".join(bits))
     return "## 지수\n" + "\n".join(lines) if lines else ""
 
@@ -546,22 +416,10 @@ async def generate_narrative(
             if warnings:
                 logger.warning(f"[narrative] 재편집 후에도 잔존: {warnings}")
 
-    # 법적 필터(비협상 — 하드 치환)
-    filtered: list[str] = []
-    cleaned: list[str] = []
-    for p in body_parts:
-        t, found = BaseAgent.filter_forbidden(p)
-        cleaned.append(t)
-        filtered += found
+    # 법적 필터 → 파트 번호 → 홍보 파트. 전부 공통 조립기가 한다.
+    parts, text, filtered = finalize_thread(body_parts)
     if filtered:
         logger.warning(f"[narrative] 금지표현 필터됨: {filtered}")
-
-    # 파트 번호는 결정론적으로 붙인다(모델이 쓰면 개수와 어긋난다).
-    n = len(cleaned)
-    numbered = [f"{p}\n\n({i}/{n})" for i, p in enumerate(cleaned, 1)] if n > 1 else cleaned
-
-    # 홍보는 가드·필터가 끝난 뒤 별도 파트(첫 댓글)로.
-    parts, text = attach_promo(numbered)
 
     return {
         "kind": "narrative",

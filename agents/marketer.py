@@ -43,8 +43,25 @@ from pydantic import BaseModel, Field
 
 from agents.base import BaseAgent
 from agents.instant import build_instant_snapshot, resolve_ticker, _snapshot_facts
+from agents.threads_style import (  # 문체·가드·홍보의 단일 출처
+    LLM_BUDGET,
+    THREADS_MAX,
+    VOICE_RULES,
+    attach_promo,
+    finalize_thread,
+    guard_hallucinated_numbers,
+    guard_hedging,
+    guard_reader_first,
+    guard_tone,
+    promo_part,
+)
 from utils.claude_client import MODEL_HAIKU, MODEL_SONNET
-from utils.threads_client import join_parts
+
+__all__ = [  # 다른 생성기들이 marketer에서 가져다 쓰던 이름들(재수출)
+    "LLM_BUDGET", "THREADS_MAX", "VOICE_RULES", "attach_promo", "finalize_thread",
+    "guard_reader_first", "promo_part", "FORMATS", "DEFAULT_FORMATS",
+    "MarketerAgent", "generate_batch", "pick_hot_tickers", "recent_marketing_memory",
+]
 
 # 마케팅 글 = 서비스의 얼굴 → 품질 우선 기본 Sonnet. 비용 절감 시 MARKETER_MODEL=haiku.
 MARKETER_MODEL = MODEL_HAIKU if os.getenv("MARKETER_MODEL", "").lower() == "haiku" else MODEL_SONNET
@@ -57,69 +74,9 @@ WRITER_CANDIDATES = max(1, int(os.getenv("MARKETER_CANDIDATES", "3") or "3"))
 # 헛글 방지 가드: 글에 인용할 실수치가 이만큼 미만이면 생성 자체를 건너뛴다.
 MIN_NUMERIC_FACTS = 2
 
-THREADS_MAX = 500  # Threads 글자 수 제한
+# THREADS_MAX / LLM_BUDGET / 홍보(PROMO) / 가드는 전부 agents/threads_style.py로 이사했다.
+# 문체를 바꾸려고 생성기 5곳을 고치던 복붙 구조를 끝내려는 것. 여기서는 재수출만 한다.
 # 면책은 본문이 아니라 계정 프로필(bio)에 상시 고지한다(JEON 결정 2026-06-27).
-
-
-# ──────────────────────────────────────────────
-# 본문 홍보(CTA) — 결정론적. LLM이 쓰지 않는다 (JEON 결정 2026-07-12)
-# ──────────────────────────────────────────────
-
-# MARKETING_PROMO=0 이면 홍보 없이(기존 동작) 발행. A/B로 도달 변화를 보려면 이 토글로.
-PROMO_ENABLED = (os.getenv("MARKETING_PROMO", "1") or "1").strip().lower() not in (
-    "0", "false", "off", "no",
-)
-
-# 문구는 한 곳에서만 고친다. 두 가지만 지킨다:
-#  ① 법적 안전 — '추천/매수·매도/목표가/수익률' 등 권유 표현 금지. 파는 것은 '분석'이지 종목이 아니다.
-#  ② 사실 — 검증 못 하는 수치(소요 시간·정확도 등)를 넣지 말 것. 첫 사용자가 들어와서 바로
-#     확인하는 주장이라 거짓이면 0→1 구간에서 가장 비싼 실수가 된다.
-#     (참고: 딥다이브 실측은 콜드 ~150초. 즉시 뜨는 건 빠른 요약이다 → "30초 리포트"는 거짓.)
-PROMO_TEXT = (
-    os.getenv("MARKETING_PROMO_TEXT")
-    or "──\n📊 종목 하나를 수급·차트·밸류·매크로까지 한 번에 뜯어봅니다.\n→ axislytics.com"
-)
-
-
-def promo_part() -> str:
-    """홍보를 담은 **별도 파트**(타래의 마지막 글 = 첫 댓글). 비활성이면 빈 문자열.
-
-    2026-07-14: 본문 문자열에 결합하던 것을 파트로 분리했다(docs/axis/THREADS_FORMAT.md §7-4).
-    링크가 본문에서 빠지고, LLM 본문 예산도 홍보가 먹던 만큼 되찾는다.
-    """
-    if not PROMO_ENABLED:
-        return ""
-    text = (PROMO_TEXT or "").strip()
-    # 단일 글 시절 본문과 홍보를 갈라주던 구분선은 별도 파트에선 의미가 없다.
-    return re.sub(r"^[─—\-_]{2,}[ \t]*\n", "", text).strip()
-
-
-def attach_promo(body_parts: list[str]) -> tuple[list[str], str]:
-    """본문 파트 배열 → (발행할 파트 배열, 검수/복사용 단일 text). 홍보를 마지막 파트로 붙인다.
-
-    ⚠️ 반드시 **모든 LLM 단계 + 가드(자기언급/법적 필터)가 끝난 뒤** 호출할 것.
-    가드보다 먼저 홍보를 붙이면 'Axis/axislytics'가 자기언급 가드에 걸리고,
-    편집 단계 후보 목록(assemble_post)에 섞이면 모델이 홍보를 흉내 내기 시작한다.
-    """
-    parts = [p.strip() for p in body_parts if p and p.strip()]
-    promo = promo_part()
-    if promo:
-        parts.append(promo)
-    return parts, join_parts(parts)
-
-
-def finalize_parts(text: str) -> tuple[list[str], str]:
-    """본문 한 덩어리(단일 글)용 attach_promo. 타래는 attach_promo를 직접 쓴다."""
-    return attach_promo([text])
-
-
-# LLM이 쓸 수 있는 글자 예산 = 파트 1개 한도 − 안전 여백.
-# 홍보가 별도 파트로 빠지면서 예산을 되찾았다(구: 한도 − 홍보 − 여백).
-def _llm_budget() -> int:
-    return max(200, THREADS_MAX - 20)
-
-
-LLM_BUDGET = _llm_budget()
 
 
 # ──────────────────────────────────────────────
@@ -180,39 +137,33 @@ DEFAULT_FORMATS = ("contrarian", "curiosity", "cta", "technical")
 # 시스템 프롬프트 (단계별 역할 분리)
 # ──────────────────────────────────────────────
 
-# 작가·편집이 공유하는 불변 규칙(법적·구체성·독자시점). 두 system 앞에 붙인다.
-_CORE_RULES = f"""# 1순위 — 구체성 (어기면 글은 폐기)
+# 작가·편집이 공유하는 불변 규칙. 두 system 앞에 붙인다.
+# 문체·사족·독자시점·법적안전은 threads_style.VOICE_RULES 하나에서만 관리한다(복붙 금지).
+_CORE_RULES = f"""{VOICE_RULES}
+
+# 이 글의 용도 (2026-07-14 이후)
+- 이 종목글은 **브로드캐스트용이 아니다.** 아무도 안 물어본 종목 리포트는 스레드에서 죽는다.
+- 용도는 ① 댓글로 "○○ 어때?" 하고 물어본 사람에게 다는 **답글 초안**, ② 검수용 재료다.
+- 그러니 '누가 물어봐서 대답해주는' 톤으로 쓴다. 훈계·발표가 아니라 대답이다.
+
+# 1순위 — 구체성 (어기면 글은 폐기)
 - 스냅샷의 **실제 숫자를 최소 2개 이상 그대로 인용**한다.
   예: "RSI 72", "외국인 8일 연속 순매수", "거래량 평소의 2.3배", "PER 14.1", "52주 고가 대비 -8%"
 - 숫자에는 의미를 붙인다. 예: "RSI 72 — 과열권", "PER 14는 업종 평균보다 낮은 편"
 - 금지된 헛소리: "뭔가 움직임이 있다", "심상치 않다", "관찰할 만한 수치들" 등 숫자 없는 두루뭉술.
 
-# 날짜 표기 (중요 — 발행이 생성 당일이 아닐 수 있음)
-- 등락·수급 등 '시점 있는' 수치에 **"오늘/금일/지금/현재/오늘자"** 같은 상대 표현 절대 금지.
-  발행이 며칠 뒤일 수 있어 '오늘'은 거짓이 된다.
-- 주어진 기준일이 있으면 그 날짜로 쓴다. 예: "삼성전자, 6월 26일 -5.3%", "6월 26일 종가 기준 RSI 49".
-  날짜는 글에 한 번만 밝히면 충분(매 문장 반복 금지).
-- 기준일이 주어지지 않으면 시점어 없이 수치만 제시한다. 예: "삼성전자 -5.3%, 외국인 7일 연속 순매수".
-
-# 2순위 — 독자 시점 (가장 자주 어기는 규칙)
-- **글의 주어는 '독자의 관심사'다. '우리 서비스'가 아니다.**
-- 절대 금지(자기언급·홍보): "Axis는~", "우리는~", "이 도구/서비스는~",
-  "~에서 끝내지 않는다", "검증까지가 기본", "~를 제공한다" 등 서비스 자랑 문장.
-- 절대 금지(내부 용어): "스냅샷", "오늘 스냅샷 기준", "데이터 기준", "~ 구간에 있다"(번역투).
-  독자는 '스냅샷'이 뭔지 모른다. 그냥 "삼성전자 오늘 -5.3%"라고 쓴다.
-- 절대 금지(AI 프레이밍): "AI한테 물어봤더니 / AI가 분석했더니". 글의 주어는 '수치'다.
-- 광고/챗봇 말투·과장 금지. 사람이 직접 차트 보며 쓴 듯 담백하게.
-
-# 3순위 — 관점(so-what)
+# 2순위 — 관점(so-what)
 - 숫자를 나열하지 말고 **하나의 긴장(모순·의외·관점)으로 수렴**시킨다.
 - 브랜드 톤: 펌핑하지 않는다. 양쪽을 냉정하게 본다.
 
-# 마무리 — '앞으로 볼 것'(이 글의 페이로드. 단 cta 포맷은 예외)
+# 마무리 — 지켜볼 지점 (이 글의 페이로드. 단 cta 포맷은 예외)
 - **예외: 'cta(댓글 모집)' 포맷은 watchpoints를 비우고([]) 댓글 유도 문장으로 마무리한다.**
-  cta의 페이로드는 댓글 초대이므로 '앞으로 볼 것'을 만들지 않는다.
+  cta의 페이로드는 댓글 초대이므로 관찰 포인트를 만들지 않는다.
 - (cta 외 모든 포맷) 긴장만 끌어올리고 결론 없이 끝내지 말 것. 그게 호응이 죽는 가장 큰 원인이다.
   독자가 "그래서 앞으로 뭘 보면 되나"의 **답(방향)**을 가져가게 한다.
-- watchpoints에 **'앞으로 볼 것' 관찰 포인트 1~3개**를 담는다. 각 항목은 조건부·관찰형:
+- watchpoints에 지켜볼 지점 1~3개를 담는다. 각 항목은 조건부·관찰형이고, **반말 한 문장**으로
+  자연스럽게 쓴다(리포트 항목처럼 명사로 끊지 마라).
+  ❌ "외국인 순매수 10일 돌파 여부"   ✅ "외국인 순매수가 10일을 넘기는지 보면 돼"
   · 수급/추세 조건 — "외국인 순매수가 10일 넘게 이어지는지", "거래량이 다시 평균을 넘는지"
   · 가격 관찰 수준(지지/저항) — "68,000원(60일선)이 지지로 유지되는지" (관찰 수준이지 매수가 아님)
   · 이벤트/실적 조건 — "다음 실적에서 메모리 가격 피크 신호가 나오는지"
@@ -233,26 +184,15 @@ _CORE_RULES = f"""# 1순위 — 구체성 (어기면 글은 폐기)
 - 따라서 "PER 9, 싸다" 식 단정 금지. "PER은 낮지만, 이게 이익 피크라면 얘기가 다르다"처럼
   **사이클 위치를 함께 묻는 관점**을 남긴다. 이게 펌핑판에서 독자를 구하는 핵심 긴장이 된다.
 
-# 법적 안전 (어기면 서비스가 위법)
-- 금지: 추천/추천합니다, 사세요, 매수·매도, 매수가/목표가/손절가 등 가격 제시,
-  "매수 신호/시그널", "반드시·확실히 오른다", "유망주" 등 권유·단정
-- 허용: 수치의 중립적 해석, '관찰', '참고', '현재 ~', 질문형
-- 종목명은 주어진 것만 사용(추정·창작 금지)
-- 핵심: '추천하지 마라' ≠ '아무 말도 하지 마라' — 숫자는 구체적으로, 결론(사라/팔라)만 빼라.
-
-# 문체
-- 짧은 문장, 줄바꿈, 이모지 0~3개. 표/마크다운 금지.
-- hook(첫 문장)은 가장 강한 수치/긴장 하나로 시작. body는 **3~5줄로 짧게**.
-- **해시태그를 쓰지 마라**(# 로 시작하는 태그 줄 금지). 유입에 도움이 안 되고 글자만 먹는다.
+# 구성 (스레드에서 읽히는 형태)
+- hook(첫 문장)은 가장 강한 수치/긴장 하나로. body는 **3~5줄로 짧게**.
+- 종목명은 주어진 것만 사용(추정·창작 금지).
 
 # 길이 예산 (필수 — 어기면 발행 불가)
-- **hook + body + '앞으로 볼 것'(1~3개)을 모두 합쳐 {LLM_BUDGET}자 이내.**
-  (Threads 글 1개의 한도 500자에서 여백을 뺀 값이다. 서비스 안내는 별도 댓글로 시스템이
-   붙이므로 **네가 쓰지 마라**. 본문에서 서비스·링크를 언급하지 마라.)
-- 페이로드는 '앞으로 볼 것'이다 → body는 긴장 제시까지만 짧게 쓰고, 결론·전망 설명은
-  watchpoints로 넘긴다. body가 길면 줄을 쳐내서라도 예산을 지킨다.
-- 길이가 빠듯하면 watchpoints를 2개로 줄이고 각 항목을 더 압축한다(개수보다 길이 준수 우선).
-- 면책은 본문에 넣지 않는다(프로필 bio 상시 고지)."""
+- **hook + body + 지켜볼 지점을 모두 합쳐 {LLM_BUDGET}자 이내.** (Threads 글 1개 한도 500자)
+- 페이로드는 마무리의 '지켜볼 지점'이다 → body는 긴장 제시까지만 짧게 쓰고, 결론·전망 설명은
+  거기로 넘긴다. body가 길면 줄을 쳐내서라도 예산을 지킨다.
+- 길이가 빠듯하면 지켜볼 지점을 2개로 줄이고 더 압축한다(개수보다 길이 준수 우선)."""
 
 # 앵글 아키타입 — '충돌형' 단일 재배 탈피(point 2). 앵글 파인더가 종목 데이터에
 # 가장 맞는 유형 하나를 고른다. key = 출력/추적용 라벨, value = 선택 가이드.
@@ -294,8 +234,8 @@ _ANGLE_SYSTEM = f"""당신은 주식 SNS 글의 '편집 앵글'을 잡는 에디
 - tension에 '오늘/지금/현재' 같은 상대 시점어 금지(발행이 며칠 뒤일 수 있음). 날짜가 필요하면 주어진 기준일을 쓴다."""
 
 _WRITER_SYSTEM = (
-    "당신은 한국/미국 주식 정보 서비스의 SNS(스레드) 카피라이터입니다.\n"
-    "주어진 '편집 앵글'과 실제 수치로, 스크롤을 멈추게 하는 짧고 구체적인 한국어 스레드 글을 씁니다.\n\n"
+    "당신은 한국 주식 스레드(Threads) 계정의 화자입니다.\n"
+    "누가 물어본 종목에 대해, 실제 수치로 짧고 구체적으로 대답하는 반말 글을 씁니다.\n\n"
     + _CORE_RULES
 )
 
@@ -303,24 +243,23 @@ _EDITOR_SYSTEM = (
     "당신은 SNS 카피의 냉정한 편집장입니다. 후보 글들을 루브릭으로 채점하고,\n"
     "가장 나은 후보를 베이스로 골라 약점까지 고쳐 '최종본 한 편'을 만듭니다.\n\n"
     "# 루브릭 (각 0~5, 합산 0~35)\n"
-    "1. 후킹: 첫 줄이 스크롤을 멈추게 하나\n"
-    "2. 긴장/관점: 숫자가 흩어지지 않고 '하나의 긴장'으로 수렴하나 (so-what)\n"
-    "3. 구체성: 의미 부여된 숫자가 2개 이상인가\n"
-    "4. 독자시점: 자기언급(Axis/우리)·내부용어(스냅샷)·셀링멘트가 0인가  ← 가장 중요\n"
-    "5. 담백함: 광고티·군더더기·챗봇 말투가 없나\n"
-    "6. 법적안전: 추천·가격제시(목표가/매수가/손절가)·단정이 없나\n"
-    "7. 방향성(앞으로 볼 것): watchpoints가 1~3개 채워졌고, 조건부·관찰형이며 '다음에 무엇을 "
-    "보면 갈림길이 보이나'의 답을 주나. 긴장만 남기고 끝나면 0점.  ← 호응의 핵심\n\n"
+    "1. 데이터 근거: 쓰인 숫자가 facts에 실제로 있는 것인가. **facts에 없는 숫자가 하나라도 "
+    "있으면 0점**이고 그 문장을 들어내야 한다. ← 검증 브랜드의 생명선\n"
+    "2. 후킹: 첫 줄이 스크롤을 멈추게 하나\n"
+    "3. 긴장/관점: 숫자가 흩어지지 않고 '하나의 긴장'으로 수렴하나 (so-what)\n"
+    "4. 톤: 반말/구어체가 일관되나. 존댓말('~습니다')이 섞이면 감점. 단 **수치를 뭉개면**"
+    "('좀 많이 팔았어') 반말이어도 감점\n"
+    "5. 사족 없음: 방어적 사족('판단은 본인이', '추천 안 해', '참고만')이 0인가. 하나라도 "
+    "있으면 0점 — 문장째 들어내고 긍정형으로 대체한다\n"
+    "6. 독자시점·법적안전: 자기언급(Axis/우리)·내부용어(스냅샷)·추천·가격제시가 0인가\n"
+    "7. 방향성: watchpoints가 1~3개 채워졌고 조건부·관찰형이며 '다음에 무엇을 보면 갈림길이 "
+    "보이나'의 답을 주나. 긴장만 남기고 끝나면 0점 (cta 포맷은 예외 — 댓글 초대가 마무리)\n\n"
     "# 출력\n"
     "- 최고 후보를 베이스로 하되, 위 7축에서 깎인 점을 직접 고쳐 최종본을 낸다.\n"
-    "- 4축 위반(자기언급·내부용어·셀링멘트)은 문장째 들어내고 독자 관심사로 대체한다.\n"
+    "- 1축 위반(facts에 없는 숫자)과 5축 위반(방어적 사족)은 문장째 들어낸다.\n"
     "- 7축: 후보의 watchpoints가 약하거나 비었으면 facts/앵글에서 직접 1~3개를 만들어 채운다.\n"
-    "  단 매수가/목표가/손절가·'사라/팔라'로 새지 않게(가격은 '관찰 지지/저항 수준'으로).\n"
-    "  watchpoints 각 항목은 35자 내외로 간결히.\n"
-    f"- 길이(필수): hook+body+watchpoints 합산 {LLM_BUDGET}자 이내. 넘치면 body를 줄이고\n"
-    "  watchpoints를 2개로 압축해서라도 맞춘다(Threads 글 1개 한도 500자 — 서비스 안내는\n"
-    "  별도 댓글로 시스템이 붙이므로 안내 문구를 직접 쓰지 마라).\n"
-    "- 해시태그를 넣지 마라(# 태그 줄 금지).\n"
+    "  각 항목은 **반말 한 문장**으로(명사로 끊는 리포트 문법 금지).\n"
+    f"- 길이(필수): 전체 합산 {LLM_BUDGET}자 이내(Threads 글 1개 한도 500자).\n"
     "- score_total은 '최종본' 기준 점수. issues_fixed에 고친 문제를 간단히 적는다.\n\n"
     + _CORE_RULES
 )
@@ -346,9 +285,9 @@ class PostAngle(BaseModel):
 
 
 _WATCHPOINTS_DESC = (
-    "앞으로 볼 관찰 포인트 1~3개(필수). **각 항목 35자 내외로 간결하게**(긴 괄호 부연 금지). "
-    "조건부·관찰형만 — 수급/추세 조건, 가격 관찰 수준(지지/저항), 실적/이벤트 조건. "
-    "예: '외국인 순매수 10일 돌파 여부', '60일선 68,000원 지지 유지'. "
+    "지켜볼 지점 1~3개(필수). **반말 한 문장씩, 35자 내외로 간결하게**(명사로 끊는 리포트 "
+    "문법 금지). 조건부·관찰형만 — 수급/추세 조건, 가격 관찰 수준(지지/저항), 실적/이벤트 조건. "
+    "예: '외국인 순매수가 10일을 넘기는지 보면 돼', '60일선 68,000원이 지지로 버티는지가 갈림길'. "
     "⚠️ 매수가/목표가/손절가·'사라/팔라' 금지."
 )
 
@@ -360,7 +299,7 @@ class ThreadsPost(BaseModel):
     body: str = Field(description="본문 3~6줄. 줄바꿈 포함. 수치 중립 해석")
     watchpoints: list[str] = Field(description=_WATCHPOINTS_DESC)  # 필수(구조화 스키마 required)
     # 해시태그 필드 없음 — Threads 유입 기여 0인데 글자 예산만 먹어 제거(2026-07-12).
-    # 서비스 홍보 1줄도 여기 없다: LLM이 쓰지 않고 finalize_parts()가 별도 파트로 붙인다.
+    # 서비스 홍보 1줄도 여기 없다: LLM이 쓰지 않고 finalize_thread()가 별도 파트로 붙인다.
 
 
 class EditedPost(BaseModel):
@@ -375,28 +314,19 @@ class EditedPost(BaseModel):
 
 
 # ──────────────────────────────────────────────
-# 결정론적 가드 — 자기언급/내부용어/셀링멘트 (④)
+# 결정론적 가드 (④) — 정의는 threads_style.py로 이사(자기언급/사족/톤/미확인수치).
 # 법적 필터(BaseAgent.filter_forbidden)와 별개. 걸리면 1회 재편집 유발 후
 # 남으면 admin 콘솔에 warnings로 노출(human-in-loop이므로 본문 강제훼손 X).
 # ──────────────────────────────────────────────
 
-_READER_FIRST_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
-    # 한국어는 조사가 브랜드명에 바로 붙어("Axis는") \b 끝경계가 깨지므로 경계 없이 매칭.
-    (re.compile(r"Axis|액시스", re.IGNORECASE), "자기언급(Axis)"),
-    (re.compile(r"우리(는|가|의|\s)"), "자기언급(우리)"),
-    (re.compile(r"이\s*(도구|서비스|앱|플랫폼)"), "자기언급(서비스)"),
-    (re.compile(r"스냅샷"), "내부용어(스냅샷)"),
-    (re.compile(r"데이터\s*기준"), "내부용어(데이터 기준)"),
-    # "~에서/데서 끝내지 않는다" 류 셀링 상투구 — 앞 어미 강제 없이 광범위 매칭.
-    (re.compile(r"(끝내지|그치지|멈추지)\s*않"), "셀링멘트(끝내지 않)"),
-    (re.compile(r"검증까지"), "셀링멘트(검증까지)"),
-    (re.compile(r"구간에\s*있다"), "번역투(구간에 있다)"),
-)
-
-
-def guard_reader_first(text: str) -> list[str]:
-    """자기언급·내부용어·셀링멘트 검출. 발견된 라벨 리스트(비면 통과)."""
-    return [label for pat, label in _READER_FIRST_PATTERNS if pat.search(text)]
+def guard_post(text: str, facts: str) -> list[str]:
+    """단일 글 가드 — 자기언급 + 방어적 사족 + 존댓말 혼입 + 미확인 수치."""
+    return (
+        guard_reader_first(text)
+        + guard_hedging(text)
+        + guard_tone(text)
+        + guard_hallucinated_numbers(text, facts)
+    )
 
 
 def _numeric_fact_count(s: dict) -> int:
@@ -548,7 +478,8 @@ class MarketerAgent(BaseAgent):
             post, _ = await self.call_claude_json(
                 user_message=user_msg,
                 schema=ThreadsPost,
-                max_tokens=700,
+                # 반말 전환으로 문장이 길어져 700에선 출력이 잘렸다(구조화 JSON이 깨진다).
+                max_tokens=1100,
                 uid=uid,
                 structured_output=True,
             )
@@ -603,7 +534,8 @@ class MarketerAgent(BaseAgent):
             edited, _ = await self.call_claude_json(
                 user_message=user_msg,
                 schema=EditedPost,
-                max_tokens=900,
+                # 편집 출력 = 최종본 + 채점 메타 → 작가보다 넉넉히. 900에서 잘림 경고가 떴다.
+                max_tokens=1500,
                 uid=uid,
                 system=_EDITOR_SYSTEM,
                 structured_output=True,
@@ -721,24 +653,25 @@ class MarketerAgent(BaseAgent):
         text = assemble_post(_edited_to_post(edited))
 
         # ④ 결정론적 가드
-        # 4-1. 자기언급/내부용어 + 빈 watchpoints → 한 번의 재편집으로 함께 고친다.
-        warnings = guard_reader_first(text)
+        # 4-1. 자기언급·사족·톤·미확인수치 + 빈 watchpoints → 한 번의 재편집으로 함께 고친다.
+        warnings = guard_post(text, facts)
         repair_reasons: list[str] = []
         if warnings:
             repair_reasons.append(
-                "다음 표현을 문장째 제거하고 독자 관심사로 대체: " + ", ".join(warnings)
+                "다음을 고쳐라 — 미확인 수치는 그 문장째 들어내고(facts에 있는 숫자만 쓴다), "
+                "방어적 사족은 긍정형으로 바꾸고, 존댓말은 반말로, 자기언급은 독자 관심사로 대체: "
+                + ", ".join(warnings)
             )
         if enforce_watchpoints and not (edited.watchpoints or []):
-            # 페이로드 = '앞으로 볼 것'. 비면 호응이 죽으므로 반드시 채운다.
+            # 페이로드 = 마무리의 '지켜볼 지점'. 비면 호응이 죽으므로 반드시 채운다.
             repair_reasons.append(
-                "'앞으로 볼 것'(watchpoints)이 비었다 — facts/앵글에서 조건부·관찰형 관찰 포인트 "
-                "1~3개를 반드시 채워라(수급/추세 조건, 지지/저항 관찰 수준, 실적 조건). "
+                "'지켜볼 지점'(watchpoints)이 비었다 — facts/앵글에서 조건부·관찰형으로 1~3개를 "
+                "반드시 채워라(수급/추세 조건, 지지/저항 관찰 수준, 실적 조건). 반말 한 문장씩. "
                 "매수가/목표가/손절가·'사라/팔라' 금지."
             )
         if len(text) > LLM_BUDGET:
-            # 홍보 블록을 붙이면 500자를 넘긴다 → 압축 재편집(발행 불가 방지).
             repair_reasons.append(
-                f"전체 길이 {len(text)}자로 예산({LLM_BUDGET}) 초과 — body를 줄이고 watchpoints를 "
+                f"전체 길이 {len(text)}자로 예산({LLM_BUDGET}) 초과 — body를 줄이고 지켜볼 지점을 "
                 f"2개로 압축해 {LLM_BUDGET}자 이내로 만들어라(수치·관찰 포인트는 유지)."
             )
         if repair_reasons:
@@ -750,20 +683,17 @@ class MarketerAgent(BaseAgent):
             if repaired is not None:
                 edited = repaired
                 text = assemble_post(_edited_to_post(edited))
-                warnings = guard_reader_first(text)
+                warnings = guard_post(text, facts)
                 if warnings or (enforce_watchpoints and not (edited.watchpoints or [])):
                     logger.warning(
                         f"[marketer] 재편집 후에도 잔존 {name}: "
-                        f"reader={warnings} watchpoints_empty={not (edited.watchpoints or [])}"
+                        f"guards={warnings} watchpoints_empty={not (edited.watchpoints or [])}"
                     )
 
-        # 4-2. 법적 필터(비협상 — 하드 치환)
-        text, found = BaseAgent.filter_forbidden(text)
+        # 4-2. 법적 필터 + 파트 조립 + 홍보(별도 파트). 홍보는 가드 뒤에 붙는다.
+        parts, text, found = finalize_thread([text])
         if found:
             logger.warning(f"[marketer] 금지표현 필터됨 {name}: {found}")
-
-        # 4-3. 홍보 파트 — 가드/필터를 모두 통과한 뒤에 붙인다(자기언급 가드 대상 아님).
-        parts, text = finalize_parts(text)
 
         # 4-4. 길이 경고 — 파트별 한도. 발행은 파트 단위이므로 합계가 아니라 각각을 본다.
         for i, p in enumerate(parts, 1):
@@ -791,14 +721,16 @@ def _edited_to_post(e: EditedPost) -> ThreadsPost:
 
 
 def _watchpoints_block(items: list[str]) -> str:
-    """관찰 포인트 → '앞으로 볼 것' 마무리 블록. 비면 빈 문자열."""
-    pts = [p.strip().lstrip("①②③-• ").strip() for p in (items or []) if p and p.strip()]
+    """지켜볼 지점 → 마무리 블록. 비면 빈 문자열.
+
+    2026-07-14: '앞으로 볼 것 ①②③' 번호 블록을 버렸다. 리포트 문법이라 스레드에서 글이
+    갑자기 문서로 변한다. 대신 짧은 안내 한 줄 + 가운뎃점 목록으로 대화 톤을 유지한다.
+    """
+    pts = [p.strip().lstrip("①②③-•· ").strip() for p in (items or []) if p and p.strip()]
     pts = [p for p in pts if p][:3]
     if not pts:
         return ""
-    marks = ("①", "②", "③")
-    lines = [f"{marks[i]} {p}" for i, p in enumerate(pts)]
-    return "앞으로 볼 것\n" + "\n".join(lines)
+    return "지켜볼 건 이거야.\n" + "\n".join(f"· {p}" for p in pts)
 
 
 def assemble_post(post: ThreadsPost) -> str:
@@ -806,7 +738,7 @@ def assemble_post(post: ThreadsPost) -> str:
 
     홍보는 여기서 붙이지 않는다 — 이 함수는 편집 단계의 후보 목록 렌더링에도
     쓰이므로, 홍보를 넣으면 모델이 그걸 학습해 본문에 흉내 낸다. 홍보는 가드까지
-    끝난 최종 단계에서 finalize_parts()가 **별도 파트**로 붙인다.
+    끝난 최종 단계에서 finalize_thread()가 **별도 파트**로 붙인다.
     해시태그는 제거됐다(2026-07-12). 면책은 프로필 bio 상시 고지(2026-06-27).
     """
     parts: list[str] = [post.hook.strip(), post.body.strip()]
