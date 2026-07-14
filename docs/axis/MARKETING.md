@@ -1,7 +1,19 @@
 # MARKETING.md — 마케팅 전략 & 콘텐츠 공장
 
 > 0→1(첫 사용자 확보) 단계의 마케팅 전략과, 이를 위해 구현한 "콘텐츠 공장" 기능 문서.
-> 최종 갱신: 2026-06-29
+> 최종 갱신: 2026-07-14
+
+> ## 🚨 2026-07-14 포맷 재설계 — 이 문서보다 [`THREADS_FORMAT.md`](THREADS_FORMAT.md)가 우선한다
+> 스레드에서 **종목 단독 글은 구조적으로 죽는다**는 게 1차 자료로 확인됐다(같은 계정 대조:
+> 종목 분석 좋아요 3 vs 거시 서사 231). 세 가지가 바뀌었다.
+>
+> 1. **브로드캐스트 = 서사 타래 / 종목 = 리플라이.** 종목 분석은 버린 게 아니라 *옮겼다* —
+>    댓글로 물어본 사람에게 다는 답글이 된다. 아래 §2의 4포맷은 **브로드캐스트용으로는 폐기**.
+> 2. **화자 = 반말/구어체** (JEON 결정). 전 콘텐츠 타입 공통.
+> 3. **문체·가드·조립의 단일 출처 = `agents/threads_style.py`.** 그전엔 문체가 생성기 5곳에
+>    복붙돼 있었다. 가드는 4종(자기언급 / 방어적 사족 / 존댓말 혼입 / **미확인 수치**).
+>
+> 홍보 1줄도 **본문 결합 → 별도 파트(첫 댓글)** 로 옮겼다(§3 참고).
 
 > **2026-06-29 생성 품질 고도화** (상세: [`../PROGRESS_2026-06-29.md`](../PROGRESS_2026-06-29.md)):
 > - **기술 분석 섹션** 활성화(이동평균·크로스·거래량·변동성) + **경기민감주 PER 함정** 자동 경고
@@ -25,24 +37,37 @@
 ### 핵심 포지셔닝
 법적 제약(추천·목표가 금지, [LEGAL.md](LEGAL.md))을 **약점이 아니라 무기**로 사용한다.
 
-> "종목 추천 안 합니다. AI한테 양쪽 다 뜯어보게 시키고, 판단은 당신이 하세요."
+> **좋은 숫자랑 나쁜 숫자를 같이 꺼내놓는다.**
 
-차별점 = **실시간 검증 + 반대의견(Contrarian)**. 대부분의 '주식 AI' 콘텐츠가 환각·낙관 일변도인 시장에서 정반대로 신뢰를 쌓는다.
+스레드 주식판은 지금 "추천글 홍수"에 대한 불신이 폭발 직전이고("스레드 주식 추천 믿고 돈 번
+사람 있나" — 조회 70.2K), 답을 놓는 사람이 없다. 그 공백이 우리 자리다.
+
+⚠️ **단, 그걸 '추천 안 함'이라는 부정형·책임전가로 쓰지 않는다**(§3 카피 원칙). 안 하는 것이
+아니라 **하는 것**으로 말한다. 차별점 = 양쪽 수치를 다 꺼내는 것 + 그 수치가 **진짜**라는 것.
 
 ---
 
-## 2. 콘텐츠 엔진 — 4가지 반복 포맷
+## 2. 콘텐츠 엔진 (2026-07-14 개편)
 
 매번 새로 짜내지 않고, 제품 출력물(AI 분석)을 그대로 콘텐츠화한다.
 
-| 키 | 포맷 | 톤 / 목적 |
-|----|------|-----------|
-| `curiosity` | 호기심 (눈에 띄는 수치) | 눈에 띄는 실수치 1~2개를 숫자 그대로 + "지금도 유효할까" 검증 훅 |
-| `contrarian` | 반대의견 (반대로 보면) | 약점·과열·리스크 관찰 포인트, 반대 시나리오 사고 유도 |
-| `trust` | 신뢰 (데이터 검증) | "AI 답변 그대로 믿어도 되나" — 신선도/재검증 브랜드 메시지 |
-| `cta` | 댓글 모집 (종목 남겨주세요) | 참여 유도, "궁금한 종목 댓글로" → 댓글=리드+다음 소재 |
+| 콘텐츠 | 파일 | 구조 | 용도 |
+|---|---|---|---|
+| 🧵 **서사 타래** | `agents/narrative.py` | **타래 3~5파트** | **브로드캐스트 기본.** 오늘의 사건 → 갈라볼 프레임 → 실측 수치로 시연 → 댓글 초대 |
+| 🌙 새벽 브리핑 | `agents/briefing.py` | 단일 글 | 간밤 미국장(화~토 발행) |
+| 🗓️ 주말 브리핑 | `agents/weekend_briefing.py` | 단일 글 | 주말 소식 → 월요일 한국장 |
+| 🎓 교육 | `agents/education.py` | 단일 글 | 개념 + 화제종목 실수치 삽화. **사건 없는 날의 소재** |
+| 📈 지수 차트 | `agents/index_chart.py` | 단일 글 | 지수 관찰 |
+| 📉 종목글 | `agents/marketer.py` | 단일 글 | **브로드캐스트용 아님** — 댓글 요청에 다는 **답글 초안** |
 
-기본 3종 = `curiosity, contrarian, cta`.
+> 구 4포맷(`contrarian`/`curiosity`/`cta`/`technical`)은 전부 "종목글의 훅 변주"였으므로
+> 브로드캐스트에선 폐기됐다. 코드는 살아 있고(리플라이 초안 생성기로 재사용), 검수 UI에선
+> 접힌 채 "브로드캐스트용 아님"으로 강등돼 있다. `cta`(댓글 모집)만 살아남아 **엔진**이 된다.
+
+**우리만 쓸 수 있는 글이어야 한다.** 뉴스 훅과 반말은 누구나 복제한다. 남과 갈리는 지점은
+글에 나오는 숫자가 **진짜**라는 것 하나뿐이라, 지어낸 수치는 차별점 자체를 무너뜨린다.
+그래서 루브릭 1축 = **데이터 근거**, 결정론적 `guard_hallucinated_numbers`가 이중으로 막는다.
+서사 타래는 삽화용 실측 종목이 0개면 **생성 자체를 거부**한다.
 
 ### 전환 경로 (스레드 → 가입)
 1. 게시물엔 결과 절반만 노출 → "전체 분석은 프로필 링크"
@@ -61,44 +86,81 @@
 
 스레드용 종목 글을 AI로 **자동 생성 → 검수 → 복사**하는 내부 도구. 2026-06-26 prod 배포(커밋 `a13d855`, `f5bd2fe`).
 
-### 아키텍처
+### 아키텍처 (2026-07-14 갱신)
 ```
-[종목] → build_instant_snapshot (스크리너 스냅샷, 실수치 PER/RSI/등락)
-       → MarketerAgent (기본 Sonnet, 구조화출력 ThreadsPost{hook,body,watchpoints})
-       → _numeric_fact_count 가드(실수치 2개 미만이면 생성 스킵 — 헛글 차단)
-       → guard_reader_first (자기언급/셀링멘트) + filter_forbidden (추천·목표가)
-       → append_promo (서비스 홍보 1줄 — 가드 통과 후에만)
-       → Firestore marketing_drafts/{id} (status: draft|approved|archived)
-       → 관리자 검수 UI / 일괄생성 CLI
+[재료] 뉴스 RSS + 지수 + build_instant_snapshot(스크리너 실수치 PER/RSI/수급/이평)
+   ↓
+[생성] 4단계 하네스 — 앵글 → 작가 best-of-N → 편집(루브릭) → 결정론적 가드
+       · 서사 타래: NarrativeAgent → parts[3~5]   (삽화 종목 0개면 생성 거부)
+       · 그 외:     각 에이전트   → 단일 글
+   ↓
+[가드] agents/threads_style.py — 문체·가드·조립의 단일 출처
+       · VOICE_RULES        반말 화자 / 수치 정확 / 방어적 사족 금지 / 독자시점 / 법적안전
+       · guard_reader_first 자기언급·내부용어·셀링멘트
+       · guard_hedging      방어적 사족("판단은 본인이", "추천 안 해")
+       · guard_tone         반말인데 존댓말 혼입
+       · guard_hallucinated_numbers  facts에 근거 없는 수치 (반올림 "7000선"은 통과, 오차 2%)
+       → 걸리면 1회 재편집, 남으면 검수 UI에 warnings 뱃지
+   ↓
+[조립] finalize_thread — filter_forbidden(추천·목표가 하드치환) → (n/N) 번호 → 홍보 파트
+   ↓
+[저장] Firestore marketing_drafts/{id}  (parts[] + text + status)
+   ↓
+[발행] threads_client.publish_thread — 각 파트를 **직전 글에 답글**로 체인
 ```
 
 | 구성 | 파일 |
 |------|------|
-| 생성 에이전트 | `agents/marketer.py` (MarketerAgent, FORMATS, generate_batch, pick_hot_tickers) |
+| **문체·가드·조립 (단일 출처)** | **`agents/threads_style.py`** |
+| 서사 타래 (브로드캐스트 기본) | `agents/narrative.py` |
+| 종목글 하네스 (리플라이 초안) | `agents/marketer.py` (MarketerAgent, FORMATS, generate_batch, pick_hot_tickers) |
 | 백엔드 API | `api/routes/marketing.py` (`/api/admin/marketing/*`, 관리자 게이트) |
+| Threads 발행 | `utils/threads_client.py` (publish_thread, validate_parts) |
 | 프론트 (웹 검수) | `web/app/(dashboard)/admin/marketing/page.tsx` + `web/lib/marketing.ts` |
 | 로컬 실행 도구 | `jobs/marketing_generate.py` + `marketing.bat` |
 
+⚠️ 잡·스크립트에서 생성기를 직접 부를 땐 **`_prime_name_store()` 필수**(API 프로세스는 기동 시
+적재). 안 하면 실수치가 0이 되어 헛글 가드에 걸리거나 삽화 없는 글이 나온다.
+
 ### API (모두 관리자 전용 — `_is_admin` 게이트)
-- `GET  /api/admin/marketing/formats` — 포맷 목록 + 기본값 + 최대 글자수(500)
-- `GET  /api/admin/marketing/drafts?status=` — 초안 목록(최신순)
-- `POST /api/admin/marketing/generate` — `{tickers?, formats?, hot_count?}`. tickers 비우면 화제종목 자동(pick_hot_tickers)
-- `PATCH /api/admin/marketing/drafts/{id}` — `{text?, status?}`
+- `POST /api/admin/marketing/narrative/generate` — 🧵 **서사 타래**(브로드캐스트 기본). `{tickers?}` = 삽화용
+- `POST /api/admin/marketing/generate` — 📉 종목글(리플라이 초안). `{tickers?, formats?, hot_count?}`
+- `POST /api/admin/marketing/briefing/generate` · `weekend-briefing/generate` · `index-chart/generate`
+- `GET  /api/admin/marketing/formats` · `drafts?status=` (status: draft|approved|published|**partial**|archived)
+- `POST /api/admin/marketing/drafts/{id}/publish` — 발행. 파트 2개 이상이면 **타래**로 순차 발행하고,
+  중간에 끊기면 `partial`로 남아 **같은 엔드포인트가 '이어서 발행'** 이 된다
+- `PATCH /api/admin/marketing/drafts/{id}` — `{text?, parts?, status?}`. `text`의 `---` 단독 줄이 파트 경계
 - `DELETE /api/admin/marketing/drafts/{id}`
 
 ### 비용
 - 종목 × 포맷 1건당 **Sonnet ~35원**(품질 우선 기본값). 비용 절감 필요 시 `MARKETER_MODEL=haiku`(~5원).
+- 서사 타래 1편 = 앵글(Haiku) + 작가 3후보(Sonnet) + 편집(Sonnet) ≈ **~50원**.
 
-### 발행 문구 구성 (JEON 결정 2026-07-12)
-글 = `hook + body + 앞으로 볼 것` **+ 서비스 홍보 1줄**. 4개 생성기(marketer/briefing/weekend/education) 공통.
+### 발행 문구 구성 (2026-07-14 갱신)
+글 = `본문` **+ 홍보 파트(= 첫 댓글)**. 전 생성기 공통(`threads_style.finalize_thread`).
 
-- **해시태그 제거** — Threads는 해시태그 유입이 사실상 없는데 500자 예산만 먹었다. 그 예산을 본문·관찰 포인트로 돌림. `ThreadsPost.hashtags` 필드 삭제.
-- **본문 끝 홍보 1줄(CTA)** — `agents/marketer.py`의 `PROMO_TEXT` 상수(현재: "종목 하나를 수급·차트·밸류·매크로까지 한 번에 뜯어봅니다 → axislytics.com"). **LLM이 쓰지 않는다**: 홍보를 모델에 맡기면 과장·톤붕괴가 생기고, 본문 품질을 지탱하는 '독자시점' 루브릭과 자기언급 가드가 무너진다. 그래서 본문은 그대로 독자 관심사로 쓰게 두고, **모든 LLM 단계 + 가드 + 법적 필터가 끝난 뒤** `append_promo()`가 붙인다.
-  - ⚠️ **순서 불변**: 홍보를 가드보다 먼저 붙이면 문구의 `axislytics`/`Axis`가 `guard_reader_first`에 걸리고, 편집 단계 후보 목록(`assemble_post`)에 섞이면 모델이 본문에서 홍보를 흉내 낸다.
-  - 글자 예산: `LLM_BUDGET = 500 − len(홍보) − 여백 20` (현재 문구 기준 **423자**). 문구를 고치면 자동 재계산돼 프롬프트 4곳에 주입되고, 초과 시 재편집을 유발한다.
-  - ⚠️ **문구 작성 규칙 2가지**: ① 추천/매수·매도/목표가/수익률 등 권유 표현 금지(파는 것은 '분석'이지 종목이 아니다) ② **검증 못 하는 수치 금지** — 소요 시간·정확도 같은 주장은 첫 사용자가 들어와서 바로 확인한다. (딥다이브 실측은 콜드 ~150초, 즉시 뜨는 건 빠른 요약 → "30초 리포트"는 거짓이라 뺐다.)
+- **해시태그 없음** — Threads는 해시태그 유입이 사실상 없는데 500자 예산만 먹었다(2026-07-12).
+- **홍보는 본문이 아니라 별도 파트** (2026-07-14 변경) — 링크가 본문에서 빠져 **첫 댓글**로 내려간다.
+  이전엔 `append_promo()`가 본문 문자열에 결합했다. 상세: [`THREADS_FORMAT.md`](THREADS_FORMAT.md) §7-4.
+  - `PROMO_TEXT`(threads_style) — 현재: "종목 하나를 수급·차트·밸류·매크로까지 한 번에 뜯어봅니다 → axislytics.com"
+  - **LLM이 쓰지 않는다**: 홍보를 모델에 맡기면 과장·톤붕괴가 생기고, 본문 품질을 지탱하는
+    '독자시점' 루브릭과 자기언급 가드가 무너진다. 가드·필터가 **모두 끝난 뒤** 코드가 붙인다.
+  - ⚠️ **순서 불변**: 홍보를 가드보다 먼저 붙이면 문구의 `axislytics`/`Axis`가 `guard_reader_first`에
+    걸리고, 편집 단계 후보 목록에 섞이면 모델이 본문에서 홍보를 흉내 낸다.
+  - 글자 예산: `LLM_BUDGET = 500 − 여백 20` = **480자**. 홍보가 파트로 빠지면서 이전(423자)보다
+    되찾았다 — 홍보 몫을 본문에서 깎지 않는다.
+  - ⚠️ **문구 작성 규칙 2가지**: ① 추천/매수·매도/목표가/수익률 등 권유 표현 금지(파는 것은
+    '분석'이지 종목이 아니다) ② **검증 못 하는 수치 금지** — 소요 시간·정확도 같은 주장은 첫
+    사용자가 바로 확인한다. (딥다이브 실측은 콜드 ~150초 → "30초 리포트"는 거짓이라 뺐다.)
 - **토글**: `MARKETING_PROMO=0`이면 홍보 없이 발행(도달 A/B용). 문구 교체는 `MARKETING_PROMO_TEXT`.
-- ⚠️ Threads는 외부 링크가 있는 글의 도달을 낮추는 경향이 있다. 도달이 눈에 띄게 떨어지면 `MARKETING_PROMO=0`으로 돌리고 링크를 **첫 댓글**로 옮기는 안을 검토할 것.
+- ⚠️ Threads는 외부 링크가 있는 글의 도달을 낮추는 경향이 있다 → 링크를 첫 댓글로 옮긴 지금
+  구조가 그 대비책이기도 하다.
+
+### 🚫 카피 원칙 — 방어적 사족 금지 (JEON 2회 지적)
+"판단은 본인이 하는 거임", "추천 안 함", "참고만" 류는 **독자를 향한 말이 아니라 우리를 향한
+보험**이라 글을 죽인다. 안 하는 것 대신 **하는 것**을 긍정형으로 쓴다.
+- ❌ "종목 추천은 안 해"  → ✅ "좋은 숫자랑 나쁜 숫자를 같이 꺼내놔"
+면책은 프로필 bio와 서비스 안에서 이미 한다. `guard_hedging`이 결정론적으로 막는다.
 
 ### 법적 안전
 - **본문 면책 없음**(JEON 결정 2026-06-27) — 면책은 계정 프로필(bio)에 상시 고지로 대체. 광고 톤 회피 + 500자 확보. ⚠️ **bio 면책 줄은 절대 제거 금지**(투자자문업 면허 없음, [LEGAL.md](LEGAL.md)). marketer/briefing 공통 진입점 `assemble_post()`에서 본문 면책 제거.
@@ -138,11 +200,27 @@
 ### 구현 (배포됨)
 | 구성 | 파일 |
 |------|------|
-| 발행 클라이언트 | `utils/threads_client.py` (2단계 발행, **httpx UTF-8**, 재시도, is_enabled/publish_text/get_me/refresh_token) |
-| 발행 라우트 | `POST /api/admin/marketing/drafts/{id}/publish`(발행 전 `filter_forbidden` 재검증→status=published+permalink), `GET /publish-status` |
-| 발행 버튼 | 검수 카드 🚀발행 (publish_status=enabled일 때) |
+| 발행 클라이언트 | `utils/threads_client.py` (2단계 발행, **httpx UTF-8**, 재시도, publish_text/**publish_thread**/validate_parts/get_me/refresh_token) |
+| 발행 라우트 | `POST /api/admin/marketing/drafts/{id}/publish`, `GET /publish-status` |
+| 발행 버튼 | 검수 카드 🚀발행 / **▶이어서 발행**(partial일 때) |
 
-> ⚠️ **한글 발행은 반드시 Python httpx(UTF-8)** — Windows Git Bash로 `curl --data-urlencode "text=한글"` 하면 깨짐. ⚠️ Threads API는 **글 삭제 미지원**(테스트글은 앱에서 수동삭제).
+> ⚠️ **한글 발행은 반드시 Python httpx(UTF-8)** — Windows Git Bash로 `curl --data-urlencode "text=한글"` 하면 깨짐.
+
+### 🚨 타래 발행 (2026-07-14 추가) — 되돌릴 수 없다
+**Threads API에는 글 삭제가 없다.** 5파트 중 3번째에서 터지면 반쪽 타래가 **영구히 박힌다.**
+코드로 못 지운다(앱에서 수동 삭제만). 그래서 발행 경로가 이렇게 설계돼 있다:
+
+1. **발행 시작 전에 전 파트를 검증**한다(파트별 500자, 파트 수 ≤6, `filter_forbidden`).
+   하나라도 걸리면 **아무것도 발행하지 않는다.** 이게 유일한 사전 방어선이다.
+2. 파트를 하나 보낼 때마다 **즉시 Firestore에 기록**(`published_ids`, `published_upto`).
+3. 중간에 끊기면 `status=partial` → 같은 엔드포인트가 **끊긴 지점부터 이어서 발행**한다.
+   복구책은 '지우기'가 아니라 **'전진'**이다.
+4. 체인은 반드시 **직전 글**에 건다. 루트 id에 전부 붙이면 타래가 아니라 **평면 댓글 더미**가 된다.
+
+파트 수를 3~5(상한 6)로 묶는 이유 중 하나 = **실패 지점 수를 줄이는 것**.
+
+> 💡 첫 실발행은 **2파트(본문 + 홍보)** 로 한 번 확인한 뒤 5파트 타래를 쏘는 게 안전하다.
+> 실패해도 루트 하나만 나가고, 그건 기존에 발행하던 것과 같은 모양이다.
 
 ---
 
@@ -156,12 +234,19 @@
 - **환각 금지**: 원인은 **제공된 헤드라인 안에서만** 도출, 근거 없으면 추측 X. 순한국어. ~25원/건.
 - (예) 반도체 -4.7% → "오픈AI IPO 연기설로 AI·기술주 투심 위축 + 마이크론 실적 경계감"
 
-### 📊 양쪽관점 종목글 = 기존 `marketer.contrarian` 재활용 (기본 Sonnet ~35원/편)
+### 🎓 교육 (`agents/education.py`, Sonnet) — 사건 없는 날의 소재
+투자심리 함정 7 + 지표 읽는 법 10 커리큘럼. 개념 + 화제종목 실수치 삽화(종목 평가는 금지).
+
+### 📊 종목글 자동생성 = **분리됨** (`--stocks 0`, JEON 수동 운영)
+
+### 🧵 서사 타래 = **자동발행 잡에 미편입** (2026-07-14 현재)
+브로드캐스트 기본 포맷이지만 아직 **수동 생성만**(`/admin/marketing` → 🧵 타래 생성).
+며칠 실제로 돌려 반응을 본 뒤 잡 편입을 결정한다.
 
 ### 운영 모드
 - 기본 = **검수 큐**(생성만, 발행 X) → `/admin/marketing`에서 보고 🚀발행
 - 완전 자동발행 전환 = 잡 args에 `--publish` 추가(`deploy-threads-job.sh`)
-- 하루 비용 ≈ 브리핑 25원 + 종목글 2편×35원 = **~95원**(MARKETER_MODEL=haiku면 ~45원)
+- 하루 비용 ≈ 브리핑 25원 + 교육 30원 (+ 수동 타래 50원) = **~100원 안팎**
 
 ---
 
