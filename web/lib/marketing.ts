@@ -26,7 +26,7 @@ export function splitParts(text: string): string[] {
 
 export interface MarketingDraft {
   id: string;
-  kind: "stock" | "briefing" | "index" | "education";
+  kind: "stock" | "briefing" | "index" | "education" | "narrative";
   index_key?: string; // 지수 차트 글의 지수 식별자 (KS11 등)
   ticker: string;
   name: string;
@@ -86,6 +86,12 @@ export const marketingApi = {
     apiCall<{ created: MarketingDraft[]; count: number }>(
       "/api/admin/marketing/generate",
       { method: "POST", body: JSON.stringify(req) },
+    ),
+  /** 🧵 서사 타래 — 스레드 브로드캐스트의 기본 포맷(3~5파트). tickers는 삽화용. */
+  generateNarrative: (tickers: string[] = []) =>
+    apiCall<{ created: MarketingDraft[]; count: number }>(
+      "/api/admin/marketing/narrative/generate",
+      { method: "POST", body: JSON.stringify({ tickers }) },
     ),
   generateBriefing: () =>
     apiCall<{ created: MarketingDraft[]; count: number }>(

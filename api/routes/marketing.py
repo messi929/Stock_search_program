@@ -284,6 +284,57 @@ async def generate_weekend_briefing_draft(request: Request):
     return {"created": [serialized], "count": 1}
 
 
+@router.post("/narrative/generate")
+async def generate_narrative_draft(request: Request):
+    """🧵 서사 타래 초안 1건 생성 → Firestore 저장. body: {tickers?: str[]}.
+
+    스레드 브로드캐스트의 기본 포맷(2026-07-14). 오늘의 사건(뉴스·지수)에서 출발해
+    프레임을 주고 **화제 종목 실측 수치로 시연**하는 3~5파트 타래.
+    tickers를 비우면 화제 종목을 자동 선정한다(삽화용 — 종목 평가 글이 아니다).
+    """
+    if not _is_admin(request):
+        return _forbid()
+
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+
+    user = getattr(request.state, "user", None) or {}
+    uid = user.get("uid", "") if isinstance(user, dict) else ""
+
+    from agents.narrative import generate_narrative
+
+    tickers = [str(t).strip().upper() for t in (body.get("tickers") or []) if str(t).strip()]
+    post = await generate_narrative(tickers=tickers[:3] or None, uid=uid)
+    if not post:
+        return JSONResponse(
+            status_code=502,
+            content={"detail": "서사 타래 생성 실패(뉴스·지수·종목 데이터 결손 또는 AI 응답 없음)"},
+        )
+
+    from firebase_admin import firestore
+
+    from screener.db.firebase_client import get_db
+
+    db = get_db()
+    now = firestore.SERVER_TIMESTAMP
+    try:
+        ref = db.collection(_COLLECTION).document()
+        ref.set({**post, "status": "draft", "created_at": now, "updated_at": now})
+        doc = ref.get()
+        serialized = _serialize(ref.id, doc.to_dict() or post)
+    except Exception as e:
+        logger.warning(f"[marketing] 서사 타래 저장 실패: {e}")
+        return JSONResponse(status_code=500, content={"detail": "초안 저장 실패"})
+
+    logger.info(
+        f"[marketing] 서사 타래 초안 생성 by {user.get('email', '?')} "
+        f"({serialized['part_count']}파트, 경고 {post.get('warnings')})"
+    )
+    return {"created": [serialized], "count": 1}
+
+
 @router.get("/index-chart/indices")
 async def list_index_choices(request: Request):
     """지수 차트 글로 만들 수 있는 지수 목록(프론트 선택용)."""

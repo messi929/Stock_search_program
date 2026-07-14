@@ -58,6 +58,7 @@ export default function AdminMarketingPage() {
   const [weekendGenerating, setWeekendGenerating] = useState(false);
   const [selectedIndices, setSelectedIndices] = useState<string[]>([]);
   const [indexGenerating, setIndexGenerating] = useState(false);
+  const [narrativeGenerating, setNarrativeGenerating] = useState(false);
   const [statusFilter, setStatusFilter] = useState("");
 
   const indicesQ = useQuery({
@@ -122,6 +123,24 @@ export default function AdminMarketingPage() {
     }
   };
 
+  const generateNarrative = async () => {
+    const tickers = tickersInput
+      .split(/[\s,]+/)
+      .map((t) => t.trim().toUpperCase())
+      .filter(Boolean);
+    setNarrativeGenerating(true);
+    try {
+      const res = await marketingApi.generateNarrative(tickers);
+      const d = res.created?.[0];
+      toast.success(`서사 타래 생성됨 (${d?.part_count ?? 0}파트)`);
+      draftsQ.refetch();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "서사 타래 생성 실패");
+    } finally {
+      setNarrativeGenerating(false);
+    }
+  };
+
   const generateBriefing = async () => {
     setBriefingGenerating(true);
     try {
@@ -178,17 +197,50 @@ export default function AdminMarketingPage() {
       <div>
         <h2 className="font-semibold">마케팅 콘텐츠 공장</h2>
         <p className="text-sm text-muted-foreground mt-1">
-          스레드용 종목 글을 AI로 생성하고, 검수·수정 후 복사합니다. 종목을 비우면
-          오늘 화제 종목을 자동 선정합니다. (추천 표현은 자동 필터됩니다)
+          스레드 글을 AI로 생성하고, 검수·수정 후 발행합니다. 종목을 비우면 오늘 화제
+          종목을 자동 선정합니다. (추천 표현은 자동 필터됩니다)
         </p>
       </div>
 
-      {/* ── 생성 패널 ── */}
-      <div className="space-y-4 rounded-lg border p-4">
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+      {/* ── 🧵 서사 타래 — 브로드캐스트의 기본 포맷 ── */}
+      <div className="space-y-3 rounded-lg border border-primary/40 bg-primary/5 p-4">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <p className="text-sm font-medium">🧵 서사 타래 (브로드캐스트 기본)</p>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              오늘의 사건(뉴스·지수)에서 출발해 갈라볼 프레임을 주고, 화제 종목의 실측
+              수치로 시연한 뒤 댓글로 초대하는 3~5파트 타래. 종목은 <b>삽화</b>로만
+              쓰입니다.
+            </p>
+          </div>
+          <Button
+            type="button"
+            onClick={generateNarrative}
+            disabled={narrativeGenerating}
+          >
+            {narrativeGenerating ? "생성 중... (수십초)" : "🧵 타래 생성"}
+          </Button>
+        </div>
+        <Input
+          value={tickersInput}
+          onChange={(e) => setTickersInput(e.target.value)}
+          placeholder="삽화로 쓸 종목 (비우면 화제 종목 자동) · 예: 005930, 000660"
+        />
+      </div>
+
+      {/* ── 종목글 (강등: 브로드캐스트용 아님) ── */}
+      <details className="space-y-4 rounded-lg border p-4">
+        <summary className="cursor-pointer text-sm font-medium">
+          📉 종목 단독 글{" "}
+          <span className="text-xs font-normal text-muted-foreground">
+            — 브로드캐스트용 아님(스레드에서 죽는 형태). 댓글 요청에 답할 초안용으로만.
+          </span>
+        </summary>
+
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-3">
           <div className="sm:col-span-2">
             <label className="text-xs text-muted-foreground">
-              종목 (티커, 쉼표/공백 구분 · 비우면 자동)
+              종목 (위 입력칸 공유 · 비우면 자동)
             </label>
             <Input
               value={tickersInput}
@@ -241,11 +293,16 @@ export default function AdminMarketingPage() {
               : `오늘 화제 종목 ${hotCount}개 자동 선정`}{" "}
             × 포맷 {effFormats.length}개
           </span>
-          <Button type="button" onClick={generate} disabled={generating}>
-            {generating ? "생성 중... (수초 소요)" : "✨ 초안 생성"}
+          <Button
+            type="button"
+            variant="outline"
+            onClick={generate}
+            disabled={generating}
+          >
+            {generating ? "생성 중... (수초 소요)" : "✨ 종목글 생성"}
           </Button>
         </div>
-      </div>
+      </details>
 
       {/* ── 새벽 미국시장 브리핑 생성 ── */}
       <div className="flex items-center justify-between gap-3 rounded-lg border p-4">
@@ -412,7 +469,16 @@ function DraftCard({
   const isIndex = draft.kind === "index";
   const isStock = draft.kind === "stock";
   const isEducation = draft.kind === "education";
-  const kindEmoji = isBriefing ? "🌙 " : isIndex ? "📈 " : isEducation ? "🎓 " : "";
+  const isNarrative = draft.kind === "narrative";
+  const kindEmoji = isBriefing
+    ? "🌙 "
+    : isIndex
+      ? "📈 "
+      : isEducation
+        ? "🎓 "
+        : isNarrative
+          ? "🧵 "
+          : "";
   const isPublished = draft.status === "published";
   const isPartial = draft.status === "partial"; // 타래 중간에서 끊김 → 이어서 발행만 가능
   const dirty = text !== draft.text;

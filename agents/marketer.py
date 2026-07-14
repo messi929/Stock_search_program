@@ -94,18 +94,23 @@ def promo_part() -> str:
     return re.sub(r"^[─—\-_]{2,}[ \t]*\n", "", text).strip()
 
 
-def finalize_parts(text: str) -> tuple[list[str], str]:
-    """가드를 통과한 본문 → (발행할 파트 배열, 검수/복사용 단일 text).
+def attach_promo(body_parts: list[str]) -> tuple[list[str], str]:
+    """본문 파트 배열 → (발행할 파트 배열, 검수/복사용 단일 text). 홍보를 마지막 파트로 붙인다.
 
     ⚠️ 반드시 **모든 LLM 단계 + 가드(자기언급/법적 필터)가 끝난 뒤** 호출할 것.
     가드보다 먼저 홍보를 붙이면 'Axis/axislytics'가 자기언급 가드에 걸리고,
     편집 단계 후보 목록(assemble_post)에 섞이면 모델이 홍보를 흉내 내기 시작한다.
     """
-    parts = [text.strip()]
+    parts = [p.strip() for p in body_parts if p and p.strip()]
     promo = promo_part()
     if promo:
         parts.append(promo)
     return parts, join_parts(parts)
+
+
+def finalize_parts(text: str) -> tuple[list[str], str]:
+    """본문 한 덩어리(단일 글)용 attach_promo. 타래는 attach_promo를 직접 쓴다."""
+    return attach_promo([text])
 
 
 # LLM이 쓸 수 있는 글자 예산 = 파트 1개 한도 − 안전 여백.
