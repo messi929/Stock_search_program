@@ -34,7 +34,7 @@ from agents.marketer import (
     guard_post,
     pick_hot_tickers,
 )
-from agents.threads_style import LLM_BUDGET, VOICE_RULES, finalize_thread
+from agents.threads_style import LLM_BUDGET, VOICE_RULES, finalize_thread, over_limit_parts
 from agents.instant import _snapshot_facts  # noqa: E402  (내부 팩트 포매터 재활용)
 from utils.claude_client import MODEL_SONNET
 
@@ -340,6 +340,12 @@ class EducationAgent(BaseAgent):
         parts, text, found = finalize_thread([text])
         if found:
             logger.warning(f"[education] 금지표현 필터됨: {found}")
+
+        # 500자 초과 파트가 있으면 생성 폐기 — 발행에서 막히는 초안은 만들지 않는다(2026-07-18).
+        over = over_limit_parts(parts)
+        if over:
+            logger.warning(f"[education] 500자 초과로 생성 폐기: {', '.join(over)}")
+            return None
 
         return {
             "kind": "education",

@@ -44,6 +44,7 @@ from agents.threads_style import (  # 문체·가드·조립의 단일 출처
     ThreadDraft,
     finalize_thread,
     guard_thread,
+    over_limit_parts,
     thread_rules,
 )
 from agents.base import BaseAgent
@@ -107,7 +108,9 @@ _EDITOR_SYSTEM = (
     "# 루브릭 (각 0~5, 합산 0~35)\n"
     "1. 데이터 근거: 수치가 facts에 실제로 있는 것인가. **facts에 없는 숫자가 하나라도 있으면 0점**\n"
     "   이고 그 문장을 들어내야 한다. ← 이 글이 남과 갈리는 유일한 지점\n"
-    "2. 훅: 1번 파트가 '사건 + 관점'으로 스크롤을 멈추나. 관점 없이 사건만 있으면 2점 이하\n"
+    "2. 훅(가중치 최우선 — 좋아요·팔로우가 여기서 갈린다): 1번 파트 **첫 줄**이 셋업 없이 "
+    "'사건 + 관점'으로 곧바로 스크롤을 멈추나. 관점 없이 사건만 있거나, 배경 설명·두루뭉술한 "
+    "도입으로 시작하면 2점 이하 — 그 첫 줄은 반드시 다시 쓴다\n"
     "3. 서사: 종목 리포트가 아니라 세상에 대한 이야기인가. 종목이 예시가 아니라 주인공이면 0점\n"
     "4. 톤: 반말/구어체가 일관되나. 존댓말('~습니다')이 섞이면 감점. 단 **수치를 뭉개면**\n"
     "   ('좀 많이 팔았어') 반말이어도 감점\n"
@@ -420,6 +423,12 @@ async def generate_narrative(
     parts, text, filtered = finalize_thread(body_parts)
     if filtered:
         logger.warning(f"[narrative] 금지표현 필터됨: {filtered}")
+
+    # 500자 초과 파트가 있으면 생성 폐기 — 발행에서 막히는 초안은 만들지 않는다(2026-07-18).
+    over = over_limit_parts(parts)
+    if over:
+        logger.warning(f"[narrative] 500자 초과로 생성 폐기: {', '.join(over)}")
+        return None
 
     return {
         "kind": "narrative",

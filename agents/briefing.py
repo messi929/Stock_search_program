@@ -21,7 +21,7 @@ from loguru import logger
 
 from agents.base import BaseAgent
 from agents.marketer import ThreadsPost, assemble_post, guard_post
-from agents.threads_style import LLM_BUDGET, VOICE_RULES, finalize_thread
+from agents.threads_style import LLM_BUDGET, VOICE_RULES, finalize_thread, over_limit_parts
 from utils.claude_client import MODEL_SONNET
 from utils.market_calendar import kr_market_status_hint, us_market_closed
 
@@ -291,6 +291,12 @@ class BriefingAgent(BaseAgent):
         parts, text, found = finalize_thread([text])  # 필터 → 홍보 파트
         if found:
             logger.warning(f"[briefing] 금지표현 필터됨: {found}")
+
+        # 500자 초과 파트가 있으면 생성 폐기 — 발행에서 막히는 초안은 만들지 않는다(2026-07-18).
+        over = over_limit_parts(parts)
+        if over:
+            logger.warning(f"[briefing] 500자 초과로 생성 폐기: {', '.join(over)}")
+            return None
 
         return {
             "kind": "briefing",

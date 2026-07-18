@@ -53,6 +53,7 @@ from agents.threads_style import (  # 문체·가드·홍보의 단일 출처
     guard_hedging,
     guard_reader_first,
     guard_tone,
+    over_limit_parts,
     promo_part,
 )
 from utils.claude_client import MODEL_HAIKU, MODEL_SONNET
@@ -245,7 +246,9 @@ _EDITOR_SYSTEM = (
     "# 루브릭 (각 0~5, 합산 0~35)\n"
     "1. 데이터 근거: 쓰인 숫자가 facts에 실제로 있는 것인가. **facts에 없는 숫자가 하나라도 "
     "있으면 0점**이고 그 문장을 들어내야 한다. ← 검증 브랜드의 생명선\n"
-    "2. 후킹: 첫 줄이 스크롤을 멈추게 하나\n"
+    "2. 후킹(가중치 최우선 — 좋아요·팔로우가 여기서 갈린다): 첫 줄이 셋업·인사·종목소개 없이 "
+    "가장 센 수치/긴장 하나(모순·의외의 수치·통념 뒤집기)로 스크롤을 멈추게 하나. "
+    "두루뭉술('심상치 않다')하거나 배경 설명으로 시작하면 2점 이하 — 그 첫 줄은 반드시 다시 쓴다\n"
     "3. 긴장/관점: 숫자가 흩어지지 않고 '하나의 긴장'으로 수렴하나 (so-what)\n"
     "4. 톤: 반말/구어체가 일관되나. 존댓말('~습니다')이 섞이면 감점. 단 **수치를 뭉개면**"
     "('좀 많이 팔았어') 반말이어도 감점\n"
@@ -695,10 +698,13 @@ class MarketerAgent(BaseAgent):
         if found:
             logger.warning(f"[marketer] 금지표현 필터됨 {name}: {found}")
 
-        # 4-4. 길이 경고 — 파트별 한도. 발행은 파트 단위이므로 합계가 아니라 각각을 본다.
-        for i, p in enumerate(parts, 1):
-            if len(p) > THREADS_MAX:
-                warnings = (warnings or []) + [f"{i}번째 파트 길이초과({len(p)}>{THREADS_MAX})"]
+        # 4-4. 길이 하드 게이트 — 500자 초과 파트가 하나라도 있으면 생성 폐기(None).
+        # 재편집(4-1)에서 LLM_BUDGET(480) 이내로 압축을 시도했는데도 남으면, 검수 큐에
+        # 올려봐야 발행에서 막히므로 초안 자체를 만들지 않는다(JEON 결정 2026-07-18).
+        over = over_limit_parts(parts)
+        if over:
+            logger.warning(f"[marketer] 500자 초과로 생성 폐기 {name}: {', '.join(over)}")
+            return None
 
         return {
             **result_base,
