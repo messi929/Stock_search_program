@@ -35,6 +35,7 @@ from agents.marketer import (
     MARKETER_MODEL,
     WRITER_CANDIDATES,
     _as_of_label,
+    ensure_store_primed,
     pick_hot_tickers,
 )
 from agents.threads_style import (  # 문체·가드·조립의 단일 출처
@@ -366,6 +367,11 @@ async def generate_narrative(
     tickers: Optional[list[str]] = None, uid: str = ""
 ) -> Optional[dict]:
     """서사 타래 초안 1건 생성. 실패 시 None."""
+    # 이 인스턴스의 인메모리 store가 비어 있으면(백그라운드 로드 실패한 인스턴스에
+    # 요청이 떨어진 경우) 요청 스레드에서 동기로 채운다. 아니면 삽화 종목이 0개가 돼
+    # '생성 건너뜀'으로 502가 난다(2026-07-19 근본원인). 이미 차 있으면 no-op.
+    ensure_store_primed()
+
     facts, meta = build_facts(tickers)
     if not facts.strip():
         logger.warning("[narrative] 재료 없음(뉴스·지수·종목 모두 결손) — 생성 건너뜀")

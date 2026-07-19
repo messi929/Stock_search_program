@@ -829,6 +829,57 @@ def pick_hot_tickers(limit: int = 3, exclude: Optional[list[str]] = None) -> lis
         return []
 
 
+def ensure_store_primed() -> bool:
+    """인메모리 스크리너 store가 비어 있으면 Firestore에서 **동기로** 적재한다.
+
+    배경(2026-07-19): Cloud Run 다중 인스턴스(maxScale=3) 중 일부는 백그라운드
+    스레드의 `load_from_firestore`가 `'_UnaryStreamMultiCallable' object has no
+    attribute '_retry'`(grpc/firestore 스레드 이슈)로 죽어 `_data_store`가 영구
+    empty가 된다. 그런 인스턴스에 요청이 떨어지면 `pick_hot_tickers`·
+    `build_instant_snapshot`이 전부 빈 값을 반환해 서사 타래·자동선정 종목글이 502로
+    실패한다. **요청 스레드의 Firestore 접근은 정상**이므로(종목글 저장이 같은
+    인스턴스에서 성공) 여기서 동기로 채워 인스턴스 상태와 무관하게 자가치유한다.
+    (jobs.marketing_generate._prime_name_store와 같은 패턴 — 이쪽은 '비었을 때만'.)
+
+    ⚠️ 반드시 동기 호출. run_in_executor(백그라운드 스레드)가 바로 위 버그의
+    발생 경로이므로 executor로 감싸지 말 것.
+
+    store에 데이터가 있으면 그대로 True. 비었으면 적재 시도 후 성공 True / 실패 False.
+    """
+    try:
+        from screener.api.routes import _get_combined_df
+
+        df = _get_combined_df()
+        if df is not None and not df.empty:
+            return True
+    except Exception as e:
+        logger.debug(f"[marketer] store 상태 확인 실패: {e}")
+
+    try:
+        import pandas as pd
+
+        from screener.api.routes import set_data
+        from screener.db.repository import load_stocks
+
+        kr = load_stocks("kr")
+        us = load_stocks("us")
+        etf = load_stocks("etf")
+        frames = [d for d in (kr, us) if d is not None and not d.empty]
+        if not frames:
+            logger.warning("[marketer] store 자가적재 실패 — load_stocks 비어 있음")
+            return False
+        snapshot = pd.concat(frames, ignore_index=True)
+        set_data(snapshot, etf_df=etf if (etf is not None and not etf.empty) else None)
+        logger.info(
+            f"[marketer] store 자가적재: {len(snapshot)}종목 "
+            f"(이 인스턴스 store가 비어 있었음 — 백그라운드 로드 실패 추정)"
+        )
+        return True
+    except Exception as e:
+        logger.warning(f"[marketer] store 자가적재 실패(graceful): {type(e).__name__}: {e}")
+        return False
+
+
 def recent_marketing_memory(limit: int = 60) -> dict:
     """최근 마케팅 글(marketing_drafts)에서 연속성 메모리 추출 — 중복 회피용(point 3).
 

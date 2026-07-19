@@ -19,6 +19,7 @@ from agents.marketer import (
     DEFAULT_FORMATS,
     FORMATS,
     THREADS_MAX,
+    ensure_store_primed,
     generate_batch,
     pick_hot_tickers,
     recent_marketing_memory,
@@ -150,6 +151,8 @@ async def generate_drafts(request: Request):
     memory = recent_marketing_memory()
 
     if not tickers:
+        # 빈 store 인스턴스면 요청 스레드에서 동기 적재(2026-07-19 근본원인 방어).
+        ensure_store_primed()
         hot_count = int(body.get("hot_count", 3) or 3)
         # 자동 선정 시에만 최근 종목 제외(관리자가 직접 입력하면 존중).
         tickers = pick_hot_tickers(limit=max(1, min(hot_count, 10)), exclude=memory["tickers"])
