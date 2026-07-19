@@ -124,6 +124,14 @@
 ⚠️ 잡·스크립트에서 생성기를 직접 부를 땐 **`_prime_name_store()` 필수**(API 프로세스는 기동 시
 적재). 안 하면 실수치가 0이 되어 헛글 가드에 걸리거나 삽화 없는 글이 나온다.
 
+🩹 **인메모리 store 자가치유 (2026-07-19, 커밋 `43cce7a`)** — "API 프로세스는 기동 시 적재"라는
+전제가 **깨질 수 있다**: Cloud Run `maxScale=3` 다중 인스턴스 중 일부는 백그라운드 로드가
+`_UnaryStreamMultiCallable ... _retry` 버그로 죽어 `_data_store`가 영구 empty가 된다(§8 참고).
+그 인스턴스에 서사/자동선정 요청이 떨어지면 삽화 종목 0개 → **502**. 방어책으로
+`agents/marketer.ensure_store_primed()`가 **store 비면 요청 스레드에서 동기 적재**(있으면 no-op)하도록
+`generate_narrative()`·`generate_drafts()` 자동선정 경로에 배선됨. ⚠️ 반드시 동기 —
+`run_in_executor`(백그라운드 스레드)가 바로 `_retry` 버그 발생 경로다.
+
 ### API (모두 관리자 전용 — `_is_admin` 게이트)
 - `POST /api/admin/marketing/narrative/generate` — 🧵 **서사 타래**(브로드캐스트 기본). `{tickers?}` = 삽화용
 - `POST /api/admin/marketing/generate` — 📉 종목글(리플라이 초안). `{tickers?, formats?, hot_count?}`
@@ -296,5 +304,12 @@
 ## 8. 알려진 한계 / 메모
 - 종목글 기본 Sonnet 승격(2026-06-27, JEON "퀄리티 별로" 피드백). 프롬프트에 실수치 ≥2개 인용 강제 + "AI한테 물어봤더니" 프레이밍 금지 + 헛소리 표현 금지. 그래도 어색하면 검수 탭에서 수정.
 - 스냅샷 미적재 환경(서버 밖·종목 미보유)에선 수치 없는 일반론 글이 나옴 → 로컬은 `prime_name_store`로 해결.
+- 🟡 **`_UnaryStreamMultiCallable ... _retry` (2026-07-19, 미해결 근본)** — Cloud Run 일부 인스턴스에서
+  백그라운드 `run_in_executor` 스레드의 `screener/main.py load_from_firestore`(30분 리로드)가 이 grpcio/
+  firestore 스레드 버그로 죽어 `set_data` 미호출 → 그 인스턴스 `_data_store` **영구 empty**. 콘텐츠 생성은
+  `ensure_store_primed()` 자가치유로 무관해졌으나(§3), **깨진 인스턴스의 데이터 신선도**는 여전히 낡음.
+  근본 트랙 = grpcio/google-api-core/google-cloud-firestore 버전 정합 + executor에서 Firestore client
+  재사용 제거(스레드마다 새 client 또는 메인스레드 로드). 요청-스레드 Firestore는 정상이라 API 응답은 무영향.
+  ⚠️ `--max-instances=1` 지혈은 **금지** — fresh 인스턴스가 같은 버그 경로로 떠 스크리너 전체가 degrade될 수 있음.
 - 토큰 60일 만료(~2026-08-25) 전 refresh 필요 — 자동 갱신 Job은 후속.
 - 관련 문서: [THREADS_PUBLISHING.md](THREADS_PUBLISHING.md)(토큰 발급), [LEGAL.md](LEGAL.md)(절대 원칙), [UNIT_ECONOMICS.md](UNIT_ECONOMICS.md)(비용), [PROGRESS.md](PROGRESS.md).
