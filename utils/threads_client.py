@@ -42,6 +42,65 @@ def is_enabled() -> bool:
     return bool(token and uid)
 
 
+# ──────────────────────────────────────────────
+# 성과 조회 (읽기) — 2026-08-09 추가
+# ──────────────────────────────────────────────
+#
+# 배경: 이 클라이언트는 3주간 **쓰기 전용**이었다. 62편을 발행하고 반응을 한 번도
+# 수집하지 않아서, 포맷 개편(THREADS_FORMAT.md §8)이 효과가 있었는지 원리적으로
+# 알 수 없었다. 2026-08-09에 API로 직접 뽑아보니 평균 조회 27 / 외부 댓글 0이었고,
+# 07-14 이전 발행 45편은 post_id조차 없어 영구 조회 불가다.
+# → 같은 실수를 반복하지 않기 위한 읽기 경로다. 자세한 실측은 docs/axis/NAVER_PREMIUM.md §0.
+
+INSIGHT_METRICS = "views,likes,replies,reposts,quotes"
+
+
+async def fetch_insights(post_id: str, *, timeout: float = 20.0) -> Optional[dict]:
+    """글 1개의 반응 지표. {views, likes, replies, reposts, quotes} 또는 None.
+
+    ⚠️ `replies`는 **자기 답글도 포함한다.** 타래로 발행하면 파트 수 - 1 만큼이
+    자동으로 잡히므로, 외부 반응을 보려면 호출부가 파트 수를 빼야 한다
+    (`external_replies` 참고).
+    """
+    token, _ = _creds()
+    if not (token and post_id):
+        return None
+    try:
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            r = await client.get(
+                f"{THREADS_API}/{post_id}/insights",
+                params={"metric": INSIGHT_METRICS, "access_token": token},
+            )
+            body = _json(r)
+    except Exception as e:
+        logger.warning(f"[threads] insights 조회 실패 {post_id}: {e}")
+        return None
+
+    if r.status_code >= 400 or "data" not in body:
+        logger.warning(f"[threads] insights 응답 오류 {post_id}: {_err(body, r)}")
+        return None
+
+    out: dict[str, int] = {}
+    for item in body.get("data", []):
+        name = item.get("name")
+        vals = item.get("values") or [{}]
+        try:
+            out[str(name)] = int(vals[0].get("value", 0) or 0)
+        except (TypeError, ValueError, IndexError):
+            out[str(name)] = 0
+    return out
+
+
+def external_replies(insights: dict, part_count: int) -> int:
+    """전체 답글에서 우리 자신의 타래 답글을 뺀 값 = 진짜 외부 반응.
+
+    2026-08-09 실측에서 17편 전부 `replies == part_count - 1`이었다. 즉 외부 댓글이
+    정확히 0이었는데, 이 보정 없이는 '댓글 1개씩 달렸다'로 오독하게 된다.
+    """
+    total = int(insights.get("replies", 0) or 0)
+    return max(0, total - max(0, part_count - 1))
+
+
 async def publish_text(
     text: str,
     *,

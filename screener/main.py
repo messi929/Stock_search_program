@@ -582,6 +582,7 @@ from api.routes.kis import router as axis_kis_router
 from api.routes.kis_ws import router as axis_kis_ws_router
 from api.routes.screener import router as axis_screener_router
 from api.routes.marketing import router as axis_marketing_router
+from api.routes.premium import router as axis_premium_router
 app.include_router(router)
 app.include_router(payment_router)
 app.include_router(user_router)
@@ -594,6 +595,7 @@ app.include_router(axis_kis_router)
 app.include_router(axis_kis_ws_router)
 app.include_router(axis_screener_router)
 app.include_router(axis_marketing_router)
+app.include_router(axis_premium_router)
 
 
 # 미처리 5xx 전역 핸들러 — 관리자 에러 모니터링 적재(2026-06-07).

@@ -12,7 +12,10 @@ const TABS = [
   { href: "/admin/users", label: "사용자" },
   { href: "/admin/usage", label: "사용량" },
   { href: "/admin/revenue", label: "수입" },
+  // 마케팅(스레드)과 프리미엄(네이버)은 별도 트랙 — 발행 방식부터 다르다.
+  // docs/axis/NAVER_PREMIUM.md
   { href: "/admin/marketing", label: "마케팅" },
+  { href: "/admin/premium", label: "프리미엄" },
   { href: "/admin/errors", label: "에러" },
   { href: "/admin/maintenance", label: "점검 공지" },
 ];

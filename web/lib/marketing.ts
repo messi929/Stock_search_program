@@ -48,6 +48,15 @@ export interface MarketingDraft {
   archetype: string; // 앵글 유형 (다양화 point 2)
   source: string;
   permalink: string;
+  /**
+   * 발행 후 수집한 반응 지표(2026-08-09~). 비어 있으면 아직 안 뽑은 것.
+   * ⚠️ insights.replies는 우리 타래 자기답글을 포함한다. 외부 반응은 external_replies를 봐야 한다.
+   */
+  insights: Partial<
+    Record<"views" | "likes" | "replies" | "reposts" | "quotes", number>
+  >;
+  external_replies: number;
+  insights_at: string | null;
   published_at: string | null;
   created_at: string | null;
   updated_at: string | null;
@@ -126,6 +135,17 @@ export const marketingApi = {
     }),
   publishStatus: () =>
     apiCall<{ enabled: boolean }>("/api/admin/marketing/publish-status"),
+  /** 발행분의 반응 지표를 Threads에서 다시 읽어온다. post_id 없는 옛 글은 skip. */
+  refreshInsights: (limit = 60) =>
+    apiCall<{
+      ok: boolean;
+      updated: number;
+      skipped_no_post_id: number;
+      failed: number;
+    }>("/api/admin/marketing/insights/refresh", {
+      method: "POST",
+      body: JSON.stringify({ limit }),
+    }),
   publish: (id: string) =>
     apiCall<{ ok: boolean; draft: MarketingDraft }>(
       `/api/admin/marketing/drafts/${id}/publish`,

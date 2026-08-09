@@ -79,6 +79,10 @@ def _serialize(doc_id: str, d: dict) -> dict:
         "archetype": d.get("archetype", "") or "",  # 앵글 유형(다양성 추적, point 2)
         "source": d.get("source", "haiku"),
         "permalink": d.get("permalink", ""),
+        # 성과(2026-08-09) — 발행 후 수집. 없으면 아직 안 뽑은 것.
+        "insights": d.get("insights") or {},
+        "external_replies": int(d.get("external_replies", 0) or 0),
+        "insights_at": _iso(d.get("insights_at")),
         "published_at": _iso(d.get("published_at")),
         "created_at": _iso(d.get("created_at")),
         "updated_at": _iso(d.get("updated_at")),
@@ -597,6 +601,82 @@ async def update_draft(request: Request, draft_id: str):
         logger.warning(f"[marketing] 초안 수정 실패 {draft_id}: {e}")
         return JSONResponse(status_code=500, content={"detail": "수정 실패"})
     return {"ok": True, "draft": _serialize(draft_id, doc.to_dict() or {})}
+
+
+@router.post("/insights/refresh")
+async def refresh_insights(request: Request):
+    """발행분의 반응 지표를 Threads에서 다시 읽어 초안에 기록. body: {limit?: int}.
+
+    2026-08-09 신설. 3주간 62편을 발행하고 반응을 한 번도 안 봤던 것에 대한 조치다
+    (docs/axis/NAVER_PREMIUM.md §0). `replies`는 우리 타래 답글을 포함하므로
+    `external_replies`로 보정해 함께 저장한다 — 이 보정이 없으면 외부 댓글 0을
+    '댓글 1개'로 오독한다.
+
+    07-14 이전 발행분은 post_id 기록이 없어 영구 조회 불가다(skipped로 집계).
+    """
+    if not _is_admin(request):
+        return _forbid()
+    if not threads_client.is_enabled():
+        return JSONResponse(status_code=400, content={"detail": "Threads 자격증명 미설정"})
+
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    limit = max(1, min(int(body.get("limit") or 60), 200))
+
+    from firebase_admin import firestore
+
+    from screener.db.firebase_client import get_db
+
+    db = get_db()
+    updated = skipped = failed = 0
+    try:
+        q = (
+            db.collection(_COLLECTION)
+            .order_by("created_at", direction=firestore.Query.DESCENDING)
+            .limit(limit)
+        )
+        docs = list(q.stream())
+    except Exception as e:
+        logger.warning(f"[marketing] insights 대상 조회 실패: {e}")
+        return JSONResponse(status_code=500, content={"detail": "조회 실패"})
+
+    for d in docs:
+        dd = d.to_dict() or {}
+        if dd.get("status") not in ("published", "partial"):
+            continue
+        ids = list(dd.get("published_ids") or [])
+        if not ids:
+            skipped += 1  # post_id 미기록(07-14 이전) — 조회 자체가 불가
+            continue
+        # 노출은 루트가 거의 전부 먹는다(THREADS_FORMAT.md §2-3). 루트만 본다.
+        ins = await threads_client.fetch_insights(str(ids[0]))
+        if ins is None:
+            failed += 1
+            continue
+        try:
+            d.reference.set(
+                {
+                    "insights": ins,
+                    "external_replies": threads_client.external_replies(
+                        ins, len(_parts_of(dd))
+                    ),
+                    "insights_at": firestore.SERVER_TIMESTAMP,
+                },
+                merge=True,
+            )
+            updated += 1
+        except Exception as e:
+            logger.warning(f"[marketing] insights 저장 실패 {d.id}: {e}")
+            failed += 1
+
+    return {
+        "ok": True,
+        "updated": updated,
+        "skipped_no_post_id": skipped,
+        "failed": failed,
+    }
 
 
 @router.delete("/drafts/{draft_id}")
