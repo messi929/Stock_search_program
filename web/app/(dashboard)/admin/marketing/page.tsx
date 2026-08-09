@@ -60,6 +60,7 @@ export default function AdminMarketingPage() {
   const [indexGenerating, setIndexGenerating] = useState(false);
   const [narrativeGenerating, setNarrativeGenerating] = useState(false);
   const [statusFilter, setStatusFilter] = useState("");
+  const [insightsRefreshing, setInsightsRefreshing] = useState(false);
 
   const indicesQ = useQuery({
     queryKey: ["admin", "marketing", "indices"],
@@ -195,11 +196,62 @@ export default function AdminMarketingPage() {
   return (
     <div className="space-y-6 max-w-3xl">
       <div>
-        <h2 className="font-semibold">마케팅 콘텐츠 공장</h2>
+        <h2 className="font-semibold">마케팅 콘텐츠 공장 — 스레드</h2>
         <p className="text-sm text-muted-foreground mt-1">
           스레드 글을 AI로 생성하고, 검수·수정 후 발행합니다. 종목을 비우면 오늘 화제
           종목을 자동 선정합니다. (추천 표현은 자동 필터됩니다)
         </p>
+        <p className="text-xs text-muted-foreground/70 mt-1">
+          네이버 프리미엄콘텐츠는 발행 방식이 달라 별도 트랙입니다 → 상단{" "}
+          <b>프리미엄</b> 탭.
+        </p>
+      </div>
+
+      {/* ── 실측 근거 배너 (2026-08-09) ──
+          3주치 발행 성과를 API로 직접 뽑은 결과다. 이 숫자를 화면에 박아두는 이유:
+          측정 없이 포맷만 3주 다듬었던 것이 이 화면에서 반복되지 않게 하려는 것. */}
+      <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 text-sm">
+        <p className="font-semibold text-amber-300">
+          브로드캐스트 자동 생성 동결 중
+        </p>
+        <p className="mt-1 text-xs text-muted-foreground leading-relaxed">
+          2026-08-09 실측: 발행 17편 <b>평균 조회 27</b> · 계정 팔로워 <b>24</b> ·{" "}
+          <b>외부 댓글 0</b>. 팔로워 밖으로 도달이 나가지 않아 포맷 비교가 성립하지
+          않습니다. 스케줄러(<code>axis-threads-daily</code>,{" "}
+          <code>axis-weekend-briefing</code>)는 PAUSED 상태이며, 수동 생성은 아래에서
+          계속 가능합니다.
+        </p>
+        <div className="mt-2 flex items-center gap-2 flex-wrap">
+          <Button
+            type="button"
+            size="sm"
+            variant="secondary"
+            disabled={insightsRefreshing || !publishEnabled}
+            onClick={async () => {
+              setInsightsRefreshing(true);
+              try {
+                const r = await marketingApi.refreshInsights();
+                toast.success(
+                  `성과 갱신 ${r.updated}건` +
+                    (r.skipped_no_post_id
+                      ? ` · post_id 없어 건너뜀 ${r.skipped_no_post_id}건`
+                      : "") +
+                    (r.failed ? ` · 실패 ${r.failed}건` : ""),
+                );
+                await draftsQ.refetch();
+              } catch {
+                toast.error("성과 갱신 실패");
+              } finally {
+                setInsightsRefreshing(false);
+              }
+            }}
+          >
+            {insightsRefreshing ? "갱신 중..." : "📊 발행분 성과 갱신"}
+          </Button>
+          <span className="text-[11px] text-muted-foreground">
+            07-14 이전 발행분은 post_id 미기록으로 영구 조회 불가입니다.
+          </span>
+        </div>
       </div>
 
       {/* ── 🧵 서사 타래 — 브로드캐스트의 기본 포맷 ── */}
@@ -618,6 +670,27 @@ function DraftCard({
             발행글 보기 ↗
           </a>
         )}
+        {/* 실제 성과 — 조회는 루트 글 기준. 댓글은 자기 타래 답글을 뺀 외부 반응만 센다.
+            (insights.replies를 그대로 쓰면 2파트글이 항상 '댓글 1'로 보인다) */}
+        {isPublished && (draft.insights?.views ?? null) !== null && (
+          <span
+            className="px-2 py-0.5 rounded-full text-[11px] bg-sky-500/15 text-sky-300 tabular-nums"
+            title="루트 글 기준. 댓글은 우리 타래 답글을 제외한 외부 반응."
+          >
+            조회 {draft.insights.views?.toLocaleString() ?? 0} · 좋아요{" "}
+            {draft.insights.likes ?? 0} · 외부댓글 {draft.external_replies ?? 0}
+          </span>
+        )}
+        {isPublished &&
+          !draft.insights_at &&
+          draft.published_ids.length === 0 && (
+            <span
+              className="px-2 py-0.5 rounded-full text-[11px] bg-zinc-500/15 text-zinc-400"
+              title="07-14 이전 발행분은 post_id를 남기지 않아 반응을 조회할 수 없다"
+            >
+              성과 조회 불가(post_id 없음)
+            </span>
+          )}
       </div>
 
       {/* 글의 핵심 긴장(앵글) — 하네스 v2 */}
