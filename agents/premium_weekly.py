@@ -17,12 +17,21 @@
 
 ## 데이터
 
-  - `repository.load_stocks("kr")`  — 종목명·업종·시총·거래대금·현재가
-  - `repository.load_history()`      — 주간 등락 계산(주초 종가 → 주말 종가)
-  - `repository.load_all_supply_history()` — 외국인·기관 수급(있으면)
+  - `pykrx.get_market_price_change`  — 전 종목 주간 시가/종가/등락률/**기간 누적 거래대금**
+  - `pykrx.get_market_cap_by_ticker` — 기준일 시가총액(업종 가중·규모별 분위용)
+  - `repository.load_stocks("kr")`    — 업종(sector)만. 느리게 변하므로 스냅샷으로 충분
 
-⚠️ `load_history()`는 전 종목 히스토리를 한 번에 읽는다. 주 1회 배치라 감수하지만,
-   일간으로 돌릴 물건이 아니다.
+## 왜 Firestore `history`를 쓰지 않는가 (2026-08-09 교체)
+
+처음엔 `repository.load_history()`로 만들었는데 실측해보니 그 컬렉션이 열화돼 있었다:
+해당 주 422종목뿐이고 시총 top100 중 29개만, **삼성전자·SK하이닉스가 아예 없었다.**
+그 표본으로 뽑은 첫 리포트는 "대형주 +6.00%"라고 썼지만 실제로는 **-3.52%**였다.
+정반대 결론이다.
+
+pykrx는 한 번에 2,872종목을 1.2초에 주고 거래대금이 기간 누적이라, 커버리지와
+'일간 값을 주간인 척 쓰던' 문제가 동시에 해결된다. 레거시 collector 의존도 사라진다.
+
+⚠️ KRX_ID / KRX_PW 환경변수 필요(Secret Manager: `krx-id`, `krx-pw`).
 """
 
 from __future__ import annotations
@@ -47,8 +56,9 @@ from utils.claude_client import MODEL_SONNET
 
 # 업종 집계에 최소 이만큼은 종목이 있어야 대표성이 있다고 본다.
 _MIN_SECTOR_MEMBERS = 3
-# 이 개수보다 적은 종목의 주간 등락만 구해졌으면 생성을 거부한다.
-_MIN_TICKERS = 200
+# 이 개수보다 적으면 KRX가 부분 응답을 준 것으로 본다(정상은 2,800종목 안팎).
+# 옛 history 방식에선 397종목도 통과해버렸다 — 그 표본엔 삼성전자가 없었다.
+_MIN_TICKERS = 1_500
 # 나열 상한 — 너무 많으면 읽히지 않고 토큰만 먹는다.
 _TOP_N = 12
 _SECTOR_N = 12
@@ -69,54 +79,103 @@ def _week_bounds(end: Optional[date] = None) -> tuple[date, date]:
     return monday, friday
 
 
-def _weekly_returns(hist: pd.DataFrame, start: date, end: date) -> pd.DataFrame:
-    """종목별 주간 등락률. 주 구간의 첫 종가 → 마지막 종가."""
-    if hist.empty:
+def _fetch_krx_weekly(start: date, end: date) -> pd.DataFrame:
+    """pykrx 1회 호출로 **전 종목** 주간 등락 + 기간 누적 거래대금.
+
+    Firestore `history` 컬렉션을 쓰지 않는 이유(2026-08-09 교체):
+    그 컬렉션은 레거시 collector가 채우는데 열화돼 있었다 — 해당 주 422종목,
+    시총 top100 중 29개, **삼성전자·SK하이닉스 누락**. 그 표본으로 주간 시장
+    리포트를 쓰면 그냥 틀린 글이 된다.
+
+    pykrx `get_market_price_change`는 한 번에 2,872종목을 1.2초에 주고,
+    **거래대금이 기간 누적**이라 '일간 값을 주간인 척' 쓰던 문제도 같이 사라진다.
+
+    ⚠️ KRX_ID/KRX_PW 환경변수가 필요하다(Secret Manager: krx-id/krx-pw).
+       없으면 pykrx가 로그인 실패 후 빈 응답을 주므로 여기서 None 처리된다.
+    """
+    from pykrx import stock
+
+    df = stock.get_market_price_change(
+        start.strftime("%Y%m%d"), end.strftime("%Y%m%d"), market="ALL"
+    )
+    if df is None or df.empty:
         return pd.DataFrame()
-    m = hist[(hist["date"] >= pd.Timestamp(start)) & (hist["date"] <= pd.Timestamp(end))]
-    if m.empty:
+
+    out = pd.DataFrame(
+        {
+            "ticker": df.index.astype(str),
+            "name": df["종목명"].astype(str),
+            "first": pd.to_numeric(df["시가"], errors="coerce"),
+            "last": pd.to_numeric(df["종가"], errors="coerce"),
+            "ret": pd.to_numeric(df["등락률"], errors="coerce"),
+            "trading_value": pd.to_numeric(df["거래대금"], errors="coerce"),
+        }
+    ).dropna(subset=["ret", "last"])
+    # 시가 0 = 그 주에 거래가 없던 종목(신규상장·거래정지). 등락률이 의미 없다.
+    return out[out["first"] > 0].reset_index(drop=True)
+
+
+def _fetch_krx_cap(on: date) -> pd.DataFrame:
+    """기준일 시가총액(억원). 업종 시총가중·규모별 분위에 쓴다."""
+    from pykrx import stock
+
+    cap = stock.get_market_cap_by_ticker(on.strftime("%Y%m%d"), market="ALL")
+    if cap is None or cap.empty:
         return pd.DataFrame()
-    m = m.sort_values("date")
-    agg = m.groupby("ticker")["close"].agg(["first", "last", "count"])
-    agg = agg[(agg["first"] > 0) & (agg["count"] >= 2)]
-    if agg.empty:
-        return pd.DataFrame()
-    agg["ret"] = (agg["last"] / agg["first"] - 1.0) * 100.0
-    return agg.reset_index()[["ticker", "first", "last", "ret"]]
+    return pd.DataFrame(
+        {
+            "ticker": cap.index.astype(str),
+            # repository의 market_cap과 단위를 맞춘다(억원).
+            "market_cap": pd.to_numeric(cap["시가총액"], errors="coerce").fillna(0)
+            / 1_0000_0000,
+        }
+    ).reset_index(drop=True)
 
 
 def build_weekly_snapshot(end: Optional[date] = None) -> Optional[dict[str, Any]]:
     """주간 리포트의 사실 스냅샷. 수치가 부족하면 None(= 생성 거부)."""
-    from screener.db import repository
-
     start, finish = _week_bounds(end)
 
     try:
-        stocks = repository.load_stocks("kr")
+        df = _fetch_krx_weekly(start, finish)
     except Exception as e:
-        logger.warning(f"[premium_weekly] 종목 로드 실패: {e}")
+        logger.warning(f"[premium_weekly] KRX 주간 시세 조회 실패: {e}")
         return None
-    if stocks is None or stocks.empty:
-        logger.warning("[premium_weekly] 종목 스냅샷 비어 있음 — 생성 거부")
-        return None
-
-    try:
-        hist = repository.load_history()
-    except Exception as e:
-        logger.warning(f"[premium_weekly] 히스토리 로드 실패: {e}")
-        return None
-
-    rets = _weekly_returns(hist, start, finish)
-    if len(rets) < _MIN_TICKERS:
+    if len(df) < _MIN_TICKERS:
         logger.warning(
-            f"[premium_weekly] 주간 등락 산출 종목 부족({len(rets)} < {_MIN_TICKERS}) — 생성 거부"
+            f"[premium_weekly] 주간 등락 산출 종목 부족({len(df)} < {_MIN_TICKERS}) — 생성 거부. "
+            f"KRX_ID/KRX_PW 설정과 KRX 점검 시간대를 확인할 것."
         )
         return None
 
-    df = stocks.merge(rets, on="ticker", how="inner")
-    df = df[df.get("close", 0) > 0].copy()
-    if df.empty:
+    try:
+        cap = _fetch_krx_cap(finish)
+    except Exception as e:
+        logger.warning(f"[premium_weekly] KRX 시총 조회 실패: {e}")
         return None
+    if cap.empty:
+        logger.warning("[premium_weekly] 시총 비어 있음 — 생성 거부")
+        return None
+    df = df.merge(cap, on="ticker", how="left")
+    df["market_cap"] = df["market_cap"].fillna(0)
+
+    # 업종은 느리게 변하므로 기존 스냅샷(네이버 수집분)을 그대로 붙인다.
+    # 없어도 업종 섹션만 빠질 뿐 리포트는 성립하므로 실패를 치명으로 보지 않는다.
+    try:
+        from screener.db import repository
+
+        stocks = repository.load_stocks("kr")
+        if stocks is not None and not stocks.empty and "sector" in stocks.columns:
+            df = df.merge(
+                stocks[["ticker", "sector"]].drop_duplicates("ticker"),
+                on="ticker",
+                how="left",
+            )
+    except Exception as e:
+        logger.warning(f"[premium_weekly] 업종 정보 결합 실패(업종 섹션 생략): {e}")
+    if "sector" not in df.columns:
+        df["sector"] = ""
+    df["sector"] = df["sector"].fillna("")
 
     # ── 업종 집계: 시총 가중. 단순평균은 잡주가 업종을 흔든다.
     sectors: list[dict] = []
@@ -128,6 +187,10 @@ def build_weekly_snapshot(end: Optional[date] = None) -> Optional[dict[str, Any]
             ret = (g["ret"] * w).sum() / w.sum() if w.sum() > 0 else g["ret"].mean()
             sectors.append({"name": str(name), "ret": round(float(ret), 2), "n": len(g)})
     sectors.sort(key=lambda x: x["ret"], reverse=True)
+    # 상/하위를 각각 잘라 쓰면 업종이 20개 남짓일 때 겹친다. 실제로 첫 실행에서 '제약'이
+    # 상위·하위에 동시에 나왔다 — 그대로 두면 글이 자기모순을 쓴다.
+    sectors_top = sectors[:_SECTOR_N]
+    sectors_bottom = sectors[len(sectors_top):][-_SECTOR_N:][::-1]
 
     # ── 규모별: 시총 3분위. 지수 하락이 대형주 편중인지 가르는 핵심 축이다.
     caps = df["market_cap"].fillna(0)
@@ -180,15 +243,52 @@ def build_weekly_snapshot(end: Optional[date] = None) -> Optional[dict[str, Any]
                     "share": round(float(getattr(r, "trading_value", 0) or 0) / total_value * 100, 2),
                 })
 
+    # ── 무결성 검사: 대표 종목이 표본에 있는가.
+    # pykrx는 전 종목을 한 번에 주므로 예전 history 방식 같은 표본 편향은 구조적으로
+    # 생기지 않는다. 다만 KRX가 부분 응답을 주는 경우(점검·장애)를 잡아야 해서
+    # 시가총액 최상위가 실제로 들어있는지 확인한다.
+    heavyweights = set(df.nlargest(30, "market_cap")["ticker"])
+    covered = len(heavyweights)
+    if df["market_cap"].sum() <= 0 or covered < 30:
+        logger.warning(
+            "[premium_weekly] 시총 결합 실패 — 업종·규모별 집계가 불가하므로 생성 거부"
+        )
+        return None
+
+    # ── 파생값은 **코드가 계산해서 준다.**
+    # 첫 실측(2026-08-09)에서 모델이 거래대금 상위 8개 합산을 54.01% 대신 58.01%로
+    # 썼다. 가드가 잡긴 했지만, 애초에 LLM에게 덧셈을 시킬 이유가 없다.
+    # (기호 위계를 코드가 붙이는 것과 같은 원칙 — 결정론적인 건 결정론적으로.)
+    shares = [t["share"] for t in turnover]
+    cum = {}
+    for k in (2, 4, 8):
+        if len(shares) >= k:
+            cum[k] = round(sum(shares[:k]), 2)
+    # 분모는 **전체 집계 종목**(보합 포함). up+down으로 나누면 보합이 빠져 비율이
+    # 부풀고, 독자가 "2,872개 중 몇 %"로 읽는 것과 어긋난다.
+    universe_cnt = len(df)
+    derived = {
+        "up_ratio": round(up / universe_cnt * 100, 1) if universe_cnt else 0.0,
+        "flat": max(0, universe_cnt - up - down),
+        "turnover_cum": cum,
+        "size_gap": (
+            round(size_buckets[0]["ret"] - size_buckets[-1]["ret"], 2)
+            if len(size_buckets) >= 2
+            else None
+        ),
+    }
+
     return {
         "market": "KR",
         "week_label": week_range_label(start, finish),
+        "derived": derived,
         "start": start.isoformat(),
         "end": finish.isoformat(),
         "universe": int(len(df)),
+        "sector_count": len(sectors),
         "breadth": {"up": up, "down": down},
-        "sectors_top": sectors[:_SECTOR_N],
-        "sectors_bottom": sectors[-_SECTOR_N:][::-1] if len(sectors) > _SECTOR_N else [],
+        "sectors_top": sectors_top,
+        "sectors_bottom": sectors_bottom,
         "sizes": size_buckets,
         "movers_up": movers_up,
         "movers_down": movers_down,
@@ -209,13 +309,16 @@ def format_facts(snap: dict) -> str:
     """
     L: list[str] = [
         f"[기간] {snap['week_label']} ({snap['start']} ~ {snap['end']})",
-        f"[집계 대상] 국내 {snap['universe']}종목",
+        f"[집계 대상] 국내 상장 전 종목 {snap['universe']}개(코스피+코스닥, KRX 기준)",
         f"[등락 폭] 오른 종목 {snap['breadth']['up']}개 / 내린 종목 {snap['breadth']['down']}개",
         "",
         "[규모별 주간 등락 — 시총 가중]",
     ]
     L += [f"- {b['name']}: {b['ret']:+.2f}% ({b['n']}종목)" for b in snap.get("sizes", [])]
 
+    # 업종 총 개수를 명시하지 않으면 모델이 "23개 업종 중" 같은 수를 지어낸다
+    # (첫 실행에서 실제로 환각했다 — 학습데이터의 코스피 업종 수로 보인다).
+    L += ["", f"[집계된 업종 수] {snap.get('sector_count', 0)}개"]
     L += ["", "[업종별 주간 등락 상위 — 시총 가중]"]
     L += [f"- {s['name']}: {s['ret']:+.2f}% ({s['n']}종목)" for s in snap.get("sectors_top", [])]
 
@@ -238,11 +341,24 @@ def format_facts(snap: dict) -> str:
     ]
 
     if snap.get("turnover"):
-        L += ["", "[거래대금 상위 종목과 시장 내 비중]"]
+        L += ["", "[거래대금 상위 종목과 비중 — 해당 주 누적 기준]"]
         L += [
-            f"- {t['name']}({t['ticker']}): 전체 거래대금의 {t['share']:.2f}%"
+            f"- {t['name']}({t['ticker']}): 주간 전체 거래대금의 {t['share']:.2f}%"
             for t in snap["turnover"]
         ]
+
+    # 파생값은 코드가 계산해 넘긴다 — 모델에게 덧셈을 시키면 틀린다(실측 확인).
+    d = snap.get("derived") or {}
+    if d:
+        L += ["", "[미리 계산된 파생 수치 — 이 값을 그대로 쓸 것. 직접 더하지 말 것]"]
+        L += [
+            f"- 상승 종목 비율: 전체 집계 종목 대비 {d.get('up_ratio')}%"
+            f" (보합 {d.get('flat', 0)}개 포함한 분모)"
+        ]
+        for k, v in (d.get("turnover_cum") or {}).items():
+            L.append(f"- 거래대금 상위 {k}개 종목 합산 비중: {v:.2f}%")
+        if d.get("size_gap") is not None:
+            L.append(f"- 대형주와 소형주 등락 격차: {d['size_gap']:+.2f}%포인트")
 
     return "\n".join(L)
 
@@ -268,8 +384,22 @@ _SYSTEM = f"""당신은 한국 주식 주간 컬럼을 쓰는 애널리스트입
 
 ## 절대 규칙
 - 아래 [사실]에 **없는 숫자는 절대 쓰지 마세요.** 종목명·티커도 [사실]에 있는 것만.
+  · **직접 덧셈하지 마세요.** 필요한 합계·비율·격차는 [미리 계산된 파생 수치]에
+    이미 있습니다. 거기 없는 합계가 필요하면 그 문장을 쓰지 마세요.
+  · 특히 **'전체 ○개 업종 중' 같은 총 개수를 지어내지 마세요.** [사실]에 적힌 수만 씁니다.
+- '지수'라고 쓸 때는 **무엇의 지수인지 밝히세요.** [사실]에 코스피·코스닥 지수 포인트는
+  없습니다. 규모별 집계를 '지수'로 부를 때는 반드시 '대형주 기준'처럼 한정합니다.
 - 지수(코스피/코스닥) 포인트 값은 [사실]에 없으면 언급하지 마세요. 추측 금지입니다.
-- 없는 데이터를 아쉬워하는 문장도 쓰지 마세요. 있는 것으로만 완결합니다."""
+- **주가 수준으로 시가총액을 추론하지 마세요.** "주가가 5만 원이 넘으니 대형주일 것"은
+  틀린 추론입니다. 주당 가격과 시총은 무관합니다. 규모 판단은 [사실]의 규모별 집계로만.
+- 집계 대상은 **전체 시장이 아닙니다.** '코스피 전 종목', '국내 증시 전체'로 확대해
+  쓰지 말고 '집계 대상 N종목 가운데'로 한정해 쓰세요.
+- 없는 데이터를 아쉬워하는 문장도 쓰지 마세요. 있는 것으로만 완결합니다.
+
+## 분량
+경쟁 글은 17,000자입니다. 섹션당 최소 2,000자를 채우세요. 섹션 4~5개를 쓰되,
+각 섹션에서 수치를 **다른 수치와 교차**시켜 파고들면 분량은 자연히 나옵니다.
+같은 문장을 바꿔 쓰며 늘리는 것은 즉시 반려 사유입니다."""
 
 
 class PremiumWeeklyAgent(BaseAgent):
