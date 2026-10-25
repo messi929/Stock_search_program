@@ -20,6 +20,9 @@ from screener.db.firebase_client import get_db
 
 # Firestore 배치 쓰기 한도
 _BATCH_LIMIT = 490  # 안전 마진 (공식 한도 500)
+# history 문서는 종목당 ~250~340행 배열(~30KB)이라 490개면 요청 10MiB 한도 초과
+# ("400 Transaction too big") → 문서 수가 아닌 크기 기준으로 작게 끊는다.
+_HISTORY_BATCH_LIMIT = 100
 
 
 # ──────────────────────────────────────────────
@@ -378,6 +381,27 @@ def save_themes(themes: dict, stock_themes: dict):
             }, merge=True)
         batch.commit(timeout=10)
 
+    # 2-1) 정리: 이번 수집에 없는 테마 문서·종목 테마 제거.
+    # 과거 EUC-KR 페이지를 utf-8로 읽어 깨진 문자열이 merge로 계속 남는 문제 방지.
+    # 부분 실패 수집으로 전체가 지워지지 않도록 정상 규모(100테마+)일 때만 실행.
+    if len(themes) >= 100:
+        stale_themes = [d.reference for d in col.select([]).stream() if d.id not in themes]
+        stale_stocks = [
+            d.reference for d in stock_col.select(["themes"]).stream()
+            if d.id not in stock_themes and (d.to_dict() or {}).get("themes")
+        ]
+        for i in range(0, len(stale_themes), _BATCH_LIMIT):
+            batch = db.batch()
+            for ref in stale_themes[i:i + _BATCH_LIMIT]:
+                batch.delete(ref)
+            batch.commit(timeout=10)
+        for i in range(0, len(stale_stocks), _BATCH_LIMIT):
+            batch = db.batch()
+            for ref in stale_stocks[i:i + _BATCH_LIMIT]:
+                batch.set(ref, {"themes": "", "theme_list": []}, merge=True)
+            batch.commit(timeout=10)
+        logger.info(f"테마 정리: 테마 문서 {len(stale_themes)}개 삭제, 종목 {len(stale_stocks)}개 테마 비움")
+
     # 3) 테마 그룹 요약 저장
     group_col = db.collection("theme_groups")
     group_themes = {}
@@ -455,9 +479,9 @@ def save_history(df: pd.DataFrame):
     import time as _time
 
     saved = 0
-    for i in range(0, len(tickers), _BATCH_LIMIT):
+    for i in range(0, len(tickers), _HISTORY_BATCH_LIMIT):
         batch = db.batch()
-        chunk = tickers[i:i + _BATCH_LIMIT]
+        chunk = tickers[i:i + _HISTORY_BATCH_LIMIT]
         for ticker in chunk:
             group = grouped.get_group(ticker).sort_values("date")
             records = []
@@ -491,10 +515,13 @@ def save_history(df: pd.DataFrame):
                     break
 
         # 배치 간 딜레이 (429 방지)
-        if i + _BATCH_LIMIT < len(tickers):
+        if i + _HISTORY_BATCH_LIMIT < len(tickers):
             _time.sleep(1)
 
-    logger.info(f"Firestore 히스토리 저장: {saved}/{len(tickers)}종목")
+    if saved < len(tickers):
+        logger.error(f"Firestore 히스토리 부분 저장: {saved}/{len(tickers)}종목")
+    else:
+        logger.info(f"Firestore 히스토리 저장: {saved}/{len(tickers)}종목")
 
 
 def load_history() -> pd.DataFrame:

@@ -630,53 +630,53 @@ def fetch_themes() -> tuple[dict, dict]:
         themes: {theme_no: theme_name}
         stock_themes: {ticker: [theme1, theme2, ...]}
     """
+    # 구 finance.naver.com/sise/theme 페이지는 stock.naver.com(SPA)으로 리다이렉트되어
+    # HTML 스크래핑이 0건이 됨 → 네이버 모바일 JSON API 사용 (UTF-8, 인코딩 문제 없음)
     logger.info("테마 데이터 수집 시작...")
     themes = {}
     stock_themes = {}  # ticker → [theme_names]
+    base = "https://m.stock.naver.com/api/stocks/theme"
+    page_size = 100
 
     # 1) 전체 테마 목록 (페이지네이션)
-    for page in range(1, 50):
+    for page in range(1, 20):
         try:
-            url = f"https://finance.naver.com/sise/theme.naver?&page={page}"
-            resp = requests.get(url, headers=_HEADERS, timeout=5)
-            resp.encoding = "utf-8"
-            soup = BeautifulSoup(resp.text, "html.parser")
-
-            found = False
-            for a in soup.select("td.col_type1 a"):
-                name = a.text.strip()
-                href = a.get("href", "")
-                if name and "no=" in href:
-                    no = href.split("no=")[-1].split("&")[0]
-                    themes[no] = name
-                    found = True
-
-            if not found:
+            resp = requests.get(base, params={"page": page, "pageSize": page_size},
+                                headers=_HEADERS, timeout=10)
+            resp.raise_for_status()
+            data = resp.json()
+            groups = data.get("groups") or []
+            for g in groups:
+                no, name = g.get("no"), str(g.get("name", "")).strip()
+                if no is not None and name:
+                    themes[str(no)] = name
+            if not groups or len(themes) >= int(data.get("totalCount") or 0):
                 break
             time.sleep(0.3)
-        except Exception:
+        except Exception as e:
+            logger.warning(f"테마 목록 수집 실패 (page={page}): {e}")
             break
 
     logger.info(f"테마 수집: {len(themes)}개")
 
-    # 2) 각 테마별 종목 매핑
+    # 2) 각 테마별 종목 매핑 (pageSize 상한 100 → 큰 테마는 페이지 넘김)
     for no, name in themes.items():
         try:
-            url = f"https://finance.naver.com/sise/sise_group_detail.naver?type=theme&no={no}"
-            resp = requests.get(url, headers=_HEADERS, timeout=5)
-            resp.encoding = "utf-8"
-            soup = BeautifulSoup(resp.text, "html.parser")
-
-            for a in soup.select("div.name_area a"):
-                href = a.get("href", "")
-                match = re.search(r"code=(\d{6})", href)
-                if match:
-                    ticker = match.group(1)
-                    if ticker not in stock_themes:
-                        stock_themes[ticker] = []
-                    stock_themes[ticker].append(name)
-
-            time.sleep(0.3)
+            seen = 0
+            for page in range(1, 10):
+                resp = requests.get(f"{base}/{no}", params={"page": page, "pageSize": page_size},
+                                    headers=_HEADERS, timeout=10)
+                resp.raise_for_status()
+                data = resp.json()
+                stocks = data.get("stocks") or []
+                for s in stocks:
+                    code = str(s.get("itemCode", ""))
+                    if s.get("stockType") == "domestic" and re.fullmatch(r"\d{6}", code):
+                        stock_themes.setdefault(code, []).append(name)
+                seen += len(stocks)
+                time.sleep(0.3)
+                if not stocks or seen >= int(data.get("totalCount") or 0):
+                    break
         except Exception:
             continue
 
