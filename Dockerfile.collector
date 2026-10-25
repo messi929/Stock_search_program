@@ -16,7 +16,8 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # 데스크톱 UI 불필요
-RUN pip uninstall -y pywebview pystray Pillow 2>/dev/null || true
+# Pillow는 제거하지 않음 — pykrx→matplotlib가 PIL을 필요로 함 (외국인/기관 수급)
+RUN pip uninstall -y pywebview pystray 2>/dev/null || true
 
 # 소스 복사 — collector + screener 패키지 모두 필요
 # (.dockerignore가 collector.py를 제외하므로 명시적 COPY)

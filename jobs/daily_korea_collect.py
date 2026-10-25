@@ -27,6 +27,7 @@ Cloud Run Job 등록 (참고, 실제 명령은 ROADMAP에서 확정):
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 import time
 from datetime import datetime, timedelta
@@ -88,6 +89,17 @@ def detect_missing_dates(
             missing.append(date)
 
     return missing
+
+
+def krx_login_ok() -> bool:
+    """KRX 계정 로그인 사전 확인.
+
+    로그인 실패(예: CD010 비밀번호 만료) 시 pykrx는 예외 없이 빈 DataFrame을 돌려줘
+    휴장일과 구분이 안 됨 → 잡이 '성공'으로 끝나며 수주간 0건 수집이 묻혔음(2026-10).
+    """
+    from pykrx.website.comm.auth import build_krx_session
+
+    return build_krx_session(os.getenv("KRX_ID"), os.getenv("KRX_PW")) is not None
 
 
 def run_daily_collect(
@@ -194,6 +206,13 @@ def main(argv: list[str] | None = None) -> int:
 
     target = args.target or yesterday_business_day()
     markets = ("KOSPI", "KOSDAQ") if args.market == "both" else (args.market,)
+
+    if not args.dry_run and not krx_login_ok():
+        logger.error(
+            "KRX 로그인 실패 — 수집 중단. 비밀번호 만료(CD010) 여부 확인 후 "
+            "Secret Manager krx-pw 새 버전 등록 필요."
+        )
+        return 2
 
     started = time.time()
     summary = run_daily_collect(

@@ -17,7 +17,9 @@ steps:
         REGION="asia-northeast3"
         IMAGE="gcr.io/$PROJECT_ID/stock-collector"
         CLOUD_URL="https://stock-screener-1043976673827.$${REGION}.run.app"
-        SECRETS="FIREBASE_CREDENTIALS=firebase-key:latest,ADMIN_KEY=admin-key:latest"
+        # KRX 계정은 prod(all-of-asset) 시크릿을 프로젝트 간 참조 — 비밀번호 갱신 시 한 곳만 수정
+        KRX_SECRETS="KRX_ID=projects/1043976673827/secrets/krx-id:latest,KRX_PW=projects/1043976673827/secrets/krx-pw:latest"
+        SECRETS="FIREBASE_CREDENTIALS=firebase-key:latest,ADMIN_KEY=admin-key:latest,$${KRX_SECRETS}"
         SECRETS_LIGHT="FIREBASE_CREDENTIALS=firebase-key:latest,ADMIN_KEY=admin-key:latest"
 
         deploy_job() {
