@@ -37,13 +37,14 @@ from loguru import logger
 # 핵심 4개 투자자 카테고리 (korea_market.md §1.2 권장 — 9개 → 4개로 축소)
 # ⚠️ 2026-05-23: KRX가 카테고리명 변경 — "외국인합계"(과거) → "외국인"(현재).
 # 이전 이름은 KRX에서 rows=0 + KeyError 반환. 백필(2026-05-22)에서 외국인 전량 누락 → 재백필.
-CORE_INVESTORS: tuple[str, ...] = ("외국인", "기관합계", "연기금등", "개인")
+# ⚠️ 2026-10-25: pykrx 1.2.8 키는 "연기금"("연기금등"은 KeyError → pension 필드 전 기간 미저장이었음).
+CORE_INVESTORS: tuple[str, ...] = ("외국인", "기관합계", "연기금", "개인")
 
 # pykrx → Firestore 필드명 매핑
 INVESTOR_FIELD_PREFIX: dict[str, str] = {
     "외국인": "foreign",
     "기관합계": "institution",
-    "연기금등": "pension",
+    "연기금": "pension",
     "개인": "individual",
 }
 

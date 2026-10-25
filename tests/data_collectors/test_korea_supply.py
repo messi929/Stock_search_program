@@ -101,9 +101,9 @@ def test_collect_daily_snapshot_column_mapping():
     """4개 투자자 카테고리별 매매 데이터가 영문 prefix 필드로 정확히 매핑되어야 한다."""
     pykrx = _mk_pykrx_mock(
         daily_responses={
-            "외국인합계": _mk_net_purchase_df(["005930", "000660"], [1_000_000_000, -500_000_000]),
+            "외국인": _mk_net_purchase_df(["005930", "000660"], [1_000_000_000, -500_000_000]),
             "기관합계": _mk_net_purchase_df(["005930", "000660"], [800_000_000, 200_000_000]),
-            "연기금등": _mk_net_purchase_df(["005930", "000660"], [300_000_000, 100_000_000]),
+            "연기금": _mk_net_purchase_df(["005930", "000660"], [300_000_000, 100_000_000]),
             "개인": _mk_net_purchase_df(["005930", "000660"], [-700_000_000, 400_000_000]),
         }
     )
@@ -117,13 +117,13 @@ def test_collect_daily_snapshot_column_mapping():
     samsung = df[df["ticker"] == "005930"].iloc[0]
     assert samsung["date"] == "20251231"
     assert samsung["market"] == "KOSPI"
-    # 외국인합계 → foreign_*
+    # 외국인 → foreign_*
     assert samsung["foreign_net_buy_value"] == 1_000_000_000
     assert samsung["foreign_buy_value"] == 1_000_000_000 + 500_000_000
     assert samsung["foreign_sell_value"] == 500_000_000
     # 기관합계 → institution_*
     assert samsung["institution_net_buy_value"] == 800_000_000
-    # 연기금등 → pension_*
+    # 연기금 → pension_*
     assert samsung["pension_net_buy_value"] == 300_000_000
     # 개인 → individual_*
     assert samsung["individual_net_buy_value"] == -700_000_000
