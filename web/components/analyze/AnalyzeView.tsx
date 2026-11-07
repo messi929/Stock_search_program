@@ -15,6 +15,7 @@
  * (event/macro/korean)는 내부 제공자로만 잔존(UI 미노출) — 카드 렌더링은 휴면 폴백.
  */
 import { useEffect } from "react";
+import { Share2 } from "lucide-react";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -22,6 +23,7 @@ import { toast } from "sonner";
 import { apiCall } from "@/lib/api";
 
 import { AddToWatchlistButton } from "@/components/analyze/AddToWatchlistButton";
+import { AnalysisSteps } from "@/components/analyze/AnalysisSteps";
 import { AnalystCard } from "@/components/analyze/AnalystCard";
 import { EventAnalystCard } from "@/components/analyze/EventAnalystCard";
 import { InstantCard } from "@/components/analyze/InstantCard";
@@ -39,6 +41,10 @@ import { StrategistCard } from "@/components/analyze/StrategistCard";
 import { ValidateButton } from "@/components/analyze/ValidateButton";
 import { ValidatorCard } from "@/components/analyze/ValidatorCard";
 import { Disclaimer } from "@/components/legal/Disclaimer";
+import { PriceChange } from "@/components/stocks/PriceChange";
+import { StockAvatar } from "@/components/stocks/StockAvatar";
+import { StockSnapshot } from "@/components/stocks/StockSnapshot";
+import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { useKisPrice } from "@/hooks/useKisPrice";
 import { useStockSearch } from "@/hooks/useStockSearch";
@@ -210,7 +216,7 @@ export function AnalyzeView({ ticker }: { ticker: string }) {
     if (horizon === run?.horizon) return;
     const meta = HORIZON_BY_ID[horizon];
     const ok = window.confirm(
-      `'${meta.name}' 시계로 다시 분석합니다.\n새 분석 1회 비용이 발생합니다. 진행하시겠어요?`,
+      `'${meta.name}' 관점으로 다시 분석합니다.\n이번 달 분석 횟수 1회가 차감됩니다. 진행하시겠어요?`,
     );
     if (ok) startHorizon(horizon);
   };
@@ -242,62 +248,48 @@ export function AnalyzeView({ ticker }: { ticker: string }) {
           : isKR
             ? "한국 시장"
             : "미국 시장";
-  const marketFlag = isKR ? "🇰🇷" : "🇺🇸";
 
   return (
-    <div className="space-y-6 max-w-5xl">
+    <div className="space-y-6">
       {/* Header */}
       <header className="space-y-4">
         <div className="flex items-start justify-between gap-4 flex-wrap">
-          <div>
+          <div className="min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
-              <h1 className="text-2xl font-bold font-mono">{ticker}</h1>
+              <StockAvatar ticker={ticker} name={displayName} className="size-10 text-base" />
+              <h1 className="text-2xl font-bold">{displayName ?? ticker}</h1>
               <span
-                className={`text-xs px-2 py-0.5 rounded-full border font-medium ${
-                  isKR
-                    ? "bg-rose-500/10 text-rose-700 border-rose-500/30"
-                    : "bg-sky-500/10 text-sky-700 border-sky-500/30"
-                }`}
+                className="rounded-md bg-muted px-1.5 py-0.5 text-xs font-medium text-muted-foreground"
                 title={isKR ? "한국 시장 — 일별 외국인·기관 수급 데이터 제공" : "미국 시장 — 일별 외국인·기관 수급 데이터 없음"}
               >
-                {marketFlag} {exchangeLabel}
+                {exchangeLabel}
               </span>
             </div>
             {displayName ? (
-              <p className="text-sm text-muted-foreground mt-1">
-                {displayName}
-                {displayPrice != null
-                  ? ` · ${displayPrice.toLocaleString()}${isKR ? "원" : "달러"}`
-                  : ""}
-                {displayChangePct != null && (
-                  <span
-                    className={`ml-1 text-xs font-medium ${
-                      displayChangePct > 0
-                        ? "text-red-500"
-                        : displayChangePct < 0
-                          ? "text-blue-500"
-                          : "text-gray-500"
-                    }`}
-                    title="KIS 라이브 등락률 (백엔드 5초 캐시)"
-                  >
-                    {displayChangePct > 0 ? "+" : ""}
-                    {displayChangePct.toFixed(2)}%
-                  </span>
-                )}
+              <p className="mt-0.5 text-sm text-muted-foreground tabular-nums">{ticker}</p>
+            ) : null}
+            {displayPrice != null && (
+              <div className="mt-2 flex flex-wrap items-baseline gap-x-2">
+                <span className="text-3xl font-bold tabular-nums">
+                  {displayPrice.toLocaleString()}
+                  <span className="ml-0.5 text-lg font-semibold">{isKR ? "원" : "달러"}</span>
+                </span>
+                <PriceChange pct={displayChangePct} className="text-base" />
                 {displayUpdatedAt && (
-                  <span className="ml-2 text-[10px]" title="Analyst 분석 시점">
-                    ⏱ {new Date(displayUpdatedAt).toLocaleString("ko-KR", {
+                  <span className="text-xs text-muted-foreground" title="분석 기준 시점">
+                    {new Date(displayUpdatedAt).toLocaleString("ko-KR", {
                       month: "numeric",
                       day: "numeric",
                       hour: "2-digit",
                       minute: "2-digit",
-                    })}
+                    })}{" "}
+                    기준
                   </span>
                 )}
-              </p>
-            ) : null}
+              </div>
+            )}
           </div>
-          {/* 결과 단계에서만 시계 전환 노출(재실행). 선택 단계에선 chooser가 담당. */}
+          {/* 결과 단계에서만 기간 전환 노출(재실행). 선택 단계에선 chooser가 담당. */}
           {run?.horizon ? (
             <HorizonSwitch current={run.horizon} onSelect={switchHorizon} />
           ) : null}
@@ -321,9 +313,10 @@ export function AnalyzeView({ ticker }: { ticker: string }) {
               type="button"
               onClick={handleShare}
               title="현재 분석 페이지 링크를 클립보드에 복사"
-              className="inline-flex items-center h-9 px-3 rounded-md border text-sm hover:bg-muted/50 transition"
+              className="inline-flex items-center gap-1.5 h-9 px-3 rounded-lg border bg-card text-sm font-medium hover:bg-muted transition"
             >
-              🔗 공유
+              <Share2 aria-hidden="true" className="size-4" />
+              공유
             </button>
           </div>
         )}
@@ -334,13 +327,96 @@ export function AnalyzeView({ ticker }: { ticker: string }) {
               type="button"
               onClick={handleShare}
               title="현재 분석 페이지 링크를 클립보드에 복사"
-              className="inline-flex items-center h-9 px-3 rounded-md border text-sm hover:bg-muted/50 transition"
+              className="inline-flex items-center gap-1.5 h-9 px-3 rounded-lg border bg-card text-sm font-medium hover:bg-muted transition"
             >
-              🔗 공유
+              <Share2 aria-hidden="true" className="size-4" />
+              공유
             </button>
           </div>
         )}
       </header>
+
+      <StockSnapshot ticker={ticker} isKR={isKR} />
+
+      {/* 선택 단계 — 분석 기간 선택 (자동 실행 없음) */}
+      {!runPersona ? (
+        <Card>
+          <CardContent className="p-5">
+            <HorizonChooser
+              defaultHorizon={storeHorizon}
+              onStart={startHorizon}
+            />
+          </CardContent>
+        </Card>
+      ) : (
+        <>
+          {/* Overall status */}
+          {runError ? (
+            <Card>
+              <CardContent className="p-4 text-sm text-destructive space-y-2">
+                <p>⚠️ {runError}</p>
+                {runUpgradeUrl && (
+                  <Link
+                    href={runUpgradeUrl}
+                    className={buttonVariants({ size: "sm" })}
+                  >
+                    Pro 플랜 보기 →
+                  </Link>
+                )}
+              </CardContent>
+            </Card>
+          ) : overallElapsed !== null ? (
+            <p className="text-xs text-muted-foreground">
+              분석 완료 ({overallElapsed}초)
+              {likelyCached && (
+                <span
+                  className="ml-2 px-1.5 py-0.5 rounded bg-info/15 text-info text-[10px] font-medium"
+                  title="이전 분석 결과가 캐시돼 즉시 응답됨 (Claude API 비호출, 비용 없음)"
+                >
+                  캐시된 결과
+                </span>
+              )}
+            </p>
+          ) : (
+            <Card>
+              <CardContent className="space-y-3 p-5">
+                {isStrategist && <AnalysisSteps status={strategistStatus} />}
+                <p className="text-center text-xs text-muted-foreground">
+                  보통 1분 안팎 걸리고, 다른 화면으로 이동해도 계속 진행됩니다.
+                </p>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* 페르소나 그룹별 카드 분기 */}
+          {isStrategist ? (
+            <>
+              {/* 빠른 참고 — 정밀 종합(Strategist) 도착 전까지만 노출 */}
+              {run?.instantSnapshot && strategistStatus.strategist !== "done" && (
+                <InstantCard
+                  snapshot={run.instantSnapshot}
+                  summary={run.instantSummary}
+                />
+              )}
+              <StrategistCard
+                data={strategistFlow.strategist}
+                status={strategistStatus.strategist}
+                currentPrice={strategistFlow.analyst?.technical.current_price ?? null}
+                ticker={ticker}
+              />
+            </>
+          ) : runPersona === "event" ? (
+            <EventAnalystCard data={dataDriven.event} status={dataDrivenStatus.event} />
+          ) : runPersona === "macro" ? (
+            <MacroPmCard data={dataDriven.macro} status={dataDrivenStatus.macro} />
+          ) : runPersona === "korean" ? (
+            <KoreanSpecialistCard
+              data={dataDriven.korean}
+              status={dataDrivenStatus.korean}
+            />
+          ) : null}
+        </>
+      )}
 
       {/* KIS 라이브 시장 데이터 — KR 종목만, AI 분석 진행 중에도 즉시 노출 */}
       {isKR && (
@@ -368,91 +444,25 @@ export function AnalyzeView({ ticker }: { ticker: string }) {
         isKR={isKR}
       />
 
-      {/* 선택 단계 — 투자 시계 선택 (자동 실행 없음) */}
-      {!runPersona ? (
-        <Card>
-          <CardContent className="p-5">
-            <HorizonChooser
-              defaultHorizon={storeHorizon}
-              onStart={startHorizon}
-            />
-          </CardContent>
-        </Card>
-      ) : (
-        <>
-          {/* Overall status */}
-          {runError ? (
-            <Card>
-              <CardContent className="p-4 text-sm text-destructive space-y-2">
-                <p>⚠️ {runError}</p>
-                {runUpgradeUrl && (
-                  <Link
-                    href={runUpgradeUrl}
-                    className="inline-flex items-center rounded-md bg-amber-500/90 px-3 py-1.5 text-xs font-medium text-white hover:bg-amber-500"
-                  >
-                    Pro 플랜 보기 →
-                  </Link>
-                )}
-              </CardContent>
-            </Card>
-          ) : overallElapsed !== null ? (
-            <p className="text-xs text-muted-foreground">
-              전체 분석 완료 ({overallElapsed}초)
-              {likelyCached && (
-                <span
-                  className="ml-2 px-1.5 py-0.5 rounded bg-sky-500/15 text-sky-700 text-[10px] font-medium"
-                  title="이전 분석 결과가 캐시돼 즉시 응답됨 (Claude API 비호출, 비용 없음)"
-                >
-                  ⚡ 캐시된 결과
-                </span>
-              )}
-            </p>
-          ) : (
-            <p className="text-xs text-muted-foreground">
-              분석 진행 중... (보통 30~90초, 캐시 시 즉시)
-            </p>
-          )}
-
-          {/* 페르소나 그룹별 카드 분기 */}
-          {isStrategist ? (
-            <>
-              {/* 빠른 참고 — 정밀 종합(Strategist) 도착 전까지만 노출 */}
-              {run?.instantSnapshot && strategistStatus.strategist !== "done" && (
-                <InstantCard
-                  snapshot={run.instantSnapshot}
-                  summary={run.instantSummary}
-                />
-              )}
-              <StrategistCard
-                data={strategistFlow.strategist}
-                status={strategistStatus.strategist}
-                currentPrice={strategistFlow.analyst?.technical.current_price ?? null}
-                ticker={ticker}
-              />
-              <ValidatorCard
-                data={strategistFlow.validator}
-                status={strategistStatus.validator}
-              />
-              <AnalystCard
-                data={strategistFlow.analyst}
-                status={strategistStatus.analyst}
-              />
-              <ResearchCard
-                data={strategistFlow.research}
-                status={strategistStatus.research}
-              />
-            </>
-          ) : runPersona === "event" ? (
-            <EventAnalystCard data={dataDriven.event} status={dataDrivenStatus.event} />
-          ) : runPersona === "macro" ? (
-            <MacroPmCard data={dataDriven.macro} status={dataDrivenStatus.macro} />
-          ) : runPersona === "korean" ? (
-            <KoreanSpecialistCard
-              data={dataDriven.korean}
-              status={dataDrivenStatus.korean}
-            />
-          ) : null}
-        </>
+      {/* 근거 카드 — 결론을 본 뒤 필요할 때 내려서 확인 */}
+      {runPersona && isStrategist && (
+        <section aria-labelledby="analysis-detail" className="space-y-4">
+          <h2 id="analysis-detail" className="text-lg font-semibold">
+            분석 근거 자세히 보기
+          </h2>
+          <ValidatorCard
+            data={strategistFlow.validator}
+            status={strategistStatus.validator}
+          />
+          <AnalystCard
+            data={strategistFlow.analyst}
+            status={strategistStatus.analyst}
+          />
+          <ResearchCard
+            data={strategistFlow.research}
+            status={strategistStatus.research}
+          />
+        </section>
       )}
 
       <Disclaimer />

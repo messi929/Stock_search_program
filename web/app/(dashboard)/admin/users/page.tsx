@@ -17,7 +17,7 @@ const FILTERS = [
 ];
 
 function tierBadge(u: AdminUser) {
-  if (u.suspended) return <span className="text-red-500">정지</span>;
+  if (u.suspended) return <span className="text-destructive">정지</span>;
   if (u.tier === "pro") return <span className="text-primary font-medium">Pro</span>;
   return <span className="text-muted-foreground">Free</span>;
 }
@@ -64,7 +64,7 @@ function UsersInner() {
       </div>
 
       {isLoading && <p className="text-sm text-muted-foreground">불러오는 중...</p>}
-      {isError && <p className="text-sm text-red-500">조회 실패 (권한 확인)</p>}
+      {isError && <p className="text-sm text-destructive">조회 실패 (권한 확인)</p>}
 
       {!isLoading && !isError && (
         <div className="rounded-xl ring-1 ring-foreground/10 overflow-hidden">
@@ -85,7 +85,7 @@ function UsersInner() {
                       {u.email || u.uid}
                     </Link>
                     {u.suspicious && !u.suspended && (
-                      <span className="ml-2 text-xs text-amber-500">의심</span>
+                      <span className="ml-2 text-xs text-caution">의심</span>
                     )}
                   </td>
                   <td className="px-3 py-2">{tierBadge(u)}</td>

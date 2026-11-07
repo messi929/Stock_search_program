@@ -57,14 +57,14 @@ export function SavedScreenersList({ onLoad, activeId }: Props) {
             role="listitem"
             className={`flex items-center gap-1 rounded-full border pl-3 pr-1 py-0.5 text-sm transition ${
               active
-                ? "border-amber-500 bg-amber-500/10"
+                ? "border-primary bg-primary/10"
                 : "hover:bg-muted"
             }`}
           >
             <button
               type="button"
               onClick={() => onLoad(s)}
-              className="font-medium focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 rounded"
+              className="font-medium focus:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded"
             >
               {s.name}
             </button>

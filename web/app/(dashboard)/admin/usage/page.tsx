@@ -44,7 +44,7 @@ export default function AdminUsagePage() {
       </div>
 
       {isLoading && <p className="text-sm text-muted-foreground">집계 중...</p>}
-      {isError && <p className="text-sm text-red-500">조회 실패 (권한 확인)</p>}
+      {isError && <p className="text-sm text-destructive">조회 실패 (권한 확인)</p>}
 
       {data && (
         <>

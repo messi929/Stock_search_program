@@ -28,14 +28,14 @@ const TIERS = [
     yearlyWas: null,
     yearlyOff: null,
     desc: "처음 시작하는 투자자",
-    cta: "🚀 무료로 시작",
+    cta: "무료로 시작",
     ctaHref: "/login",
     highlight: false,
     features: [
       "관심 종목 무제한",
       "AI 분석 월 20회",
       "실시간 검증 월 10회",
-      "투자 시계 — 단기 (수일~1개월)",
+      "분석 기간 — 단기 (수일~1개월)",
       "스마트 리스트 6개",
     ],
   },
@@ -50,14 +50,14 @@ const TIERS = [
     yearlyWas: "398,000원",
     yearlyOff: "20% 할인",
     desc: "꾸준히 분석하는 투자자",
-    cta: "💎 Pro 시작",
+    cta: "Pro 시작",
     ctaHref: "/login",
     highlight: true,
     features: [
       "관심 종목 무제한",
       "AI 분석 월 100회 (공정사용)",
       "실시간 검증 월 50회",
-      "투자 시계 4종 전체 (단중기·중기·장기 포함)",
+      "분석 기간 4종 전체 (단중기·중기·장기 포함)",
       "스마트 리스트 17개 전체",
       "커스텀 스크리너 + AI 자연어 종목 발견",
     ],
@@ -87,11 +87,11 @@ export default function PricingPage() {
           {TIERS.map((t) => (
             <Card
               key={t.id}
-              className={t.highlight ? "border-amber-500/60 ring-2 ring-amber-500/20" : ""}
+              className={t.highlight ? "border-caution/60 ring-2 ring-caution/20" : ""}
             >
               <CardContent className="p-6 space-y-4">
                 {t.highlight && (
-                  <span className="inline-block text-xs font-medium px-2 py-0.5 rounded bg-amber-500 text-black">
+                  <span className="inline-block text-xs font-medium px-2 py-0.5 rounded bg-caution text-caution-foreground">
                     인기
                   </span>
                 )}
@@ -106,7 +106,7 @@ export default function PricingPage() {
                         {t.was}
                       </span>
                       {t.off && (
-                        <span className="text-xs font-semibold px-1.5 py-0.5 rounded bg-red-500/15 text-red-500">
+                        <span className="text-xs font-semibold px-1.5 py-0.5 rounded bg-primary/10 text-primary">
                           {t.off}
                         </span>
                       )}
@@ -127,7 +127,7 @@ export default function PricingPage() {
                       )}
                       <span className="text-foreground">{t.yearly}</span>
                       {t.yearlyOff && (
-                        <span className="font-semibold text-red-500">
+                        <span className="font-semibold text-primary">
                           {t.yearlyOff}
                         </span>
                       )}
@@ -142,7 +142,7 @@ export default function PricingPage() {
                 <ul className="space-y-2 text-sm">
                   {t.features.map((f) => (
                     <li key={f} className="flex items-start gap-2">
-                      <span className="text-amber-500 mt-0.5">✓</span>
+                      <span className="text-caution mt-0.5">✓</span>
                       <span>{f}</span>
                     </li>
                   ))}

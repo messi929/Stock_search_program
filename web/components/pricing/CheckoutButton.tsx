@@ -42,8 +42,8 @@ export function CheckoutButton() {
   if (isPro) {
     return (
       <div className="space-y-2">
-        <div className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-center text-sm font-medium text-amber-600">
-          💎 이미 Pro를 이용 중입니다
+        <div className="rounded-md border border-caution/40 bg-caution/10 px-3 py-2 text-center text-sm font-medium text-caution">
+          이미 Pro를 이용 중입니다
         </div>
         <Link href="/settings/profile" className="block">
           <Button variant="outline" className="w-full">
@@ -60,7 +60,7 @@ export function CheckoutButton() {
       onClick={() => setPlan(key)}
       className={`flex-1 rounded-md px-2 py-1.5 text-xs font-medium transition-colors ${
         plan === key
-          ? "bg-amber-500 text-black"
+          ? "bg-caution text-caution-foreground"
           : "bg-muted text-muted-foreground hover:bg-muted/70"
       }`}
     >
@@ -68,8 +68,8 @@ export function CheckoutButton() {
     </button>
   );
 
-  const ctaSignedIn = trialEligible ? "💎 7일 무료로 시작" : "💎 Pro 구독 시작";
-  const ctaGuest = trialEligible ? "💎 가입하고 7일 무료로 시작" : "💎 가입하고 Pro 시작";
+  const ctaSignedIn = trialEligible ? "7일 무료로 시작" : "Pro 구독 시작";
+  const ctaGuest = trialEligible ? "가입하고 7일 무료로 시작" : "가입하고 Pro 시작";
 
   return (
     <div className="space-y-2">

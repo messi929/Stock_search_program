@@ -56,7 +56,7 @@ function isKrForeign(cat?: string, name?: string): boolean {
 function changeTone(v: number | undefined): string {
   if (v == null) return "text-muted-foreground";
   // KR 컬러: 상승 빨강 / 하락 파랑
-  return v > 0 ? "text-red-500" : v < 0 ? "text-blue-500" : "text-muted-foreground";
+  return v > 0 ? "text-up" : v < 0 ? "text-down" : "text-muted-foreground";
 }
 
 function KrEtfCard({ e }: { e: EtfRow }) {
@@ -106,7 +106,7 @@ export function EtfDiscoverView() {
   return (
     <div className="space-y-5 max-w-5xl">
       <header>
-        <h1 className="text-2xl font-bold">🧺 ETF 탐색</h1>
+        <h1 className="text-2xl font-bold">ETF 탐색</h1>
         <p className="text-sm text-muted-foreground mt-1">
           분류를 선택해 ETF 정보·구성종목·비중을 확인하세요.
         </p>
@@ -181,7 +181,7 @@ export function EtfDiscoverView() {
               </div>
               <p className="text-[11px] text-muted-foreground">
                 거래량 상위 기준. 전체 목록은{" "}
-                <Link href="/screener/etf" className="text-amber-600 hover:underline">
+                <Link href="/screener/etf" className="text-primary hover:underline">
                   스크리너 ETF
                 </Link>
                 에서.

@@ -18,11 +18,11 @@ import { PERSONA_BY_ID, type PersonaId } from "@/types/persona";
 
 type TabKey = "all" | "analysis" | "validation" | "discovery";
 
-const TABS: { key: TabKey; label: string; icon: string }[] = [
-  { key: "all", label: "전체", icon: "🗂" },
-  { key: "analysis", label: "종목 분석", icon: "🔍" },
-  { key: "validation", label: "실시간 검증", icon: "✅" },
-  { key: "discovery", label: "종목 발견", icon: "🧭" },
+const TABS: { key: TabKey; label: string }[] = [
+  { key: "all", label: "전체" },
+  { key: "analysis", label: "종목 분석" },
+  { key: "validation", label: "실시간 검증" },
+  { key: "discovery", label: "종목 발견" },
 ];
 
 function isTab(v: string | null): v is TabKey {
@@ -48,13 +48,13 @@ function HistoryItemRow({ it }: { it: HistoryItem }) {
   if (it.kind === "discovery") {
     return (
       <div className="flex items-center justify-between gap-3 py-3 px-1">
-        <span className="truncate text-sm">🧭 “{it.query || "발견"}”</span>
+        <span className="truncate text-sm">“{it.query || "발견"}”</span>
         <span className="text-xs text-muted-foreground shrink-0 tabular-nums">{at}</span>
       </div>
     );
   }
 
-  const kindIcon = it.kind === "validation" ? "✅" : "🔍";
+  const kindIcon = it.kind === "validation" ? "✅" : "";
   const isKR = /^\d{6}$/.test(it.ticker);
   return (
     <Link
@@ -112,7 +112,7 @@ function HistoryInner() {
             ← 대시보드
           </Link>
         </div>
-        <h1 className="text-2xl font-bold">🕘 분석 이력</h1>
+        <h1 className="text-2xl font-bold">분석 이력</h1>
         <p className="text-sm text-muted-foreground">
           분석 시점마다 판단이 달라질 수 있어요. 종목과 분석 일자를 함께 확인하세요.
         </p>
@@ -135,7 +135,7 @@ function HistoryInner() {
                   : "text-muted-foreground hover:text-foreground hover:bg-muted"
               }`}
             >
-              {t.icon} {t.label}
+              {t.label}
               <span className="ml-1 text-xs opacity-70">{count}</span>
             </button>
           );

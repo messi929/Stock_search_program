@@ -11,10 +11,13 @@
  *
  * 잠금: Free 플랜에서 Pro 전용 시계는 🔒 Pro 배지 + /pricing 안내.
  */
+import { Check, Lock } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
+import { HorizonIcon } from "@/components/analyze/HorizonIcon";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { usePersonas } from "@/hooks/usePersonas";
 import {
   ALL_HORIZONS,
@@ -59,14 +62,11 @@ export function HorizonChooser({
   return (
     <div className="space-y-3">
       {/* 헤더 */}
-      <div className="flex items-baseline gap-2">
-        <span className="text-xs font-bold text-primary bg-primary/10 px-2 py-0.5 rounded">
-          관점
-        </span>
-        <h2 className="text-base font-semibold">투자 시계 선택</h2>
-        <span className="text-[11px] text-muted-foreground">
-          (보는 기간에 따라 분석 초점이 달라집니다)
-        </span>
+      <div>
+        <h2 className="text-lg font-semibold">어느 기간으로 볼까요?</h2>
+        <p className="mt-0.5 text-muted-foreground">
+          기간에 따라 AI가 중점적으로 살펴보는 데이터가 달라져요.
+        </p>
       </div>
 
       {/* 4개 시계 타일 */}
@@ -80,30 +80,27 @@ export function HorizonChooser({
               type="button"
               onClick={() => setSelected(h.id)}
               aria-pressed={active}
-              className={`text-left rounded-md border p-3 transition bg-background ${
+              title={h.tagline}
+              className={`flex flex-col text-left rounded-xl border p-3.5 transition bg-card ${
                 active
-                  ? "border-primary ring-1 ring-primary/40 bg-primary/5"
+                  ? "border-primary ring-1 ring-primary bg-accent"
                   : "hover:bg-muted/50 hover:border-foreground/20"
               }`}
             >
-              <div className="font-medium text-sm flex items-center justify-between gap-2">
-                <span className="truncate">
-                  <span className="mr-1">{h.icon}</span>
+              <div className="w-full font-semibold flex items-center justify-between gap-2">
+                <span className="flex items-center gap-1.5 truncate">
+                  <HorizonIcon id={h.id} className="size-4 shrink-0 text-primary" />
                   {h.name}
                 </span>
                 {proLocked ? (
-                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-700 shrink-0">
-                    🔒 Pro
+                  <span className="inline-flex items-center gap-0.5 text-[11px] px-1.5 py-0.5 rounded bg-caution/15 text-caution shrink-0">
+                    <Lock aria-hidden="true" className="size-3" /> Pro
                   </span>
                 ) : active ? (
-                  <span className="text-[10px] font-bold text-primary bg-primary/10 px-1.5 py-0.5 rounded shrink-0">
-                    ✓
-                  </span>
+                  <Check aria-label="선택됨" className="size-4 shrink-0 text-primary" />
                 ) : null}
               </div>
-              <div className="text-xs text-muted-foreground mt-1 leading-relaxed">
-                {h.tagline}
-              </div>
+              <div className="mt-1 text-xs leading-relaxed text-muted-foreground">{h.plain}</div>
             </button>
           );
         })}
@@ -115,25 +112,22 @@ export function HorizonChooser({
           <div className="space-y-2">
             <Link
               href="/pricing"
-              className="inline-flex items-center w-full sm:w-auto px-6 py-2.5 rounded-md bg-amber-500/90 text-white font-medium text-sm hover:bg-amber-500 transition"
+              className={`${buttonVariants({ size: "lg" })} w-full sm:w-auto`}
             >
-              🔒 {HORIZON_BY_ID[selected].name} 시계는 Pro 전용 — 업그레이드 안내
+              <Lock aria-hidden="true" />
+              {HORIZON_BY_ID[selected].name} 관점은 Pro에서 볼 수 있어요
             </Link>
             <p className="text-xs text-muted-foreground">
-              Free 플랜에서 사용할 수 있는 시계는 제한됩니다. 모든 시계는 Pro에서 열립니다.
+              Free 플랜에서는 일부 기간만 분석할 수 있어요.
             </p>
           </div>
         ) : (
           <>
-            <button
-              type="button"
-              onClick={() => onStart(selected)}
-              className="w-full sm:w-auto px-6 py-2.5 rounded-md bg-primary text-primary-foreground font-medium text-sm hover:bg-primary/90 transition"
-            >
-              🔍 {HORIZON_BY_ID[selected].name} 시계로 분석 시작
-            </button>
+            <Button type="button" size="lg" onClick={() => onStart(selected)} className="w-full sm:w-auto">
+              {HORIZON_BY_ID[selected].name} 관점으로 분석 시작
+            </Button>
             <p className="text-xs text-muted-foreground mt-2">
-              분석은 선택한 시계로 1회 실행됩니다. 결과 후 다른 시계로 다시 분석할 수 있습니다.
+              보통 1분 안팎 걸려요. 결과를 본 뒤 다른 기간으로 다시 분석할 수 있습니다.
             </p>
           </>
         )}
@@ -161,8 +155,8 @@ export function HorizonSwitch({
 
   const handleClick = (id: HorizonId, locked: boolean, name: string) => {
     if (locked) {
-      toast.info(`${name} 시계는 Pro 전용입니다.`, {
-        description: "/pricing 에서 업그레이드 안내를 확인하세요.",
+      toast.info(`${name} 관점은 Pro에서 볼 수 있어요.`, {
+        description: "요금제 페이지에서 자세히 확인하세요.",
       });
       return;
     }
@@ -176,7 +170,7 @@ export function HorizonSwitch({
     <div
       className="flex gap-1 border rounded-md p-1 bg-muted/30 overflow-x-auto scrollbar-thin snap-x snap-mandatory"
       role="tablist"
-      aria-label="투자 시계 선택"
+      aria-label="분석 기간 선택"
     >
       {ALL_HORIZONS.map((id) => {
         const meta = HORIZON_BY_ID[id];
@@ -192,8 +186,8 @@ export function HorizonSwitch({
             aria-disabled={locked}
             title={
               locked
-                ? `${meta.name}: Pro 전용 — ${meta.tagline}`
-                : `${meta.name}: ${meta.tagline}`
+                ? `${meta.name}: Pro 전용 — ${meta.plain}`
+                : `${meta.name}: ${meta.plain}`
             }
             onClick={() => handleClick(id, locked, meta.name)}
             className={`
@@ -207,9 +201,11 @@ export function HorizonSwitch({
               ${locked ? "opacity-50 cursor-not-allowed" : ""}
             `}
           >
-            <span className="mr-1">{meta.icon}</span>
-            {meta.name}
-            {locked && <span className="ml-1 text-[10px]">🔒</span>}
+            <span className="inline-flex items-center gap-1">
+              <HorizonIcon id={id} className="size-3.5" />
+              {meta.name}
+              {locked && <Lock aria-label="Pro 전용" className="size-3" />}
+            </span>
           </button>
         );
       })}

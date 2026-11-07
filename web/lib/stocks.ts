@@ -87,6 +87,14 @@ export function fmtCompactKR(v: number): string {
   return n.toLocaleString("ko-KR");
 }
 
+/** 시가총액 표기. 백엔드 market_cap은 국내·미국 모두 억원 단위다. */
+export function fmtMarketCapEok(v: unknown): string {
+  const n = Number(v);
+  if (!Number.isFinite(n) || n <= 0) return "-";
+  if (n >= 1e4) return `${(n / 1e4).toLocaleString("ko-KR", { maximumFractionDigits: n >= 1e6 ? 0 : 1 })}조`;
+  return `${Math.round(n).toLocaleString("ko-KR")}억`;
+}
+
 /** KR 시장 여부(원화 표기 판단). */
 export function isKrMarket(market: string): boolean {
   return market === "KOSPI" || market === "KOSDAQ";
@@ -94,7 +102,7 @@ export function isKrMarket(market: string): boolean {
 
 /** 등락률 색상 — 한국식(상승 빨강 / 하락 파랑). */
 export function changeColorClass(pct: number): string {
-  if (pct > 0) return "text-red-500";
-  if (pct < 0) return "text-blue-500";
+  if (pct > 0) return "text-up";
+  if (pct < 0) return "text-down";
   return "text-muted-foreground";
 }

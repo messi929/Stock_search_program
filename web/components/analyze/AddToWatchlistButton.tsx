@@ -39,7 +39,7 @@ export function AddToWatchlistButton({
   if (already) {
     return (
       <Button type="button" disabled size={size} variant="outline">
-        ⭐ 관심 종목 등록됨
+        관심 종목 등록됨
       </Button>
     );
   }
@@ -52,7 +52,7 @@ export function AddToWatchlistButton({
       size={size}
       variant="outline"
     >
-      {add.isPending ? "추가 중..." : "⭐ 관심 종목 추가"}
+      {add.isPending ? "추가 중..." : "관심 종목 추가"}
     </Button>
   );
 }

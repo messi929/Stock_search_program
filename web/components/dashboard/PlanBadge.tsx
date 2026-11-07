@@ -38,9 +38,9 @@ export function PlanBadge({ compact = false }: { compact?: boolean }) {
       <Link
         href="/settings/profile"
         aria-label="구독 관리"
-        className="inline-flex items-center gap-1 rounded-full border border-amber-500/50 bg-amber-500/15 px-2.5 py-1 text-xs font-semibold text-amber-600 hover:bg-amber-500/25"
+        className="inline-flex items-center gap-1 rounded-full bg-accent px-2.5 py-1 text-xs font-semibold text-accent-foreground hover:bg-accent/80"
       >
-        <span>💎 Pro</span>
+        <span>Pro</span>
         {!compact && isAdmin && <span className="font-normal opacity-80">· 관리자</span>}
         {!compact && !isAdmin && sub?.cancel_at_period_end && renewal && (
           <span className="font-normal opacity-80">· {renewal} 해지</span>
@@ -69,10 +69,10 @@ export function PlanBadge({ compact = false }: { compact?: boolean }) {
   return (
     <Link
       href="/pricing"
-      className="inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-medium text-muted-foreground hover:border-amber-500/50 hover:text-amber-600"
+      className="inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-medium text-muted-foreground hover:border-primary/50 hover:text-primary"
     >
       <span>Free</span>
-      <span className="opacity-70">· 💎 업그레이드</span>
+      <span className="opacity-70">· 업그레이드</span>
     </Link>
   );
 }

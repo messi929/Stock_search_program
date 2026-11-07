@@ -33,7 +33,7 @@ export function KisOrderbook({ ticker }: { ticker: string }) {
   if (error || !data) {
     return (
       <Card>
-        <CardContent className="p-4 text-xs text-red-500">호가 불러오기 실패</CardContent>
+        <CardContent className="p-4 text-xs text-destructive">호가 불러오기 실패</CardContent>
       </Card>
     );
   }
@@ -66,7 +66,7 @@ export function KisOrderbook({ ticker }: { ticker: string }) {
     <Card>
       <CardContent className="p-4 space-y-3">
         <div className="flex items-center justify-between">
-          <div className="text-sm font-semibold">📋 호가 (10단계)</div>
+          <div className="text-sm font-semibold">호가 (10단계)</div>
           {expected?.antc_cnpr && expected.antc_cnpr !== "0" && (
             <div className="text-[10px] text-muted-foreground">
               예상체결 {formatKisPrice(expected.antc_cnpr)}원 ·{" "}
@@ -96,8 +96,8 @@ export function KisOrderbook({ ticker }: { ticker: string }) {
             <span>매수 총 {totalBid.toLocaleString("ko-KR")}</span>
           </div>
           <div className="flex h-2 rounded-full overflow-hidden bg-muted">
-            <div className="bg-blue-500" style={{ width: `${askPct}%` }} />
-            <div className="bg-red-500" style={{ width: `${bidPct}%` }} />
+            <div className="bg-down" style={{ width: `${askPct}%` }} />
+            <div className="bg-up" style={{ width: `${bidPct}%` }} />
           </div>
           <div className="text-[10px] text-center text-muted-foreground">
             {bidPct > askPct
@@ -124,8 +124,8 @@ function OrderbookRow({
   const pct = (row.qty / maxQty) * 100;
   // 한국식: 매도=파랑, 매수=빨강
   const isAsk = side === "ask";
-  const color = isAsk ? "bg-blue-500/15" : "bg-red-500/15";
-  const text = isAsk ? "text-blue-500" : "text-red-500";
+  const color = isAsk ? "bg-down/15" : "bg-up/15";
+  const text = isAsk ? "text-down" : "text-up";
   return (
     <div className="grid grid-cols-[1fr_1fr] gap-2 py-0.5">
       {isAsk ? (

@@ -4,8 +4,10 @@
  * 최근 분석한 종목 리스트 — analysisStore.recents(localStorage 영속) 기반.
  * 새로고침·재방문 후에도 유지. 진행 중인 종목은 ⏳ 표시.
  */
+import { ChevronRight, LoaderCircle } from "lucide-react";
 import Link from "next/link";
 
+import { HorizonIcon } from "@/components/analyze/HorizonIcon";
 import { Card, CardContent } from "@/components/ui/card";
 import { useAnalysisStore } from "@/store/analysisStore";
 import { HORIZON_BY_ID } from "@/types/persona";
@@ -27,13 +29,13 @@ export function RecentAnalyses() {
   return (
     <section className="space-y-3">
       <div className="flex items-center justify-between">
-        <h2 className="font-semibold">🕘 최근 분석</h2>
+        <h2 className="font-semibold">최근 분석</h2>
         <div className="flex items-center gap-3">
           <Link href="/history" className="text-xs text-muted-foreground hover:text-foreground">
             전체 이력
           </Link>
           <Link href="/analyze" className="text-xs text-muted-foreground hover:text-foreground">
-            새 분석 →
+            새 분석
           </Link>
         </div>
       </div>
@@ -42,7 +44,6 @@ export function RecentAnalyses() {
           // 시계 기반 분석이면 시계 메타로 라벨/아이콘. 페르소나 시대 옛 항목은 중립 라벨.
           const horizon = r.horizon ? HORIZON_BY_ID[r.horizon] : undefined;
           const label = horizon?.name ?? "분석";
-          const icon = horizon?.icon ?? "📊";
           const isRunning = runs[r.ticker]?.running;
           return (
             <Link
@@ -50,9 +51,9 @@ export function RecentAnalyses() {
               href={`/analyze/${r.ticker}`}
               className="block focus:outline-none"
             >
-              <Card className="hover:bg-muted transition">
+              <Card className="transition hover:ring-primary/40">
                 <CardContent className="p-3 flex items-center gap-3">
-                  <span className="text-lg shrink-0">{icon}</span>
+                  {r.horizon && <HorizonIcon id={r.horizon} className="size-5 shrink-0 text-primary" />}
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-1.5 min-w-0">
                       {r.name ? (
@@ -62,8 +63,9 @@ export function RecentAnalyses() {
                         {r.ticker}
                       </span>
                       {isRunning && (
-                        <span className="text-[10px] text-amber-600 inline-flex items-center gap-0.5 shrink-0">
-                          <span className="inline-block animate-spin">⏳</span>진행중
+                        <span className="text-[11px] text-caution inline-flex items-center gap-0.5 shrink-0">
+                          <LoaderCircle aria-hidden="true" className="size-3 animate-spin" />
+                          진행중
                         </span>
                       )}
                     </div>
@@ -71,7 +73,7 @@ export function RecentAnalyses() {
                       {label} · {timeAgo(r.at)}
                     </p>
                   </div>
-                  <span className="text-muted-foreground text-sm shrink-0">→</span>
+                  <ChevronRight aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" />
                 </CardContent>
               </Card>
             </Link>

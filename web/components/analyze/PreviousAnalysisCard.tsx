@@ -20,7 +20,7 @@ function MovePct({ from, to }: { from: number | null; to: number | null }) {
   if (from == null || to == null || from <= 0) return null;
   const pct = ((to - from) / from) * 100;
   const cls =
-    pct > 0 ? "text-red-500" : pct < 0 ? "text-blue-500" : "text-muted-foreground";
+    pct > 0 ? "text-up" : pct < 0 ? "text-down" : "text-muted-foreground";
   return (
     <span className={`font-medium ${cls}`}>
       {pct > 0 ? "+" : ""}
@@ -63,11 +63,11 @@ export function PreviousAnalysisCard({
   ];
 
   return (
-    <section className="rounded-lg border border-amber-500/30 bg-amber-500/[0.04] p-4 space-y-3">
+    <section className="rounded-lg border border-caution/30 bg-caution/[0.04] p-4 space-y-3">
       {/* 헤더 */}
       <div className="flex items-center justify-between gap-2 flex-wrap">
         <div className="flex items-center gap-2">
-          <span className="text-sm font-semibold">📌 이전 분석</span>
+          <span className="text-sm font-semibold">이전 분석</span>
           {horizonName && (
             <span className="text-xs px-2 py-0.5 rounded-full bg-muted text-muted-foreground">
               {horizonName} 관점
@@ -117,19 +117,19 @@ export function PreviousAnalysisCard({
       {/* 손절 / 익절 참고선 */}
       {xp && (
         <div className="grid grid-cols-3 gap-2">
-          <div className="rounded-md bg-blue-500/10 p-2 text-center">
+          <div className="rounded-md bg-down/10 p-2 text-center">
             <div className="text-[10px] text-muted-foreground">손실 한도</div>
             <div className="font-mono text-sm font-medium">
               {fmtPrice(xp.stop_loss, isKR)}
             </div>
           </div>
-          <div className="rounded-md bg-red-500/10 p-2 text-center">
+          <div className="rounded-md bg-up/10 p-2 text-center">
             <div className="text-[10px] text-muted-foreground">1차 익절</div>
             <div className="font-mono text-sm font-medium">
               {fmtPrice(xp.take_profit_1, isKR)}
             </div>
           </div>
-          <div className="rounded-md bg-red-500/10 p-2 text-center">
+          <div className="rounded-md bg-up/10 p-2 text-center">
             <div className="text-[10px] text-muted-foreground">최종 익절</div>
             <div className="font-mono text-sm font-medium">
               {fmtPrice(xp.take_profit_final, isKR)}

@@ -147,7 +147,7 @@ export default function AdminOverviewPage() {
       </section>
 
       {(stats.isError || funnel.isError || revenue.isError || usage.isError || errors.isError) && (
-        <p className="text-sm text-red-500">
+        <p className="text-sm text-destructive">
           일부 데이터를 불러오지 못했습니다. 새로고침하거나 권한을 확인하세요.
         </p>
       )}

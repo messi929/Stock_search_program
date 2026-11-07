@@ -322,7 +322,7 @@ function Header() {
           ← 스마트 리스트
         </Link>
       </div>
-      <h1 className="text-2xl font-bold">🔧 커스텀 스크리너</h1>
+      <h1 className="text-2xl font-bold">커스텀 스크리너</h1>
       <p className="text-sm text-muted-foreground">
         직접 조건을 조합해 종목을 탐색하고 저장합니다 (Pro 전용)
       </p>

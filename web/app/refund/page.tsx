@@ -32,7 +32,7 @@ export default function RefundPage() {
           최종 수정일: {LAST_UPDATED}
         </p>
 
-        <div className="mb-10 p-4 rounded-md border border-amber-500/40 bg-amber-500/10 text-sm">
+        <div className="mb-10 p-4 rounded-md border border-caution/40 bg-caution/10 text-sm">
           <p className="font-medium mb-1">한 줄 요약 (Summary)</p>
           <p className="text-muted-foreground">
             Pro 구독은 <strong className="text-foreground">결제일로부터 7일 이내</strong>{" "}

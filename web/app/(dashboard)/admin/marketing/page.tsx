@@ -32,11 +32,11 @@ const STATUS_FILTERS: { key: string; label: string }[] = [
 const MAX_PARTS = 6;
 
 const STATUS_BADGE: Record<DraftStatus, string> = {
-  draft: "bg-slate-500/15 text-slate-300",
-  approved: "bg-emerald-500/15 text-emerald-300",
-  published: "bg-sky-500/15 text-sky-300",
-  partial: "bg-rose-500/15 text-rose-300",
-  archived: "bg-zinc-500/15 text-zinc-400",
+  draft: "bg-muted-foreground/15 text-muted-foreground",
+  approved: "bg-success/15 text-success",
+  published: "bg-info/15 text-info",
+  partial: "bg-destructive/15 text-destructive",
+  archived: "bg-muted-foreground/15 text-muted-foreground",
 };
 
 const STATUS_LABEL: Record<DraftStatus, string> = {
@@ -210,8 +210,8 @@ export default function AdminMarketingPage() {
       {/* ── 실측 근거 배너 (2026-08-09) ──
           3주치 발행 성과를 API로 직접 뽑은 결과다. 이 숫자를 화면에 박아두는 이유:
           측정 없이 포맷만 3주 다듬었던 것이 이 화면에서 반복되지 않게 하려는 것. */}
-      <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 text-sm">
-        <p className="font-semibold text-amber-300">
+      <div className="rounded-lg border border-caution/30 bg-caution/5 p-3 text-sm">
+        <p className="font-semibold text-caution">
           브로드캐스트 자동 생성 동결 중
         </p>
         <p className="mt-1 text-xs text-muted-foreground leading-relaxed">
@@ -439,7 +439,7 @@ export default function AdminMarketingPage() {
       </div>
 
       {!publishEnabled && (
-        <p className="text-xs text-amber-400">
+        <p className="text-xs text-caution">
           ⚠ Threads 자동발행이 비활성 상태입니다(토큰 미설정). 지금은 복사 후 수동 발행만
           가능합니다.
         </p>
@@ -625,7 +625,7 @@ function DraftCard({
         {isStock && (
           <span className="text-xs text-muted-foreground">{draft.ticker}</span>
         )}
-        <span className="px-2 py-0.5 rounded-full text-[11px] bg-blue-500/15 text-blue-300">
+        <span className="px-2 py-0.5 rounded-full text-[11px] bg-down/15 text-down">
           {draft.fmt_label}
         </span>
         <span
@@ -634,7 +634,7 @@ function DraftCard({
           {STATUS_LABEL[draft.status]}
         </span>
         {draft.filtered.length > 0 && (
-          <span className="px-2 py-0.5 rounded-full text-[11px] bg-amber-500/15 text-amber-300">
+          <span className="px-2 py-0.5 rounded-full text-[11px] bg-caution/15 text-caution">
             ⚠ 필터됨: {draft.filtered.join(", ")}
           </span>
         )}
@@ -642,10 +642,10 @@ function DraftCard({
           <span
             className={`px-2 py-0.5 rounded-full text-[11px] ${
               draft.score >= 25
-                ? "bg-emerald-500/15 text-emerald-300"
+                ? "bg-success/15 text-success"
                 : draft.score >= 18
-                  ? "bg-amber-500/15 text-amber-300"
-                  : "bg-rose-500/15 text-rose-300"
+                  ? "bg-caution/15 text-caution"
+                  : "bg-destructive/15 text-destructive"
             }`}
             title="편집 단계 자가채점(후킹·긴장·구체성·독자시점·담백함·법적안전 6축 합산)"
           >
@@ -654,7 +654,7 @@ function DraftCard({
         )}
         {(draft.warnings?.length ?? 0) > 0 && (
           <span
-            className="px-2 py-0.5 rounded-full text-[11px] bg-orange-500/15 text-orange-300"
+            className="px-2 py-0.5 rounded-full text-[11px] bg-caution/15 text-caution"
             title="자기언급·내부용어·길이 등 사람이 한번 더 볼 지점"
           >
             ⚠ 점검: {draft.warnings.join(", ")}
@@ -665,7 +665,7 @@ function DraftCard({
             href={draft.permalink}
             target="_blank"
             rel="noreferrer"
-            className="text-[11px] text-sky-400 underline underline-offset-2"
+            className="text-[11px] text-info underline underline-offset-2"
           >
             발행글 보기 ↗
           </a>
@@ -674,7 +674,7 @@ function DraftCard({
             (insights.replies를 그대로 쓰면 2파트글이 항상 '댓글 1'로 보인다) */}
         {isPublished && (draft.insights?.views ?? null) !== null && (
           <span
-            className="px-2 py-0.5 rounded-full text-[11px] bg-sky-500/15 text-sky-300 tabular-nums"
+            className="px-2 py-0.5 rounded-full text-[11px] bg-info/15 text-info tabular-nums"
             title="루트 글 기준. 댓글은 우리 타래 답글을 제외한 외부 반응."
           >
             조회 {draft.insights.views?.toLocaleString() ?? 0} · 좋아요{" "}
@@ -685,7 +685,7 @@ function DraftCard({
           !draft.insights_at &&
           draft.published_ids.length === 0 && (
             <span
-              className="px-2 py-0.5 rounded-full text-[11px] bg-zinc-500/15 text-zinc-400"
+              className="px-2 py-0.5 rounded-full text-[11px] bg-muted-foreground/15 text-muted-foreground"
               title="07-14 이전 발행분은 post_id를 남기지 않아 반응을 조회할 수 없다"
             >
               성과 조회 불가(post_id 없음)
@@ -702,7 +702,7 @@ function DraftCard({
 
       {/* 발행이 중간에 끊긴 초안 — 이미 나간 파트는 지울 수 없다(Threads 글삭제 API 없음) */}
       {isPartial && (
-        <p className="rounded-md bg-rose-500/10 px-3 py-2 text-xs text-rose-300">
+        <p className="rounded-md bg-destructive/10 px-3 py-2 text-xs text-destructive">
           {draft.part_count}개 파트 중 <b>{draft.published_upto}개까지 발행</b>된 상태로
           끊겼습니다. 이미 나간 글은 코드로 지울 수 없습니다(앱에서 수동 삭제). 남은 파트를
           고친 뒤 <b>이어서 발행</b>하면 마지막 글에 이어 붙습니다.
@@ -728,7 +728,7 @@ function DraftCard({
             <span
               key={i}
               className={
-                p.length > maxChars ? "text-red-500 font-semibold" : undefined
+                p.length > maxChars ? "text-destructive font-semibold" : undefined
               }
             >
               {i > 0 && " · "}
@@ -739,7 +739,7 @@ function DraftCard({
           {parts.length > 1 && ` (한도 ${maxChars}자/파트)`}
         </span>
         {parts.length > MAX_PARTS && (
-          <span className="text-xs text-red-500">
+          <span className="text-xs text-destructive">
             파트 {parts.length}개 — 최대 {MAX_PARTS}개
           </span>
         )}
@@ -773,7 +773,7 @@ function DraftCard({
                     ? "끊긴 지점부터 남은 파트를 마지막 글에 이어 붙입니다"
                     : "Threads에 발행"
               }
-              className="bg-sky-600 hover:bg-sky-500"
+              className="bg-info hover:bg-info"
             >
               {isPartial ? "▶ 이어서 발행" : "🚀 발행"}
             </Button>
@@ -798,7 +798,7 @@ function DraftCard({
             variant="outline"
             onClick={remove}
             disabled={busy}
-            className="text-red-500"
+            className="text-destructive"
           >
             삭제
           </Button>

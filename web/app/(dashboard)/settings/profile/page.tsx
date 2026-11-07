@@ -6,6 +6,7 @@
  * 온보딩(/onboarding)은 4-step wizard로 신규 가입자를 안내. 편집은 한 번에 보고
  * 바꾸길 원하므로 단일 폼이 적합. 옵션 상수는 온보딩과 일관성 유지.
  */
+import { HorizonIcon } from "@/components/analyze/HorizonIcon";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
@@ -51,11 +52,11 @@ const HOLDING_PERIOD_OPTIONS: { id: HoldingPeriod; label: string }[] = [
   { id: "3y+", label: "3년 이상" },
 ];
 
-const HORIZON_OPTIONS: { id: PreferredHorizon; icon: string; name: string; tagline: string }[] = [
-  { id: "short", icon: "⚡", name: "단기", tagline: "수일~1개월 · 추세·거래량·수급" },
-  { id: "short_mid", icon: "📈", name: "단중기", tagline: "1~3개월 · 분기 실적 모멘텀 + 기술" },
-  { id: "mid", icon: "⚖️", name: "중기", tagline: "3개월~1년 · 밸류·성장 균형" },
-  { id: "long", icon: "🏔", name: "장기", tagline: "1년+ · 펀더멘털·해자·매크로 사이클" },
+const HORIZON_OPTIONS: { id: PreferredHorizon; name: string; tagline: string }[] = [
+  { id: "short", name: "단기", tagline: "수일~1개월 · 추세·거래량·수급" },
+  { id: "short_mid", name: "단중기", tagline: "1~3개월 · 분기 실적 모멘텀 + 기술" },
+  { id: "mid", name: "중기", tagline: "3개월~1년 · 밸류·성장 균형" },
+  { id: "long", name: "장기", tagline: "1년+ · 펀더멘털·해자·매크로 사이클" },
 ];
 
 export default function SettingsProfilePage() {
@@ -126,7 +127,7 @@ export default function SettingsProfilePage() {
     <div className="space-y-6 max-w-3xl">
       <header className="flex items-start justify-between flex-wrap gap-2">
         <div>
-          <h1 className="text-2xl font-bold">⚙️ 설정 · 투자 프로필</h1>
+          <h1 className="text-2xl font-bold">설정 · 투자 프로필</h1>
           <p className="text-sm text-muted-foreground mt-1">
             분석 결과 톤·가중치에 반영됩니다. 언제든 바꿀 수 있어요.
           </p>
@@ -135,7 +136,7 @@ export default function SettingsProfilePage() {
           href="/settings/notifications"
           className="text-xs underline text-muted-foreground hover:text-foreground transition"
         >
-          🔔 알림 설정 →
+          알림 설정 →
         </a>
       </header>
 
@@ -155,7 +156,7 @@ export default function SettingsProfilePage() {
                 aria-pressed={experience === opt.id}
                 className={`p-3 rounded-md border text-sm transition ${
                   experience === opt.id
-                    ? "border-amber-500 bg-amber-500/10"
+                    ? "border-primary bg-primary/10"
                     : "border-border hover:bg-muted"
                 }`}
               >
@@ -179,7 +180,7 @@ export default function SettingsProfilePage() {
                 aria-pressed={holdingPeriod === opt.id}
                 className={`p-2 rounded-md border text-sm transition ${
                   holdingPeriod === opt.id
-                    ? "border-amber-500 bg-amber-500/10"
+                    ? "border-primary bg-primary/10"
                     : "border-border hover:bg-muted"
                 }`}
               >
@@ -205,7 +206,7 @@ export default function SettingsProfilePage() {
                   aria-pressed={on}
                   className={`p-2 rounded-md border text-sm transition ${
                     on
-                      ? "border-amber-500 bg-amber-500/10"
+                      ? "border-primary bg-primary/10"
                       : "border-border hover:bg-muted"
                   }`}
                 >
@@ -267,7 +268,7 @@ export default function SettingsProfilePage() {
       {/* 선호 시계(투자 시간축) */}
       <Card>
         <CardContent className="p-5 space-y-3">
-          <h2 className="font-semibold">선호 시계 (투자 시간축)</h2>
+          <h2 className="font-semibold">선호 기간 (투자 시간축)</h2>
           <p className="text-xs text-muted-foreground">
             기본값일 뿐 분석 화면에서 종목마다 자유롭게 바꿀 수 있습니다.
           </p>
@@ -280,12 +281,12 @@ export default function SettingsProfilePage() {
                 aria-pressed={horizon === h.id}
                 className={`w-full text-left p-3 rounded-md border transition ${
                   horizon === h.id
-                    ? "border-amber-500 bg-amber-500/10"
+                    ? "border-primary bg-primary/10"
                     : "border-border hover:bg-muted"
                 }`}
               >
                 <div className="flex items-center gap-3">
-                  <span className="text-2xl">{h.icon}</span>
+                  <HorizonIcon id={h.id} className="size-6 text-primary" />
                   <div>
                     <div className="font-semibold text-sm">{h.name}</div>
                     <div className="text-xs text-muted-foreground">{h.tagline}</div>

@@ -26,18 +26,18 @@ const POPULAR_TICKERS: Array<{ ticker: string; name: string; sector: string }> =
 
 export default function AnalyzeIndexPage() {
   return (
-    <div className="space-y-6 max-w-3xl">
+    <div className="space-y-6">
       <header>
-        <h1 className="text-2xl font-bold">🔍 종목 분석</h1>
+        <h1 className="text-2xl font-bold">종목 분석</h1>
         <p className="text-sm text-muted-foreground mt-1">
-          분석할 종목을 검색하거나 아래 인기 종목에서 바로 시작하세요.
+          궁금한 종목을 검색하거나 아래 인기 종목에서 골라보세요.
         </p>
       </header>
 
       <SearchTab />
 
       <section className="space-y-3">
-        <h2 className="font-semibold">💡 인기 종목 바로 분석</h2>
+        <h2 className="font-semibold">인기 종목</h2>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
           {POPULAR_TICKERS.map((stock) => (
             <Link
@@ -45,14 +45,11 @@ export default function AnalyzeIndexPage() {
               href={`/analyze/${stock.ticker}`}
               className="block"
             >
-              <Card className="hover:bg-muted/50 transition cursor-pointer">
+              <Card className="h-full transition hover:ring-primary/40">
                 <CardContent className="p-3 space-y-1">
-                  <p className="font-medium text-sm truncate">{stock.name}</p>
-                  <p className="text-xs text-muted-foreground font-mono">
-                    {stock.ticker}
-                  </p>
+                  <p className="truncate font-semibold">{stock.name}</p>
                   <p className="text-xs text-muted-foreground">
-                    {stock.sector}
+                    {stock.sector} · {stock.ticker}
                   </p>
                 </CardContent>
               </Card>
@@ -60,9 +57,7 @@ export default function AnalyzeIndexPage() {
           ))}
         </div>
         <p className="text-xs text-muted-foreground">
-          종목 선택 후 분석 방식·관점을 골라 의도적으로 실행합니다 — 종합 전략(4
-          에이전트, 약 60~90초) 또는 데이터 특화(이벤트·매크로·한국 시장, 약
-          40~70초). 같은 종목은 캐시되어 즉시 응답됩니다.
+          종목을 고른 뒤 보고 싶은 기간을 선택하면 분석이 시작됩니다. 보통 1분 안팎 걸려요.
         </p>
       </section>
 

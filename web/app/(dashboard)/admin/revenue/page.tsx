@@ -14,7 +14,7 @@ export default function AdminRevenuePage() {
   return (
     <div className="space-y-5">
       {isLoading && <p className="text-sm text-muted-foreground">불러오는 중...</p>}
-      {isError && <p className="text-sm text-red-500">조회 실패 (권한 확인)</p>}
+      {isError && <p className="text-sm text-destructive">조회 실패 (권한 확인)</p>}
 
       {data && (
         <>
@@ -73,7 +73,7 @@ export default function AdminRevenuePage() {
                     <td className="px-3 py-2 text-muted-foreground">{fmtDate(r.period_end)}</td>
                     <td className="px-3 py-2">
                       {r.cancel_at_period_end ? (
-                        <span className="text-red-500">해지 예정</span>
+                        <span className="text-destructive">해지 예정</span>
                       ) : (
                         <span className="text-muted-foreground">갱신 예정</span>
                       )}

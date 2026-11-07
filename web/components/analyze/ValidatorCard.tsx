@@ -1,5 +1,6 @@
 "use client";
 
+import { ShieldCheck } from "lucide-react";
 import {
   AgentCardShell,
   type AgentStatus,
@@ -7,14 +8,14 @@ import {
 import type { ValidatorResult } from "@/types/api";
 
 const STATUS_BADGE: Record<string, { label: string; className: string }> = {
-  PASS: { label: "✅ 검증 통과", className: "text-emerald-500 bg-emerald-500/10" },
-  WARN: { label: "⚠️ 일부 차이", className: "text-amber-500 bg-amber-500/10" },
+  PASS: { label: "✅ 검증 통과", className: "text-success bg-success/10" },
+  WARN: { label: "⚠️ 일부 차이", className: "text-caution bg-caution/10" },
   FAIL: { label: "❌ 재분석 필요", className: "text-destructive bg-destructive/10" },
 };
 
 const PROBABILITY_BADGE: Record<string, string> = {
   HIGH: "text-destructive",
-  MEDIUM: "text-amber-500",
+  MEDIUM: "text-caution",
   LOW: "text-muted-foreground",
 };
 
@@ -28,8 +29,8 @@ export function ValidatorCard({
   const badge = data ? STATUS_BADGE[data.overall_status] : null;
   return (
     <AgentCardShell
-      icon="⭐"
-      title="검증 + Contrarian (Validator)"
+      icon={ShieldCheck}
+      title="수치 검증과 반대 시나리오"
       subtitle={
         data
           ? `신뢰도 ${(data.confidence_score * 100).toFixed(0)}% · ${data.contrarian_scenarios.length} 반대 시나리오`
@@ -74,9 +75,9 @@ export function ValidatorCard({
                     <span
                       className={`col-span-2 text-right font-medium ${
                         c.status === "OK"
-                          ? "text-emerald-500"
+                          ? "text-success"
                           : c.status === "WARN"
-                            ? "text-amber-500"
+                            ? "text-caution"
                             : "text-destructive"
                       }`}
                     >
@@ -117,7 +118,7 @@ export function ValidatorCard({
           {data.blind_spots.length > 0 && (
             <section>
               <h4 className="text-xs font-medium text-muted-foreground mb-1">
-                🔎 분석에서 누락된 관점
+                분석에서 누락된 관점
               </h4>
               <ul className="text-sm space-y-0.5">
                 {data.blind_spots.map((b, i) => (

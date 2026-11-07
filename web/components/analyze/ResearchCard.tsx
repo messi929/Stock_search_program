@@ -1,5 +1,6 @@
 "use client";
 
+import { Newspaper } from "lucide-react";
 import {
   AgentCardShell,
   type AgentStatus,
@@ -7,15 +8,15 @@ import {
 import type { ResearchResult } from "@/types/api";
 
 const SENTIMENT_COLOR: Record<string, string> = {
-  낙관적: "text-emerald-500",
-  신중: "text-amber-500",
+  낙관적: "text-success",
+  신중: "text-caution",
   비관적: "text-destructive",
 };
 
 const SECTOR_STATUS_COLOR: Record<string, string> = {
-  강세: "text-emerald-500",
+  강세: "text-up",
   횡보: "text-muted-foreground",
-  약세: "text-destructive",
+  약세: "text-down",
 };
 
 export function ResearchCard({
@@ -27,8 +28,8 @@ export function ResearchCard({
 }) {
   return (
     <AgentCardShell
-      icon="🔍"
-      title="시황·뉴스·매크로 (Research)"
+      icon={Newspaper}
+      title="시장·뉴스 동향"
       subtitle={
         data
           ? `시장 심리: ${data.market_sentiment}`
@@ -128,9 +129,9 @@ export function ResearchCard({
                     <span
                       className={`mr-1 ${
                         n.impact === "positive"
-                          ? "text-emerald-500"
+                          ? "text-up"
                           : n.impact === "negative"
-                            ? "text-destructive"
+                            ? "text-down"
                             : "text-muted-foreground"
                       }`}
                     >

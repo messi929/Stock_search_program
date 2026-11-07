@@ -97,21 +97,21 @@ function diagnose(c: FunnelCohort): { msg: string; tone: string } {
   if (c.signups === 0)
     return {
       msg: "이 기간 신규 가입이 0입니다 → 유입(트래픽) 자체가 문제. 마케팅·SEO부터.",
-      tone: "text-amber-600",
+      tone: "text-caution",
     };
   if (c.activation_rate < 40)
     return {
       msg: `가입은 있는데 활성화율 ${c.activation_rate}% → 가입 후 분석을 안 돌립니다. 온보딩·첫 경험이 새는 구멍.`,
-      tone: "text-red-500",
+      tone: "text-destructive",
     };
   if (c.activated > 0 && c.paid_rate < 3)
     return {
       msg: `활성화는 ${c.activation_rate}%로 양호하나 결제 전환 ${c.paid_rate}% → 가치는 느끼지만 지갑이 안 열림. 가격·결제 설득이 구멍.`,
-      tone: "text-orange-500",
+      tone: "text-caution",
     };
   return {
     msg: `활성화 ${c.activation_rate}% · 결제 ${c.paid_rate}% — 단계별로 큰 누수는 없음. 상단(유입) 볼륨을 키우는 단계.`,
-    tone: "text-emerald-600",
+    tone: "text-success",
   };
 }
 
@@ -145,7 +145,7 @@ export default function AdminFunnelPage() {
       </div>
 
       {isLoading && <p className="text-sm text-muted-foreground">집계 중...</p>}
-      {isError && <p className="text-sm text-red-500">조회 실패 (권한 확인)</p>}
+      {isError && <p className="text-sm text-destructive">조회 실패 (권한 확인)</p>}
 
       {data && c && (
         <>
@@ -200,7 +200,7 @@ export default function AdminFunnelPage() {
               value={c.paid}
               base={c.signups}
               rate={c.paid_rate}
-              tone="bg-emerald-500/70"
+              tone="bg-success/70"
               hint={
                 c.activated > 0
                   ? `활성화→결제 전환 ${c.activated_to_paid_rate}%`

@@ -12,12 +12,12 @@ import { Card, CardContent } from "@/components/ui/card";
 
 export function ProGate({ categoryName }: { categoryName: string }) {
   return (
-    <Card className="border-amber-500/40 bg-amber-500/5">
+    <Card>
       <CardContent className="p-8 space-y-4 text-center">
         <div className="text-4xl">🔒</div>
         <h2 className="text-lg font-semibold">{categoryName}는 Pro 전용입니다</h2>
         <p className="text-sm text-muted-foreground">
-          Pro 플랜은 무제한 분석·검증과 모든 스마트 리스트 카테고리를 제공합니다.
+          Pro 플랜은 월 100회 분석과 모든 스마트 리스트를 제공합니다.
         </p>
         <div className="flex justify-center gap-2 pt-2">
           <Link href="/pricing">

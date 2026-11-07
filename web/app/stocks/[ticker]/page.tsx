@@ -8,16 +8,21 @@
  * 법적 원칙(CLAUDE.md): 추천/목표가 표현 0, 면책 문구 필수, 기준 시점 명시.
  */
 import type { Metadata } from "next";
+import type { ReactNode } from "react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
+import { PriceChange } from "@/components/stocks/PriceChange";
+import { StockAvatar } from "@/components/stocks/StockAvatar";
+import { Range52Week, RsiMeter } from "@/components/viz/Meters";
 import { Sparkline } from "@/components/stocks/Sparkline";
+import { Term } from "@/components/ui/term";
 import { Disclaimer } from "@/components/legal/Disclaimer";
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import {
-  changeColorClass,
-  fmtCompactKR,
+
+  fmtMarketCapEok,
   getPublicStock,
   isKrMarket,
   type PublicStock,
@@ -47,8 +52,7 @@ function fmtPrice(s: PublicStock): string {
 
 function fmtCap(s: PublicStock): string {
   if (s.market_cap <= 0) return "-";
-  if (isKrMarket(s.market)) return `${fmtCompactKR(s.market_cap)}원`;
-  return `$${fmtCompactKR(s.market_cap)}`;
+  return `${fmtMarketCapEok(s.market_cap)}원`;
 }
 
 export async function generateMetadata({ params }: Params): Promise<Metadata> {
@@ -61,7 +65,7 @@ export async function generateMetadata({ params }: Params): Promise<Metadata> {
   const description =
     `${stock.name} ${marketLabel(stock.market)} 현재가 ${fmtPrice(stock)}, ` +
     `PER ${stock.per || "-"}·PBR ${stock.pbr || "-"}·ROE ${stock.roe || "-"}%·배당수익률 ${stock.div_yield || "-"}%. ` +
-    `Axis가 리스크·성장·가치 등 6가지 관점으로 분석합니다. (투자 권유 아님)`;
+    `Axis가 단기부터 장기까지 4가지 기간 관점으로 분석합니다. (투자 권유 아님)`;
   const url = `${SITE_URL}/stocks/${stock.ticker}`;
   return {
     title,
@@ -72,12 +76,12 @@ export async function generateMetadata({ params }: Params): Promise<Metadata> {
   };
 }
 
-function Metric({ label, value, hint }: { label: string; value: string; hint?: string }) {
+function Metric({ label, value, hint }: { label: ReactNode; value: string; hint?: string }) {
   return (
-    <div className="flex flex-col gap-0.5 rounded-md border p-3">
+    <div className="flex flex-col gap-0.5 rounded-xl border bg-card p-3">
       <span className="text-xs text-muted-foreground">{label}</span>
       <span className="text-base font-semibold tabular-nums">{value}</span>
-      {hint && <span className="text-[11px] text-muted-foreground">{hint}</span>}
+      {hint && <span className="text-xs text-muted-foreground">{hint}</span>}
     </div>
   );
 }
@@ -117,6 +121,7 @@ export default async function PublicStockPage({ params }: Params) {
 
       <header className="mb-6">
         <div className="flex items-baseline gap-2">
+          <StockAvatar ticker={stock.ticker} name={stock.name} className="size-10 self-center text-base" />
           <h1 className="text-2xl font-bold">{stock.name}</h1>
           <span className="text-sm text-muted-foreground">
             {stock.ticker} · {marketLabel(stock.market)}
@@ -124,10 +129,7 @@ export default async function PublicStockPage({ params }: Params) {
         </div>
         <div className="mt-2 flex items-baseline gap-3">
           <span className="text-3xl font-bold tabular-nums">{fmtPrice(stock)}</span>
-          <span className={`text-lg font-semibold tabular-nums ${changeColorClass(stock.change_pct)}`}>
-            {stock.change_pct > 0 ? "+" : ""}
-            {stock.change_pct}%
-          </span>
+          <PriceChange pct={stock.change_pct} className="text-lg font-semibold" />
         </div>
         {stock.updated_at && (
           <p className="mt-1 text-xs text-muted-foreground">
@@ -141,22 +143,34 @@ export default async function PublicStockPage({ params }: Params) {
         <Sparkline candles={stock.chart} up={up} />
       </section>
 
+      {/* 가격 위치 */}
+      <section className="mb-6 grid gap-5 rounded-xl border bg-card p-4 md:grid-cols-2 md:gap-8">
+        <Range52Week
+          close={stock.close}
+          vsHigh={stock.vs_high_52w}
+          vsLow={stock.vs_low_52w}
+          unit={isKrMarket(stock.market) ? "원" : "달러"}
+          label="최근 1년 가격대"
+        />
+        <RsiMeter value={stock.rsi} label={<Term id="rsi">최근 힘 (RSI)</Term>} />
+      </section>
+
       {/* 핵심 지표 */}
       <section className="mb-6">
         <h2 className="mb-3 text-lg font-semibold">핵심 지표</h2>
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-          <Metric label="PER" value={num(stock.per, "배")} />
-          <Metric label="PBR" value={num(stock.pbr, "배")} />
-          <Metric label="ROE" value={num(stock.roe, "%")} />
-          <Metric label="배당수익률" value={num(stock.div_yield, "%")} />
-          <Metric label="시가총액" value={fmtCap(stock)} />
-          <Metric label="RSI" value={num(stock.rsi)} />
+          <Metric label={<Term id="per" />} value={num(stock.per, "배")} />
+          <Metric label={<Term id="pbr" />} value={num(stock.pbr, "배")} />
+          <Metric label={<Term id="roe" />} value={num(stock.roe, "%")} />
+          <Metric label={<Term id="div_yield" />} value={num(stock.div_yield, "%")} />
+          <Metric label={<Term id="market_cap" />} value={fmtCap(stock)} />
+          <Metric label={<Term id="rsi" />} value={num(stock.rsi)} />
           <Metric
-            label="52주 고점 대비"
+            label={<Term id="vs_high_52w" />}
             value={stock.vs_high_52w ? `${stock.vs_high_52w}%` : "-"}
           />
           <Metric
-            label="52주 저점 대비"
+            label={<Term id="vs_low_52w" />}
             value={stock.vs_low_52w ? `+${stock.vs_low_52w}%` : "-"}
           />
           {stock.sector && <Metric label="섹터" value={stock.sector} />}
@@ -168,20 +182,19 @@ export default async function PublicStockPage({ params }: Params) {
         <Card>
           <CardContent className="space-y-3 p-5">
             <h2 className="text-lg font-semibold">
-              {stock.name}, 6가지 관점으로 분석해보세요
+              {stock.name}, 기간별로 분석해보세요
             </h2>
             <p className="text-sm text-muted-foreground">
               {stock.name}({stock.ticker})의 주가·밸류에이션·재무 지표는 위와 같습니다.
-              Axis는 4개의 AI 에이전트가 이 종목을 리스크 관리·성장·가치 등 6가지 투자
-              관점으로 다층 분석하고, 모든 수치를 현재 시점 데이터로 재검증합니다. 추천이
-              아니라, 당신의 판단을 돕는 정보 제공 도구입니다.
+              Axis는 단기부터 장기까지 4가지 기간 관점으로 이 종목을 분석하고, 모든 수치를
+              현재 시점 데이터로 재검증합니다. 어려운 용어는 쉬운 설명과 함께 보여드려요.
             </p>
             <div className="flex flex-wrap gap-2 pt-1">
               <Link
                 href={`/login?next=${encodeURIComponent(`/analyze/${stock.ticker}`)}`}
                 className={buttonVariants({ size: "lg" })}
               >
-                심층 분석 보기 →
+                심층 분석 보기
               </Link>
               <Link href="/pricing" className={buttonVariants({ variant: "outline", size: "lg" })}>
                 요금제 보기

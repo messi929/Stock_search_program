@@ -13,7 +13,7 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { useDiscover } from "@/hooks/useDiscover";
@@ -24,17 +24,17 @@ import type { StockSuggestion } from "@/types/api";
 type Market = "KR" | "US" | "ALL";
 
 const MARKETS: { id: Market; label: string }[] = [
-  { id: "KR", label: "🇰🇷 국내" },
-  { id: "US", label: "🇺🇸 미국" },
-  { id: "ALL", label: "🌐 전체" },
+  { id: "KR", label: "국내" },
+  { id: "US", label: "미국" },
+  { id: "ALL", label: "전체" },
 ];
 
 const PRESET_GROUPS: { label: string; items: string[] }[] = [
-  { label: "💎 가치", items: ["저PER 저PBR 가치주", "PBR 1배 미만 자산주"] },
-  { label: "🚀 성장", items: ["매출·이익 고성장주", "AI 2차 수혜주"] },
-  { label: "💰 배당", items: ["안정 배당 + ROE 10% 이상", "고배당 우량주"] },
-  { label: "📈 모멘텀", items: ["외국인 연속 매수 + 실적 호조", "52주 신고가 근접"] },
-  { label: "🔄 역발상", items: ["급등 후 조정 재진입 후보", "52주 저점 낙폭 과대"] },
+  { label: "가치", items: ["저PER 저PBR 가치주", "PBR 1배 미만 자산주"] },
+  { label: "성장", items: ["매출·이익 고성장주", "AI 2차 수혜주"] },
+  { label: "배당", items: ["안정 배당 + ROE 10% 이상", "고배당 우량주"] },
+  { label: "모멘텀", items: ["외국인 연속 매수 + 실적 호조", "52주 신고가 근접"] },
+  { label: "역발상", items: ["급등 후 조정 재진입 후보", "52주 저점 낙폭 과대"] },
 ];
 
 interface Props {
@@ -98,7 +98,7 @@ export function DiscoverView({ externalQuery = null }: Props = {}) {
       <Card>
         <CardContent className="p-5 space-y-4">
           <header className="space-y-1">
-            <h3 className="font-semibold">🧭 AI 종목 발견</h3>
+            <h3 className="font-semibold">AI 종목 발견</h3>
             <p className="text-sm text-muted-foreground">
               조건을 자유롭게 설명하거나, 아래 프리셋을 눌러 바로 발견하세요.
             </p>
@@ -186,7 +186,7 @@ export function DiscoverView({ externalQuery = null }: Props = {}) {
             {(discover.error as APIError)?.upgradeUrl && (
               <Link
                 href={(discover.error as APIError).upgradeUrl!}
-                className="inline-flex items-center rounded-md bg-amber-500/90 px-3 py-1.5 text-xs font-medium text-white hover:bg-amber-500"
+                className={buttonVariants({ size: "sm" })}
               >
                 Pro 플랜 보기 →
               </Link>
@@ -265,8 +265,8 @@ function Metric({ label, value }: { label: string; value: string }) {
 }
 
 function scoreColor(v: number): string {
-  if (v >= 70) return "bg-emerald-500/15 text-emerald-700";
-  if (v >= 50) return "bg-amber-500/15 text-amber-700";
+  if (v >= 70) return "bg-success/15 text-success";
+  if (v >= 50) return "bg-caution/15 text-caution";
   return "bg-muted text-muted-foreground";
 }
 
@@ -356,7 +356,7 @@ function SuggestionRow({ s }: { s: StockSuggestion }) {
       {(s.foreign_consecutive ?? 0) > 0 || s.themes ? (
         <div className="flex items-center gap-2 flex-wrap text-[10px] text-muted-foreground">
           {(s.foreign_consecutive ?? 0) > 0 && (
-            <span className="px-1.5 py-0.5 rounded bg-sky-500/10 text-sky-700">
+            <span className="px-1.5 py-0.5 rounded bg-info/10 text-info">
               외국인 {s.foreign_consecutive}일 연속
             </span>
           )}

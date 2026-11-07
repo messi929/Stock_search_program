@@ -122,6 +122,8 @@ export type HorizonMeta = {
   icon: string;
   name: string;
   tagline: string;
+  /** 초보자용 쉬운 설명 */
+  plain: string;
   /** Tailwind color tag (text-{color}-600 / bg-{color}-50 등) */
   accent: "slate" | "violet" | "emerald" | "amber" | "sky" | "rose";
 };
@@ -132,6 +134,7 @@ export const HORIZON_META: readonly HorizonMeta[] = [
     icon: "⚡",
     name: "단기",
     tagline: "수일~1개월 · 추세·거래량·수급 (모멘텀)",
+    plain: "며칠~한 달. 요즘 주가 흐름과 거래 분위기를 봐요.",
     accent: "amber",
   },
   {
@@ -139,6 +142,7 @@ export const HORIZON_META: readonly HorizonMeta[] = [
     icon: "📈",
     name: "단중기",
     tagline: "1~3개월 · 분기 실적 모멘텀 + 기술 강세 (어닝)",
+    plain: "1~3개월. 최근 실적과 주가 흐름을 함께 봐요.",
     accent: "sky",
   },
   {
@@ -146,6 +150,7 @@ export const HORIZON_META: readonly HorizonMeta[] = [
     icon: "⚖️",
     name: "중기",
     tagline: "3개월~1년 · 밸류·성장 균형 (GARP)",
+    plain: "3개월~1년. 회사 가치와 성장성을 균형 있게 봐요.",
     accent: "violet",
   },
   {
@@ -153,6 +158,7 @@ export const HORIZON_META: readonly HorizonMeta[] = [
     icon: "🏔",
     name: "장기",
     tagline: "1년+ · 펀더멘털·해자·매크로 사이클 (가치·해자)",
+    plain: "1년 이상. 회사의 기초 체력과 경쟁력을 봐요.",
     accent: "emerald",
   },
 ] as const;

@@ -21,7 +21,7 @@ export function AnalysisProgressBar() {
   return (
     <Link
       href={`/analyze/${first.ticker}`}
-      className="flex items-center justify-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-400 px-4 py-2.5 mb-4 text-sm hover:bg-amber-500/15 transition"
+      className="flex items-center justify-center gap-2 rounded-lg border border-caution/30 bg-caution/10 text-caution dark:text-caution px-4 py-2.5 mb-4 text-sm hover:bg-caution/15 transition"
     >
       <span className="inline-block animate-spin">⏳</span>
       <span className="font-medium font-mono">{first.ticker}</span>

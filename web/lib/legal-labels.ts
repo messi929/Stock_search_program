@@ -23,6 +23,10 @@ const LEGAL_SAFE_LABELS: Record<string, SafeLabel> = {
     name: "급등 관찰",
     desc: "급등 가능성이 포착된 종목 (참고용)",
   },
+  quality: {
+    name: "퀄리티주",
+    desc: "수익성이 높고 부채가 적으며 안정적으로 성장하는 해외 종목",
+  },
   growth: {
     name: "성장 관찰",
     desc: "수익성 + 적정 가격의 장기 성장 후보",

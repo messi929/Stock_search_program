@@ -12,24 +12,22 @@ const PLAN_LABEL: Record<string, string> = {
 };
 
 // kind: /history?kind= 로 전달 (analysis|validation|discovery)
-const METRICS: { key: "analyses" | "validations" | "discoveries"; label: string; icon: string; kind: string }[] = [
-  { key: "analyses", label: "종목 분석", icon: "🔍", kind: "analysis" },
-  { key: "validations", label: "실시간 검증", icon: "✅", kind: "validation" },
-  { key: "discoveries", label: "종목 발견", icon: "🧭", kind: "discovery" },
+const METRICS: { key: "analyses" | "validations" | "discoveries"; label: string; kind: string }[] = [
+  { key: "analyses", label: "종목 분석", kind: "analysis" },
+  { key: "validations", label: "실시간 검증", kind: "validation" },
+  { key: "discoveries", label: "종목 발견", kind: "discovery" },
 ];
 
-function MetricRow({ label, icon, metric }: { label: string; icon: string; metric: UsageMetric }) {
+function MetricRow({ label, metric }: { label: string; metric: UsageMetric }) {
   const unlimited = metric.limit < 0;
   const pct =
     unlimited || metric.limit === 0 ? 0 : Math.min(100, (metric.used / metric.limit) * 100);
-  const barColor = pct >= 90 ? "bg-red-500" : pct >= 70 ? "bg-amber-500" : "bg-sky-500";
+  const barColor = pct >= 90 ? "bg-destructive" : pct >= 70 ? "bg-caution" : "bg-primary";
 
   return (
     <div className="space-y-1">
       <div className="flex items-center justify-between text-sm">
-        <span>
-          {icon} {label}
-        </span>
+        <span>{label}</span>
         <span className="flex items-center gap-1.5 text-xs text-muted-foreground tabular-nums">
           {unlimited ? `${metric.used} (무제한)` : `${metric.used} / ${metric.limit}`}
           <span aria-hidden="true">›</span>
@@ -65,7 +63,7 @@ export function UsageCard() {
     <Card>
       <CardContent className="space-y-3 p-4">
         <div className="flex items-center justify-between">
-          <h2 className="font-semibold">🔥 이번 달 AI 사용량</h2>
+          <h2 className="font-semibold">이번 달 사용량</h2>
           <span className="text-xs text-muted-foreground">
             {data?.month}
             {" · "}
@@ -85,10 +83,10 @@ export function UsageCard() {
               <Link
                 key={m.key}
                 href={`/history?kind=${m.kind}`}
-                className="block rounded-lg border p-2.5 hover:bg-muted/50 transition"
+                className="block rounded-lg p-1.5 hover:bg-muted transition"
                 title={`${m.label} 이력 보기`}
               >
-                <MetricRow label={m.label} icon={m.icon} metric={data.usage[m.key]} />
+                <MetricRow label={m.label} metric={data.usage[m.key]} />
               </Link>
             ))}
           </div>
@@ -98,7 +96,7 @@ export function UsageCard() {
           {resetLabel && <span className="text-xs text-muted-foreground">{resetLabel}</span>}
           {plan === "free" && (
             <Link href="/pricing" className="text-xs font-medium text-primary hover:underline">
-              Pro로 업그레이드 →
+              Pro 보기
             </Link>
           )}
         </div>

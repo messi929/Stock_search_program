@@ -1,5 +1,15 @@
 "use client";
 
+import {
+  ChartCandlestick,
+  Compass,
+  House,
+  Layers,
+  ListFilter,
+  Settings,
+  Shield,
+  type LucideIcon,
+} from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect } from "react";
@@ -7,22 +17,59 @@ import { useEffect } from "react";
 import { AnalysisProgressBar } from "@/components/dashboard/AnalysisProgressBar";
 import { PlanBadge } from "@/components/dashboard/PlanBadge";
 import { SiteFooter } from "@/components/layout/SiteFooter";
-import { Button } from "@/components/ui/button";
+import { UserMenu } from "@/components/layout/UserMenu";
+import { StockSearch } from "@/components/stocks/StockSearch";
+import { Logo } from "@/components/ui/logo";
+import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { useAuth } from "@/hooks/useAuth";
 import { useIsAdmin } from "@/hooks/useIsAdmin";
 import { useUserProfile } from "@/hooks/useUserProfile";
-import { signOut } from "@/lib/auth-actions";
+import { cn } from "@/lib/utils";
 
-const NAV = [
-  { href: "/dashboard", label: "대시보드", icon: "🏠" },
-  { href: "/analyze", label: "종목 분석", icon: "🔍" },
-  { href: "/discover", label: "종목 발견", icon: "🧭" },
-  { href: "/screener", label: "스크리너", icon: "📊" },
-  { href: "/etf", label: "ETF", icon: "🧺" },
-  { href: "/settings/profile", label: "설정", icon: "⚙️" },
+interface NavItem {
+  href: string;
+  label: string;
+  icon: LucideIcon;
+}
+
+// 모바일 하단 nav도 이 5개를 쓴다. 설정은 상단 계정 메뉴로 이동.
+const NAV: NavItem[] = [
+  { href: "/dashboard", label: "홈", icon: House },
+  { href: "/analyze", label: "종목 분석", icon: ChartCandlestick },
+  { href: "/discover", label: "종목 발견", icon: Compass },
+  { href: "/screener", label: "스마트 리스트", icon: ListFilter },
+  { href: "/etf", label: "ETF", icon: Layers },
 ];
 
-const ADMIN_NAV = { href: "/admin", label: "관리자", icon: "🛡️" };
+const SETTINGS_NAV: NavItem = { href: "/settings/profile", label: "설정", icon: Settings };
+const ADMIN_NAV: NavItem = { href: "/admin", label: "관리자", icon: Shield };
+
+function isActive(href: string, pathname: string | null): boolean {
+  if (!pathname) return false;
+  if (href === "/dashboard") return pathname === href;
+  if (href.startsWith("/settings")) return pathname.startsWith("/settings");
+  return pathname.startsWith(href);
+}
+
+function SidebarLink({ item, pathname }: { item: NavItem; pathname: string | null }) {
+  const active = isActive(item.href, pathname);
+  const Icon = item.icon;
+  return (
+    <Link
+      href={item.href}
+      aria-current={active ? "page" : undefined}
+      className={cn(
+        "flex items-center gap-2.5 rounded-lg px-3 py-2.5 text-sm transition",
+        active
+          ? "bg-sidebar-accent font-semibold text-sidebar-accent-foreground"
+          : "text-muted-foreground hover:bg-muted hover:text-foreground",
+      )}
+    >
+      <Icon aria-hidden="true" className="size-[18px] shrink-0" />
+      {item.label}
+    </Link>
+  );
+}
 
 export default function DashboardLayout({
   children,
@@ -34,8 +81,6 @@ export default function DashboardLayout({
   const { user, loading: authLoading } = useAuth();
   const { onboarded, loading: profileLoading } = useUserProfile();
   const { isAdmin } = useIsAdmin();
-  // 관리자는 사이드바에 관리자 메뉴 추가 노출(모바일 하단 nav는 5개 유지).
-  const sidebarNav = isAdmin ? [...NAV, ADMIN_NAV] : NAV;
 
   useEffect(() => {
     if (authLoading || profileLoading) return;
@@ -58,102 +103,74 @@ export default function DashboardLayout({
   }
 
   return (
-    <div className="min-h-screen flex flex-col md:flex-row">
+    <div className="min-h-screen flex">
       {/* Sidebar (md+) */}
-      <aside className="hidden md:flex flex-col w-56 border-r p-4 gap-1">
-        <Link href="/dashboard" className="text-xl font-bold mb-6 px-2">
-          Axis
+      <aside className="hidden md:flex sticky top-0 h-screen w-60 shrink-0 flex-col border-r bg-sidebar p-3">
+        <Link href="/dashboard" className="mb-5 px-2.5 py-2 text-lg">
+          <Logo />
         </Link>
-        {sidebarNav.map((item) => (
-          <Link
-            key={item.href}
-            href={item.href}
-            className="px-3 py-2 rounded-md hover:bg-muted text-sm flex items-center gap-2"
-          >
-            <span>{item.icon}</span>
-            <span>{item.label}</span>
-          </Link>
-        ))}
-        <div className="mt-auto pt-4 border-t">
-          <div className="px-2 pb-2">
+        <nav aria-label="주 메뉴" className="flex flex-col gap-0.5">
+          {NAV.map((item) => (
+            <SidebarLink key={item.href} item={item} pathname={pathname} />
+          ))}
+        </nav>
+        <div className="mt-auto flex flex-col gap-0.5 border-t pt-3">
+          {isAdmin && <SidebarLink item={ADMIN_NAV} pathname={pathname} />}
+          <SidebarLink item={SETTINGS_NAV} pathname={pathname} />
+          <div className="px-3 pt-2">
             <PlanBadge />
           </div>
-          <p className="text-xs text-muted-foreground px-2 truncate">
-            {user.email}
-          </p>
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            className="mt-2 w-full justify-start"
-            onClick={() => signOut().then(() => router.replace("/"))}
-          >
-            로그아웃
-          </Button>
         </div>
       </aside>
 
-      {/* Mobile top bar — 하단 nav는 5개 유지, 관리자 진입은 여기(관리자만 🛡️ 노출). */}
-      <header className="md:hidden flex items-center justify-between px-4 py-3 border-b">
-        <Link href="/dashboard" className="text-lg font-bold">
-          Axis
-        </Link>
-        <div className="flex items-center gap-1">
-          <PlanBadge compact />
-          {isAdmin && (
-            <Link
-              href="/admin"
-              aria-label="관리자"
-              aria-current={pathname?.startsWith("/admin") ? "page" : undefined}
-              className={`px-2 py-1 rounded-md text-lg leading-none hover:bg-muted ${
-                pathname?.startsWith("/admin") ? "bg-muted" : ""
-              }`}
-            >
-              🛡️
-            </Link>
-          )}
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            onClick={() => signOut().then(() => router.replace("/"))}
-          >
-            로그아웃
-          </Button>
-        </div>
-      </header>
+      <div className="flex min-w-0 flex-1 flex-col">
+        {/* 상단바 — 어느 화면에서든 종목을 바로 찾을 수 있게 검색을 고정한다. */}
+        <header className="sticky top-0 z-30 flex items-center gap-2 border-b bg-background/90 px-4 py-2 backdrop-blur md:px-6">
+          <Link href="/dashboard" className="shrink-0 md:hidden" aria-label="홈">
+            <Logo showName={false} />
+          </Link>
+          {/* 홈은 본문에 큰 검색창이 있으므로 상단에서는 뺀다. */}
+          {pathname !== "/dashboard" && <StockSearch shortcut className="min-w-0 flex-1 md:max-w-md" />}
+          <div className="ml-auto flex shrink-0 items-center">
+            <span className="md:hidden">
+              <PlanBadge compact />
+            </span>
+            <ThemeToggle />
+            <UserMenu email={user.email} isAdmin={isAdmin} />
+          </div>
+        </header>
 
-      {/* pb-20: 모바일 fixed bottom nav(약 60px) + safe-area 여유. md+에선 사이드바라 0. */}
-      <main className="flex-1 p-4 md:p-6 pb-20 md:pb-6">
-        {/* 분석 진행중 전역 표시기 (running 있을 때만 노출) */}
-        <AnalysisProgressBar />
-        {children}
-        {/* 로그인 후에도 가격·약관·개인정보·환불 정책에 접근하도록 페이지 최하단 푸터 */}
-        <SiteFooter />
-      </main>
+        {/* pb-24: 모바일 fixed bottom nav + safe-area 여유. md+에선 사이드바라 불필요. */}
+        <main className="flex-1 p-4 pb-24 md:p-6 md:pb-6">
+          <div className="mx-auto w-full max-w-5xl">
+            {/* 분석 진행중 전역 표시기 (running 있을 때만 노출) */}
+            <AnalysisProgressBar />
+            {children}
+            {/* 로그인 후에도 가격·약관·개인정보·환불 정책에 접근하도록 페이지 최하단 푸터 */}
+            <SiteFooter />
+          </div>
+        </main>
+      </div>
 
-      {/* Mobile bottom nav — 항상 화면 하단 고정(긴 페이지에서도 노출). 5개 항목 + 활성 표시 + iOS safe-area. */}
+      {/* Mobile bottom nav — 항상 화면 하단 고정. 활성 표시 + iOS safe-area. */}
       <nav
-        className="md:hidden fixed bottom-0 left-0 right-0 z-40 flex justify-around py-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] border-t bg-background/95 backdrop-blur"
+        className="md:hidden fixed bottom-0 left-0 right-0 z-40 grid grid-cols-5 border-t bg-card/95 pt-1.5 pb-[max(0.375rem,env(safe-area-inset-bottom))] backdrop-blur"
         aria-label="모바일 주 메뉴"
       >
         {NAV.map((item) => {
-          const active =
-            item.href === "/dashboard"
-              ? pathname === "/dashboard"
-              : item.href.startsWith("/settings")
-                ? pathname?.startsWith("/settings")
-                : pathname?.startsWith(item.href);
+          const active = isActive(item.href, pathname);
+          const Icon = item.icon;
           return (
             <Link
               key={item.href}
               href={item.href}
               aria-current={active ? "page" : undefined}
-              className={`flex flex-col items-center text-[11px] gap-0.5 px-2 transition ${
-                active ? "text-primary font-semibold" : "text-muted-foreground"
-              }`}
+              className={cn(
+                "flex min-h-11 flex-col items-center justify-center gap-0.5 text-[11px] transition",
+                active ? "font-semibold text-primary" : "text-muted-foreground",
+              )}
             >
-              <span className="text-lg leading-none">{item.icon}</span>
+              <Icon aria-hidden="true" className="size-5" />
               <span className="whitespace-nowrap">{item.label}</span>
             </Link>
           );

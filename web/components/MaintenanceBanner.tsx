@@ -39,11 +39,11 @@ export function MaintenanceBanner() {
     return (
       <div
         role="status"
-        className="w-full bg-amber-500/15 border-b border-amber-500/40 text-amber-900 dark:text-amber-200 px-4 py-2 text-sm text-center"
+        className="w-full bg-caution/15 border-b border-caution/40 text-caution dark:text-caution px-4 py-2 text-sm text-center"
       >
         <span className="font-semibold">🛠 점검 안내</span>
         {window && <span className="mx-1.5 font-medium">· {window}</span>}
-        <span className="text-amber-800/90 dark:text-amber-200/90">
+        <span className="text-caution/90 dark:text-caution/90">
           {data.message
             ? ` · ${data.message}`
             : " · 점검 중 일부 기능(AI 분석 등) 이용이 제한될 수 있습니다."}
@@ -56,10 +56,10 @@ export function MaintenanceBanner() {
     return (
       <div
         role="status"
-        className="w-full bg-red-500/15 border-b border-red-500/40 text-red-900 dark:text-red-200 px-4 py-2 text-sm text-center"
+        className="w-full bg-destructive/10 border-b border-destructive/30 text-destructive px-4 py-2 text-sm text-center"
       >
         <span className="font-semibold">⚠️ AI 분석 일시 장애</span>
-        <span className="text-red-800/90 dark:text-red-200/90">
+        <span className="text-destructive/90">
           {" · "}
           {data.ai_reason || "AI 분석·검증이 일시적으로 원활하지 않습니다. 잠시 후 다시 시도해주세요."}
         </span>

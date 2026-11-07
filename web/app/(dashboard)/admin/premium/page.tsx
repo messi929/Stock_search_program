@@ -33,10 +33,10 @@ const STATUS_FILTERS: { key: string; label: string }[] = [
 ];
 
 const STATUS_BADGE: Record<PremiumStatus, string> = {
-  draft: "bg-slate-500/15 text-slate-300",
-  approved: "bg-emerald-500/15 text-emerald-300",
-  published: "bg-sky-500/15 text-sky-300",
-  archived: "bg-zinc-500/15 text-zinc-400",
+  draft: "bg-muted-foreground/15 text-muted-foreground",
+  approved: "bg-success/15 text-success",
+  published: "bg-info/15 text-info",
+  archived: "bg-muted-foreground/15 text-muted-foreground",
 };
 
 const STATUS_LABEL: Record<PremiumStatus, string> = {
@@ -59,17 +59,17 @@ function LengthBar({
   const pct = Math.min(100, Math.round((chars / target) * 100));
   const tone =
     chars < min
-      ? "bg-rose-500"
+      ? "bg-destructive"
       : chars < target * 0.8
-        ? "bg-amber-500"
-        : "bg-emerald-500";
+        ? "bg-caution"
+        : "bg-success";
   return (
     <div className="flex items-center gap-2">
       <div className="h-1.5 w-28 rounded bg-white/10 overflow-hidden">
         <div className={`h-full ${tone}`} style={{ width: `${pct}%` }} />
       </div>
       <span
-        className={`text-xs tabular-nums ${chars < min ? "text-rose-400" : "text-muted-foreground"}`}
+        className={`text-xs tabular-nums ${chars < min ? "text-destructive" : "text-muted-foreground"}`}
       >
         {chars.toLocaleString()}자
       </span>
@@ -186,8 +186,8 @@ export default function AdminPremiumPage() {
   return (
     <div className="space-y-5">
       {/* 발행 방식 고지 — 스레드 탭과 가장 크게 다른 지점이라 화면 최상단에 박아둔다. */}
-      <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 text-sm">
-        <p className="font-semibold text-amber-300">
+      <div className="rounded-lg border border-caution/30 bg-caution/5 p-3 text-sm">
+        <p className="font-semibold text-caution">
           프리미엄콘텐츠는 자동 발행이 없습니다
         </p>
         <p className="mt-1 text-muted-foreground">
@@ -200,7 +200,7 @@ export default function AdminPremiumPage() {
             href={meta.data.studio_url}
             target="_blank"
             rel="noopener noreferrer"
-            className="mt-2 inline-block text-xs text-amber-300 underline"
+            className="mt-2 inline-block text-xs text-caution underline"
           >
             프리미엄콘텐츠 스튜디오 열기 ↗
           </a>
@@ -287,7 +287,7 @@ export default function AdminPremiumPage() {
                         </span>
                       )}
                       {d.warnings.length > 0 && (
-                        <span className="px-2 py-0.5 rounded text-xs bg-amber-500/15 text-amber-300">
+                        <span className="px-2 py-0.5 rounded text-xs bg-caution/15 text-caution">
                           경고 {d.warnings.length}
                         </span>
                       )}
@@ -309,12 +309,12 @@ export default function AdminPremiumPage() {
               {open && (
                 <div className="border-t p-4 space-y-3">
                   {d.warnings.length > 0 && (
-                    <div className="rounded border border-amber-500/30 bg-amber-500/5 p-2 text-xs text-amber-300">
+                    <div className="rounded border border-caution/30 bg-caution/5 p-2 text-xs text-caution">
                       {d.warnings.join(" · ")}
                     </div>
                   )}
                   {d.filtered.length > 0 && (
-                    <div className="rounded border border-rose-500/30 bg-rose-500/5 p-2 text-xs text-rose-300">
+                    <div className="rounded border border-destructive/30 bg-destructive/5 p-2 text-xs text-destructive">
                       금지표현 치환: {d.filtered.join(", ")}
                     </div>
                   )}
@@ -372,7 +372,7 @@ export default function AdminPremiumPage() {
                     <Button
                       size="sm"
                       variant="ghost"
-                      className="text-rose-400 ml-auto"
+                      className="text-destructive ml-auto"
                       onClick={() => onDelete(d.id)}
                     >
                       삭제
@@ -407,7 +407,7 @@ export default function AdminPremiumPage() {
                         href={d.published_url}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="text-xs text-sky-400 underline break-all"
+                        className="text-xs text-info underline break-all"
                       >
                         {d.published_url}
                       </a>

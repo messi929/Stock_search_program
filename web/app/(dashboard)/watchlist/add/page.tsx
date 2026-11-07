@@ -34,7 +34,7 @@ export default function AddWatchlistPage() {
   return (
     <div className="space-y-6 max-w-3xl">
       <header>
-        <h1 className="text-2xl font-bold">⭐ 관심 종목 추가</h1>
+        <h1 className="text-2xl font-bold">관심 종목 추가</h1>
         <p className="text-sm text-muted-foreground mt-1">
           종목 코드로 직접 검색해 추가하거나, 테마에서 골라 AI 발견으로 이어가세요.
           (AI에게 조건으로 찾기는{" "}
@@ -44,8 +44,8 @@ export default function AddWatchlistPage() {
 
       <Tabs defaultValue="search">
         <TabsList>
-          <TabsTrigger value="search">🔎 검색</TabsTrigger>
-          <TabsTrigger value="themes">🎯 테마</TabsTrigger>
+          <TabsTrigger value="search">검색</TabsTrigger>
+          <TabsTrigger value="themes">테마</TabsTrigger>
         </TabsList>
 
         <TabsContent value="search">

@@ -1,5 +1,6 @@
 "use client";
 
+import { HorizonIcon } from "@/components/analyze/HorizonIcon";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
@@ -41,11 +42,11 @@ const HOLDING_PERIOD_OPTIONS: { id: HoldingPeriod; label: string }[] = [
   { id: "3y+", label: "3년 이상" },
 ];
 
-const HORIZON_OPTIONS: { id: PreferredHorizon; icon: string; name: string; tagline: string }[] = [
-  { id: "short", icon: "⚡", name: "단기", tagline: "수일~1개월 · 추세·거래량·수급" },
-  { id: "short_mid", icon: "📈", name: "단중기", tagline: "1~3개월 · 분기 실적 모멘텀 + 기술" },
-  { id: "mid", icon: "⚖️", name: "중기", tagline: "3개월~1년 · 밸류·성장 균형" },
-  { id: "long", icon: "🏔", name: "장기", tagline: "1년+ · 펀더멘털·해자·매크로 사이클" },
+const HORIZON_OPTIONS: { id: PreferredHorizon; name: string; tagline: string }[] = [
+  { id: "short", name: "단기", tagline: "수일~1개월 · 추세·거래량·수급" },
+  { id: "short_mid", name: "단중기", tagline: "1~3개월 · 분기 실적 모멘텀 + 기술" },
+  { id: "mid", name: "중기", tagline: "3개월~1년 · 밸류·성장 균형" },
+  { id: "long", name: "장기", tagline: "1년+ · 펀더멘털·해자·매크로 사이클" },
 ];
 
 export default function OnboardingPage() {
@@ -138,7 +139,7 @@ export default function OnboardingPage() {
         {/* progress bar */}
         <div className="h-1 w-full bg-muted rounded">
           <div
-            className="h-1 bg-amber-500 rounded transition-all"
+            className="h-1 bg-primary rounded transition-all"
             style={{ width: `${(step / 4) * 100}%` }}
           />
         </div>
@@ -154,13 +155,13 @@ export default function OnboardingPage() {
                   onClick={() => setExperience(opt.id)}
                   className={`w-full text-left p-3 rounded-md border transition ${
                     experience === opt.id
-                      ? "border-amber-500 bg-amber-500/10"
+                      ? "border-primary bg-primary/10"
                       : "border-border hover:bg-muted"
                   }`}
                 >
                   <span>{opt.label}</span>
                   {opt.tag && (
-                    <span className="ml-2 text-xs text-amber-500">{opt.tag}</span>
+                    <span className="ml-2 text-xs text-caution">{opt.tag}</span>
                   )}
                 </button>
               ))}
@@ -181,7 +182,7 @@ export default function OnboardingPage() {
                     onClick={() => toggleSector(s)}
                     className={`p-3 rounded-md border text-sm transition ${
                       on
-                        ? "border-amber-500 bg-amber-500/10"
+                        ? "border-primary bg-primary/10"
                         : "border-border hover:bg-muted"
                     }`}
                   >
@@ -249,7 +250,7 @@ export default function OnboardingPage() {
                     onClick={() => setHoldingPeriod(opt.id)}
                     className={`p-2 rounded-md border text-sm transition ${
                       holdingPeriod === opt.id
-                        ? "border-amber-500 bg-amber-500/10"
+                        ? "border-primary bg-primary/10"
                         : "border-border hover:bg-muted"
                     }`}
                   >
@@ -265,7 +266,7 @@ export default function OnboardingPage() {
           <div className="space-y-4">
             <h2 className="font-semibold">주로 어느 기간 관점으로 보시나요?</h2>
             <p className="text-sm text-muted-foreground">
-              기본 시계일 뿐, 분석 화면에서 종목마다 자유롭게 바꿀 수 있습니다.
+              기본 설정일 뿐, 분석 화면에서 종목마다 자유롭게 바꿀 수 있습니다.
             </p>
             <div className="space-y-2">
               {HORIZON_OPTIONS.map((h) => (
@@ -275,12 +276,12 @@ export default function OnboardingPage() {
                   onClick={() => setHorizon(h.id)}
                   className={`w-full text-left p-4 rounded-md border transition ${
                     horizon === h.id
-                      ? "border-amber-500 bg-amber-500/10"
+                      ? "border-primary bg-primary/10"
                       : "border-border hover:bg-muted"
                   }`}
                 >
                   <div className="flex items-center gap-3">
-                    <span className="text-2xl">{h.icon}</span>
+                    <HorizonIcon id={h.id} className="size-6 text-primary" />
                     <div>
                       <div className="font-semibold">{h.name}</div>
                       <div className="text-xs text-muted-foreground">{h.tagline}</div>

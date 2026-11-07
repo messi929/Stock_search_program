@@ -12,6 +12,7 @@
  * SVG 5각형은 외부 차트 라이브러리 없이 polygon으로 직접 렌더 (의존성 최소).
  */
 
+import { Landmark } from "lucide-react";
 import {
   AgentCardShell,
   type AgentStatus,
@@ -35,8 +36,8 @@ export function KoreanSpecialistCard({
 }) {
   return (
     <AgentCardShell
-      icon="🇰🇷"
-      title="한국 시장 특수성 (Korean Specialist)"
+      icon={Landmark}
+      title="한국 시장 특수성"
       subtitle={
         data
           ? `종합 ${data.korea_specific_score.weighted_total.toFixed(1)}/10`
@@ -67,7 +68,7 @@ export function KoreanSpecialistCard({
 
           {/* 거버넌스 disclaimer (강조) */}
           {data.chaebol_structure_analysis?.governance_disclaimer ? (
-            <div className="rounded-md border border-amber-500/40 bg-amber-500/5 p-2 text-xs text-muted-foreground leading-relaxed">
+            <div className="rounded-md border border-caution/40 bg-caution/5 p-2 text-xs text-muted-foreground leading-relaxed">
               ⚠️ {String(data.chaebol_structure_analysis.governance_disclaimer)}
             </div>
           ) : null}
@@ -223,7 +224,7 @@ function ScoreList({ scores }: { scores: KoreaSpecificScore }) {
             </div>
             <div className="h-1 rounded bg-muted overflow-hidden">
               <div
-                className="h-full bg-rose-500/70"
+                className="h-full bg-up/70"
                 style={{ width: `${pct}%` }}
               />
             </div>

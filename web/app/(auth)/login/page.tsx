@@ -7,6 +7,7 @@ import { toast } from "sonner";
 
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Logo } from "@/components/ui/logo";
 import { Input } from "@/components/ui/input";
 import { useAuth } from "@/hooks/useAuth";
 import { useUserProfile } from "@/hooks/useUserProfile";
@@ -175,10 +176,8 @@ function LoginPageInner() {
     <Card className="w-full max-w-md">
       <CardContent className="p-8 space-y-6">
         <div className="text-center space-y-2">
+          <Logo className="justify-center text-lg" />
           <h1 className="text-2xl font-bold">{titleByMode[mode]}</h1>
-          <p className="text-sm text-muted-foreground">
-            AI 투자 분석 파트너 — Axis
-          </p>
         </div>
 
         {/* 소셜 로그인 */}
@@ -190,7 +189,7 @@ function LoginPageInner() {
             className="w-full h-11"
             size="lg"
           >
-            {busy ? "처리 중..." : "🔵 구글로 계속하기"}
+            {busy ? "처리 중..." : "구글로 계속하기"}
           </Button>
           <Button
             type="button"

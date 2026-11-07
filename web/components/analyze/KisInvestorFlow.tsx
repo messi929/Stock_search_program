@@ -78,9 +78,9 @@ export function KisInvestorFlow({ ticker }: { ticker: string }) {
 
         {/* 14일 누적 요약 */}
         <div className="grid grid-cols-3 gap-2 text-xs">
-          <SummaryCell label="외국인" qty={sumForeign} accent="text-amber-500" />
-          <SummaryCell label="기관" qty={sumInst} accent="text-emerald-500" />
-          <SummaryCell label="개인" qty={sumPerson} accent="text-slate-400" />
+          <SummaryCell label="외국인" qty={sumForeign} accent="text-caution" />
+          <SummaryCell label="기관" qty={sumInst} accent="text-success" />
+          <SummaryCell label="개인" qty={sumPerson} accent="text-muted-foreground" />
         </div>
 
         {/* 일자별 막대 */}
@@ -91,11 +91,11 @@ export function KisInvestorFlow({ ticker }: { ticker: string }) {
                 <div className="w-10 text-[10px] text-muted-foreground tabular-nums">
                   {fmtDate(r.date)}
                 </div>
-                <FlowBar value={r.foreign} max={maxAbs} color="bg-amber-500" />
+                <FlowBar value={r.foreign} max={maxAbs} color="bg-caution" />
               </div>
               <div className="flex items-center gap-1.5">
                 <div className="w-10 text-[10px] text-muted-foreground tabular-nums" />
-                <FlowBar value={r.inst} max={maxAbs} color="bg-emerald-500" />
+                <FlowBar value={r.inst} max={maxAbs} color="bg-success" />
               </div>
             </div>
           ))}
@@ -103,10 +103,10 @@ export function KisInvestorFlow({ ticker }: { ticker: string }) {
 
         <div className="flex items-center gap-3 text-[10px] text-muted-foreground border-t border-border pt-2">
           <span className="flex items-center gap-1">
-            <span className="inline-block w-2 h-2 rounded-sm bg-amber-500" /> 외인
+            <span className="inline-block w-2 h-2 rounded-sm bg-caution" /> 외인
           </span>
           <span className="flex items-center gap-1">
-            <span className="inline-block w-2 h-2 rounded-sm bg-emerald-500" /> 기관
+            <span className="inline-block w-2 h-2 rounded-sm bg-success" /> 기관
           </span>
           <span className="ml-auto">우=순매수 · 좌=순매도</span>
         </div>

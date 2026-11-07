@@ -1,31 +1,37 @@
 "use client";
 
+import { ChartCandlestick, Compass, Layers, ListFilter, type LucideIcon } from "lucide-react";
 import Link from "next/link";
 import { useEffect } from "react";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
 
-import { MarketStatus } from "@/components/dashboard/MarketStatus";
+import { GettingStarted } from "@/components/dashboard/GettingStarted";
+import { HotList } from "@/components/dashboard/HotList";
+import { MarketPulse } from "@/components/dashboard/MarketPulse";
 import { RecentAnalyses } from "@/components/dashboard/RecentAnalyses";
 import { UsageCard } from "@/components/dashboard/UsageCard";
 import { WatchlistPreview } from "@/components/dashboard/WatchlistPreview";
 import { Disclaimer } from "@/components/legal/Disclaimer";
-import { buttonVariants } from "@/components/ui/button";
+import { StockSearch } from "@/components/stocks/StockSearch";
 import { Card, CardContent } from "@/components/ui/card";
 import { useAuth } from "@/hooks/useAuth";
-import { useUserProfile } from "@/hooks/useUserProfile";
+import { useWatchlist } from "@/hooks/useWatchlist";
+import { useAnalysisStore } from "@/store/analysisStore";
 
-const HORIZON_LABEL: Record<string, string> = {
-  short: "⚡ 단기",
-  short_mid: "📈 단중기",
-  mid: "⚖️ 중기",
-  long: "🏔 장기",
-};
+const SHORTCUTS: { href: string; icon: LucideIcon; tint: string; title: string; desc: string }[] = [
+  { href: "/analyze", icon: ChartCandlestick, tint: "bg-tint-1/15 text-tint-1", title: "종목 분석", desc: "AI가 한 종목을 깊이 있게 분석해요" },
+  { href: "/discover", icon: Compass, tint: "bg-tint-3/15 text-tint-3", title: "종목 발견", desc: "주제나 조건을 말하면 AI가 찾아드려요" },
+  { href: "/screener", icon: ListFilter, tint: "bg-tint-2/15 text-tint-2", title: "스마트 리스트", desc: "주제별로 정리된 종목 목록을 봐요" },
+  { href: "/etf", icon: Layers, tint: "bg-tint-5/15 text-tint-5", title: "ETF 탐색", desc: "ETF의 구성 종목과 비중을 확인해요" },
+];
 
 export default function DashboardHome() {
   const { user } = useAuth();
-  const { profile } = useUserProfile();
   const qc = useQueryClient();
+  const { data: watchlist, isLoading: watchlistLoading } = useWatchlist();
+  const hasRecents = useAnalysisStore((s) => s.recents.length > 0);
+  const isNewUser = !watchlistLoading && (watchlist?.watchlist.length ?? 0) === 0 && !hasRecents;
 
   // 결제 성공 콜백 (?payment=success) — LS 결제 후 리다이렉트
   useEffect(() => {
@@ -39,135 +45,71 @@ export default function DashboardHome() {
   }, [qc]);
 
   return (
-    <div className="space-y-6 max-w-5xl">
-      <header className="flex items-start justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold">
-            안녕하세요{user?.displayName ? `, ${user.displayName}` : ""} 👋
-          </h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            오늘도 신중한 분석으로 시작합니다.
-          </p>
-        </div>
-        <Link
-          href="/settings/notifications"
-          className="text-sm text-muted-foreground hover:text-foreground shrink-0"
+    <div className="space-y-6">
+      {/* 첫 화면의 주 행동은 종목 검색 하나로 모은다. */}
+      <header className="bg-hero relative rounded-2xl p-6 md:p-8">
+        {/* 장식용 상승 곡선 — 데이터가 아니므로 스크린리더에서 숨긴다. */}
+        <svg
+          aria-hidden="true"
+          viewBox="0 0 400 120"
+          preserveAspectRatio="none"
+          className="pointer-events-none absolute inset-x-0 bottom-0 h-2/3 w-full rounded-b-2xl opacity-20"
         >
-          🔔 알림 설정
-        </Link>
+          <path d="M0 100 L60 84 L110 92 L170 60 L220 70 L280 38 L330 46 L400 12" fill="none" stroke="#fff" strokeWidth="2" vectorEffect="non-scaling-stroke" />
+          <path d="M0 100 L60 84 L110 92 L170 60 L220 70 L280 38 L330 46 L400 12 L400 120 L0 120 Z" fill="#fff" fillOpacity="0.12" />
+        </svg>
+        <div className="relative space-y-4">
+          <div>
+            <h1 className="text-2xl font-bold md:text-3xl">
+              {user?.displayName ? `${user.displayName}님, ` : ""}어떤 종목이 궁금하세요?
+            </h1>
+            <p className="mt-1 text-white/80">회사 이름만 입력하면 분석을 시작할 수 있어요.</p>
+          </div>
+          <div className="text-foreground">
+            <StockSearch size="lg" placeholder="예: 삼성전자, 현대차, AAPL" className="max-w-2xl" />
+          </div>
+        </div>
       </header>
 
-      {/* Market status (v7.5 backend) */}
-      <MarketStatus />
+      {isNewUser && <GettingStarted />}
 
-      {/* Watchlist preview */}
-      <WatchlistPreview />
+      <HotList />
 
-      {/* 최근 분석한 종목 (localStorage 영속) */}
-      <RecentAnalyses />
-
-      {/* AI 사용량 (월 한도) */}
-      <UsageCard />
-
-      {/* Profile summary */}
-      <Card>
-        <CardContent className="p-6 space-y-3">
-          <div className="flex items-center justify-between gap-2">
-            <h2 className="font-semibold">내 투자 프로필</h2>
-            <Link
-              href="/settings/profile"
-              className="text-xs text-amber-500 hover:underline shrink-0"
-            >
-              ⚙️ 수정 →
-            </Link>
-          </div>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-            <div>
-              <p className="text-muted-foreground">선호 시계</p>
-              <p className="font-medium">
-                {HORIZON_LABEL[profile?.preferred_horizon ?? "mid"]}
-              </p>
-            </div>
-            <div>
-              <p className="text-muted-foreground">투자 경력</p>
-              <p className="font-medium">{profile?.investing_experience ?? "—"}</p>
-            </div>
-            <div>
-              <p className="text-muted-foreground">보유 기간</p>
-              <p className="font-medium">{profile?.holding_period ?? "—"}</p>
-            </div>
-            <div>
-              <p className="text-muted-foreground">관심 섹터</p>
-              <p className="font-medium">
-                {profile?.interested_sectors?.length
-                  ? `${profile.interested_sectors.length}개`
-                  : "—"}
-              </p>
-            </div>
-          </div>
-          {profile?.investment_principles?.length ? (
-            <div className="pt-2 text-sm">
-              <p className="text-muted-foreground mb-1">투자 원칙</p>
-              <ul className="space-y-1">
-                {profile.investment_principles.map((p) => (
-                  <li key={p}>• {p}</li>
-                ))}
-              </ul>
-            </div>
-          ) : null}
-        </CardContent>
-      </Card>
-
-      {/* Quick actions */}
-      <section>
-        <h2 className="font-semibold mb-3">빠른 시작</h2>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-          <Link
-            href="/screener"
-            className={`${buttonVariants({ variant: "outline", size: "lg" })} h-auto py-4 px-4 justify-start`}
-          >
-            <div className="text-left w-full">
-              <div className="font-semibold">📊 스마트 리스트</div>
-              <div className="text-xs text-muted-foreground mt-1">
-                17 카테고리 / 관찰 시그널·가치주·모멘텀
-              </div>
-            </div>
-          </Link>
-          <Link
-            href="/discover"
-            className={`${buttonVariants({ variant: "outline", size: "lg" })} h-auto py-4 px-4 justify-start`}
-          >
-            <div className="text-left w-full">
-              <div className="font-semibold">🧭 종목 발견</div>
-              <div className="text-xs text-muted-foreground mt-1">
-                AI에게 조건·테마로 관찰 가치 종목 찾기
-              </div>
-            </div>
-          </Link>
-          <Link
-            href="/analyze"
-            className={`${buttonVariants({ variant: "outline", size: "lg" })} h-auto py-4 px-4 justify-start`}
-          >
-            <div className="text-left w-full">
-              <div className="font-semibold">🔍 종목 분석</div>
-              <div className="text-xs text-muted-foreground mt-1">
-                4 에이전트 종합 + 검증
-              </div>
-            </div>
-          </Link>
-          <Link
-            href="/etf"
-            className={`${buttonVariants({ variant: "outline", size: "lg" })} h-auto py-4 px-4 justify-start`}
-          >
-            <div className="text-left w-full">
-              <div className="font-semibold">🧺 ETF 탐색</div>
-              <div className="text-xs text-muted-foreground mt-1">
-                국내·해외 ETF 정보·구성종목·비중
-              </div>
-            </div>
-          </Link>
+      <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_20rem]">
+        <div className="min-w-0 space-y-6">
+          <MarketPulse />
+          <WatchlistPreview />
+          <RecentAnalyses />
         </div>
-      </section>
+        <div className="min-w-0 space-y-6">
+          <section aria-labelledby="shortcuts" className="space-y-3">
+            <h2 id="shortcuts" className="font-semibold">
+              바로 가기
+            </h2>
+            <div className="grid grid-cols-2 gap-3 lg:grid-cols-1">
+              {SHORTCUTS.map((s) => {
+                const Icon = s.icon;
+                return (
+                  <Link key={s.href} href={s.href} className="block rounded-xl focus-visible:ring-2 focus-visible:ring-ring">
+                    <Card className="h-full transition hover:ring-primary/40">
+                      <CardContent className="flex items-start gap-3 p-3.5">
+                        <span className={`flex size-9 shrink-0 items-center justify-center rounded-lg ${s.tint}`}>
+                          <Icon aria-hidden="true" className="size-5" />
+                        </span>
+                        <span className="min-w-0">
+                          <span className="block font-semibold">{s.title}</span>
+                          <span className="mt-0.5 block text-xs leading-relaxed text-muted-foreground">{s.desc}</span>
+                        </span>
+                      </CardContent>
+                    </Card>
+                  </Link>
+                );
+              })}
+            </div>
+          </section>
+          <UsageCard />
+        </div>
+      </div>
 
       <Disclaimer />
     </div>

@@ -1,5 +1,6 @@
 "use client";
 
+import { ChartColumn } from "lucide-react";
 import {
   AgentCardShell,
   type AgentStatus,
@@ -7,16 +8,16 @@ import {
 import type { AnalystResult } from "@/types/api";
 
 const TIER_COLOR: Record<string, string> = {
-  상위: "text-emerald-500",
-  준상위: "text-amber-500",
+  상위: "text-success",
+  준상위: "text-caution",
   중간: "text-muted-foreground",
   관찰: "text-muted-foreground",
 };
 
 const SIGNAL_COLOR: Record<string, string> = {
-  강세: "text-emerald-500",
+  강세: "text-up",
   중립: "text-muted-foreground",
-  약세: "text-destructive",
+  약세: "text-down",
 };
 
 /** 6자리 숫자=KR(원), 그 외=US(달러). */
@@ -33,9 +34,9 @@ export function AnalystCard({
 }) {
   return (
     <AgentCardShell
-      icon="📊"
-      title="기술/펀더멘털 (Analyst)"
-      subtitle="Sonnet · 정량 데이터 해석"
+      icon={ChartColumn}
+      title="숫자로 본 종목 상태"
+      subtitle="차트와 재무 수치를 해석했어요"
       status={status}
     >
       {!data ? (

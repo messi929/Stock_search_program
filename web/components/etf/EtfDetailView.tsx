@@ -13,10 +13,10 @@ import { Card, CardContent } from "@/components/ui/card";
 import { useEtfDetail, type EtfBreakdown } from "@/hooks/useEtf";
 
 const REGION_LABEL: Record<string, string> = {
-  domestic: "🇰🇷 국내",
-  foreign: "🌐 국내상장 국외",
+  domestic: "국내",
+  foreign: "국내상장 국외",
   mixed: "🌗 혼합",
-  us: "🇺🇸 미국 상장",
+  us: "미국 상장",
   unknown: "ETF",
 };
 
@@ -106,7 +106,7 @@ export function EtfDetailView({ ticker }: { ticker: string }) {
         <Card>
           <CardContent className="p-6 text-sm text-muted-foreground space-y-2">
             <p>⚠️ ETF 정보를 불러오지 못했습니다. 종목 코드를 확인하거나 잠시 후 다시 시도해주세요.</p>
-            <Link href="/etf" className="text-amber-600 hover:underline">
+            <Link href="/etf" className="text-primary hover:underline">
               ETF 목록 보기 →
             </Link>
           </CardContent>
@@ -157,7 +157,7 @@ export function EtfDetailView({ ticker }: { ticker: string }) {
       <Card>
         <CardContent className="p-5 space-y-3">
           <div className="flex items-baseline justify-between">
-            <h2 className="font-semibold">📦 상위 구성종목</h2>
+            <h2 className="font-semibold">상위 구성종목</h2>
             <span className="text-[11px] text-muted-foreground">상위 10개 (CU 기준)</span>
           </div>
           {data.top_holdings.length === 0 ? (
@@ -223,17 +223,17 @@ export function EtfDetailView({ ticker }: { ticker: string }) {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <Card>
           <CardContent className="p-5">
-            <BreakdownBars title="🏭 섹터 비중" items={data.sector_breakdown} accent="bg-violet-500/70" />
+            <BreakdownBars title="섹터 비중" items={data.sector_breakdown} accent="bg-info/70" />
           </CardContent>
         </Card>
         <Card>
           <CardContent className="p-5">
-            <BreakdownBars title="🌐 국가 비중" items={data.country_breakdown} accent="bg-sky-500/70" />
+            <BreakdownBars title="국가 비중" items={data.country_breakdown} accent="bg-info/70" />
           </CardContent>
         </Card>
         <Card>
           <CardContent className="p-5">
-            <BreakdownBars title="🧱 자산 비중" items={data.asset_breakdown} accent="bg-emerald-500/70" />
+            <BreakdownBars title="자산 비중" items={data.asset_breakdown} accent="bg-success/70" />
           </CardContent>
         </Card>
       </div>

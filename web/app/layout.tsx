@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import "pretendard/dist/web/variable/pretendardvariable-dynamic-subset.css";
 import "./globals.css";
 
 import { MaintenanceBanner } from "@/components/MaintenanceBanner";
@@ -43,7 +44,7 @@ export default function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="ko" className="dark h-full antialiased">
+    <html lang="ko" className="h-full antialiased" suppressHydrationWarning>
       <body className="min-h-full flex flex-col bg-background text-foreground">
         <Providers>
           <MaintenanceBanner />

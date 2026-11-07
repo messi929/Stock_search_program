@@ -83,13 +83,13 @@ export default function NotificationsSettingsPage() {
         >
           ← 대시보드
         </Link>
-        <h1 className="text-2xl font-bold">🔔 알림 설정</h1>
+        <h1 className="text-2xl font-bold">알림 설정</h1>
         <p className="text-sm text-muted-foreground">
           관심 종목 진입선 도달, 일일 시황 등을 이메일로 받아봅니다.
         </p>
       </header>
 
-      <Card className="border-amber-500/30 bg-amber-500/5">
+      <Card className="border-caution/30 bg-caution/5">
         <CardContent className="p-4 text-sm space-y-1">
           <p className="font-medium">⏳ 알림 발송은 v1.1 도입 예정입니다</p>
           <p className="text-xs text-muted-foreground">
@@ -110,7 +110,7 @@ export default function NotificationsSettingsPage() {
             }}
           />
           <ToggleRow
-            title="🎯 진입선 도달 알림"
+            title="진입선 도달 알림"
             desc="관심 종목에 저장한 1차/2차/3차 관찰 구간에 가격이 도달하면 즉시 발송."
             value={entry}
             onChange={(v) => {
@@ -178,8 +178,8 @@ function ToggleRow({
         aria-checked={value}
         aria-label={title}
         onClick={() => onChange(!value)}
-        className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 ${
-          value ? "bg-amber-500" : "bg-muted"
+        className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+          value ? "bg-primary" : "bg-muted"
         }`}
       >
         <span

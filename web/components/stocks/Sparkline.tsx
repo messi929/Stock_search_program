@@ -45,7 +45,7 @@ export function Sparkline({ candles, up, width = 640, height = 160 }: SparklineP
     .join(" ");
   const areaPath = `${linePath} L${points[points.length - 1][0].toFixed(1)},${h - pad} L${points[0][0].toFixed(1)},${h - pad} Z`;
 
-  const stroke = up ? "#ef4444" : "#3b82f6"; // red-500 / blue-500
+  const stroke = up ? "var(--up)" : "var(--down)";
   const fillId = up ? "spark-up" : "spark-down";
 
   return (

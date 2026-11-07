@@ -71,7 +71,7 @@ export default function AdminErrorsPage() {
           <p className="px-4 py-6 text-sm text-muted-foreground">불러오는 중...</p>
         )}
         {list.isError && (
-          <p className="px-4 py-6 text-sm text-red-500">조회 실패 (권한 확인)</p>
+          <p className="px-4 py-6 text-sm text-destructive">조회 실패 (권한 확인)</p>
         )}
         {list.data && (
           <table className="w-full text-sm">
@@ -101,7 +101,7 @@ export default function AdminErrorsPage() {
                       <span className="block text-xs truncate max-w-[120px]">{e.uid}</span>
                     )}
                   </td>
-                  <td className="px-3 py-2 text-red-500/90 break-all">{e.message}</td>
+                  <td className="px-3 py-2 text-destructive/90 break-all">{e.message}</td>
                 </tr>
               ))}
               {list.data.errors.length === 0 && (

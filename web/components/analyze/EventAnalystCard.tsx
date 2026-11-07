@@ -13,6 +13,7 @@
  * LEGAL: 단정 표현 사용 금지. 백엔드가 이미 filter_forbidden 통과한 데이터.
  */
 
+import { CalendarClock } from "lucide-react";
 import {
   AgentCardShell,
   type AgentStatus,
@@ -20,13 +21,13 @@ import {
 import type { EventAnalystResult } from "@/types/api";
 
 const MODE_BADGE: Record<string, { color: string; label: string }> = {
-  "Full Analysis": { color: "bg-emerald-500/15 text-emerald-700", label: "Full" },
-  Cautious: { color: "bg-amber-500/15 text-amber-700", label: "Cautious" },
+  "Full Analysis": { color: "bg-success/15 text-success", label: "Full" },
+  Cautious: { color: "bg-caution/15 text-caution", label: "Cautious" },
   "Probabilistic Only": {
-    color: "bg-amber-500/15 text-amber-700",
+    color: "bg-caution/15 text-caution",
     label: "Probabilistic",
   },
-  Refused: { color: "bg-red-500/15 text-red-700", label: "Refused" },
+  Refused: { color: "bg-destructive/15 text-destructive", label: "Refused" },
 };
 
 export function EventAnalystCard({
@@ -38,8 +39,8 @@ export function EventAnalystCard({
 }) {
   return (
     <AgentCardShell
-      icon="⚡"
-      title="이벤트 통계 분석 (Event Analyst)"
+      icon={CalendarClock}
+      title="이벤트 통계 분석"
       subtitle={
         data ? `${data.event_summary.event_type} — ${data.event_summary.event_target}` : "Sonnet"
       }
@@ -68,7 +69,7 @@ export function EventAnalystCard({
           {data.reference_observation_zones?.current_position_vs_history && (
             <section>
               <h4 className="text-xs font-medium text-muted-foreground mb-1">
-                📊 참고 관찰 구간
+                참고 관찰 구간
               </h4>
               <p className="text-sm leading-relaxed">
                 {data.reference_observation_zones.current_position_vs_history}
@@ -217,7 +218,7 @@ function ImpactPanel({ data }: { data: EventAnalystResult }) {
       <div className="space-y-1 text-sm">
         {im.direct_beneficiary?.ticker && (
           <div>
-            <span className="text-xs px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-700 mr-2">
+            <span className="text-xs px-1.5 py-0.5 rounded bg-caution/15 text-caution mr-2">
               1차
             </span>
             <span className="font-mono">{im.direct_beneficiary.ticker}</span>
@@ -228,7 +229,7 @@ function ImpactPanel({ data }: { data: EventAnalystResult }) {
         )}
         {im.secondary_beneficiaries?.slice(0, 3).map((s, i) => (
           <div key={i}>
-            <span className="text-xs px-1.5 py-0.5 rounded bg-sky-500/15 text-sky-700 mr-2">
+            <span className="text-xs px-1.5 py-0.5 rounded bg-info/15 text-info mr-2">
               2차
             </span>
             <span className="font-mono">{s.ticker ?? "?"}</span>
@@ -317,9 +318,9 @@ function ScenarioPanel({
     label: string;
     color: string;
   }> = [
-    { key: "bullish_case", label: "Bullish", color: "border-emerald-500/40 bg-emerald-500/5" },
-    { key: "base_case", label: "Base", color: "border-slate-500/40 bg-slate-500/5" },
-    { key: "bearish_case", label: "Bearish", color: "border-red-500/40 bg-red-500/5" },
+    { key: "bullish_case", label: "Bullish", color: "border-up/40 bg-up/5" },
+    { key: "base_case", label: "Base", color: "border-border/40 bg-muted-foreground/5" },
+    { key: "bearish_case", label: "Bearish", color: "border-down/40 bg-down/5" },
   ];
 
   return (

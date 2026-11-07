@@ -79,14 +79,14 @@ export function KisCandleChart({ ticker }: { ticker: string }) {
       height: 360,
       layout: {
         background: { color: "transparent" },
-        textColor: "#94a3b8",
+        textColor: "#64748b",
       },
       grid: {
-        vertLines: { color: "#1e293b22" },
-        horzLines: { color: "#1e293b22" },
+        vertLines: { color: "#94a3b822" },
+        horzLines: { color: "#94a3b822" },
       },
-      rightPriceScale: { borderColor: "#1e293b" },
-      timeScale: { borderColor: "#1e293b", timeVisible: true },
+      rightPriceScale: { borderColor: "#94a3b84d" },
+      timeScale: { borderColor: "#94a3b84d", timeVisible: true },
     });
     chartRef.current = chart;
     candleRef.current = chart.addSeries(CandlestickSeries, {
@@ -196,7 +196,7 @@ export function KisCandleChart({ ticker }: { ticker: string }) {
     <Card>
       <CardContent className="p-4 space-y-3">
         <div className="flex items-center justify-between">
-          <div className="text-sm font-semibold">📊 차트</div>
+          <div className="text-sm font-semibold">차트</div>
           <div className="flex gap-1">
             {PERIODS.map((p) => (
               <button
@@ -223,7 +223,7 @@ export function KisCandleChart({ ticker }: { ticker: string }) {
             </div>
           )}
           {error && !loading && (
-            <div className="absolute inset-0 flex items-center justify-center text-xs text-red-500">
+            <div className="absolute inset-0 flex items-center justify-center text-xs text-up">
               차트 불러오기 실패
             </div>
           )}

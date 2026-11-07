@@ -5,11 +5,23 @@
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
+  --color-tint-1: var(--tint-1);
+  --color-tint-2: var(--tint-2);
+  --color-tint-3: var(--tint-3);
+  --color-tint-4: var(--tint-4);
+  --color-tint-5: var(--tint-5);
+  --color-tint-6: var(--tint-6);
+  --color-up: var(--up);
+  --color-down: var(--down);
+  --color-success: var(--success);
+  --color-caution: var(--caution);
+  --color-caution-foreground: var(--caution-foreground);
+  --color-info: var(--info);
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-sans);
-  --font-mono: var(--font-geist-mono);
-  --font-heading: var(--font-sans);
+  --font-sans: "Pretendard Variable", Pretendard, -apple-system, BlinkMacSystemFont, system-ui, "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+  --font-mono: "Pretendard Variable", Pretendard, -apple-system, BlinkMacSystemFont, system-ui, "Malgun Gothic", sans-serif;
+  --font-heading: "Pretendard Variable", Pretendard, -apple-system, BlinkMacSystemFont, system-ui, "Malgun Gothic", sans-serif;
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -48,73 +60,107 @@
   --radius-4xl: calc(var(--radius) * 2.6);
 }
 
+/*
+ * Axis 디자인 토큰.
+ * 한국 시장 관습상 빨강=상승, 파랑=하락이라 브랜드색(primary)은 두 색을 피해 청록을 쓴다.
+ * 색상은 토큰만 사용한다. Tailwind 기본 팔레트(text-red-500 등)를 직접 쓰지 말 것.
+ */
 :root {
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
+  --background: oklch(0.975 0.003 250);
+  --foreground: oklch(0.24 0.02 262);
   --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
+  --card-foreground: oklch(0.24 0.02 262);
   --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --radius: 0.625rem;
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
+  --popover-foreground: oklch(0.24 0.02 262);
+  --primary: oklch(0.48 0.095 182);
+  --primary-foreground: oklch(0.99 0 0);
+  --secondary: oklch(0.95 0.005 250);
+  --secondary-foreground: oklch(0.28 0.02 262);
+  --muted: oklch(0.955 0.004 250);
+  --muted-foreground: oklch(0.5 0.015 260);
+  --accent: oklch(0.95 0.015 182);
+  --accent-foreground: oklch(0.36 0.07 182);
+  --destructive: oklch(0.56 0.21 27);
+  --border: oklch(0.925 0.005 255);
+  --input: oklch(0.89 0.006 255);
+  --ring: oklch(0.48 0.095 182);
+  /* 구분용 색. dataviz validate_palette.js 통과값이며 순서를 바꾸지 말 것. 항상 글자와 함께 쓴다. */
+  --tint-1: #00907c;
+  --tint-2: #b87a00;
+  --tint-3: #7c5cd6;
+  --tint-4: #4c9a2f;
+  --tint-5: #2689c9;
+  --tint-6: #c63f96;
+  --hero-from: #0c5a54;
+  --hero-to: #0a3f4a;
+  --up: oklch(0.58 0.215 25);
+  --down: oklch(0.52 0.19 262);
+  --success: oklch(0.52 0.13 155);
+  --caution: oklch(0.56 0.125 70);
+  --caution-foreground: oklch(0.99 0 0);
+  --info: oklch(0.54 0.1 235);
+  --chart-1: oklch(0.48 0.095 182);
+  --chart-2: oklch(0.56 0.125 70);
+  --chart-3: oklch(0.54 0.1 235);
+  --chart-4: oklch(0.52 0.13 155);
+  --chart-5: oklch(0.5 0.015 260);
+  --radius: 0.75rem;
+  --sidebar: oklch(1 0 0);
+  --sidebar-foreground: oklch(0.24 0.02 262);
+  --sidebar-primary: oklch(0.48 0.095 182);
+  --sidebar-primary-foreground: oklch(0.99 0 0);
+  --sidebar-accent: oklch(0.95 0.015 182);
+  --sidebar-accent-foreground: oklch(0.36 0.07 182);
+  --sidebar-border: oklch(0.925 0.005 255);
+  --sidebar-ring: oklch(0.48 0.095 182);
 }
 
 .dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
+  --background: oklch(0.17 0.012 260);
+  --foreground: oklch(0.95 0.005 255);
+  --card: oklch(0.215 0.014 260);
+  --card-foreground: oklch(0.95 0.005 255);
+  --popover: oklch(0.24 0.015 260);
+  --popover-foreground: oklch(0.95 0.005 255);
+  --primary: oklch(0.76 0.12 180);
+  --primary-foreground: oklch(0.2 0.03 200);
+  --secondary: oklch(0.27 0.015 260);
+  --secondary-foreground: oklch(0.95 0.005 255);
+  --muted: oklch(0.26 0.014 260);
+  --muted-foreground: oklch(0.72 0.012 258);
+  --accent: oklch(0.3 0.04 182);
+  --accent-foreground: oklch(0.86 0.08 180);
+  --destructive: oklch(0.7 0.19 22);
+  --border: oklch(1 0 0 / 9%);
   --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.556 0 0);
+  --ring: oklch(0.76 0.12 180);
+  --tint-1: #149a89;
+  --tint-2: #ba8a12;
+  --tint-3: #8b6fdc;
+  --tint-4: #5d9f40;
+  --tint-5: #3a90c4;
+  --tint-6: #cc5ea8;
+  --hero-from: #0e4a47;
+  --hero-to: #10303d;
+  --up: oklch(0.7 0.19 22);
+  --down: oklch(0.7 0.15 255);
+  --success: oklch(0.75 0.15 155);
+  --caution: oklch(0.82 0.14 80);
+  --caution-foreground: oklch(0.22 0.04 80);
+  --info: oklch(0.76 0.11 230);
+  --chart-1: oklch(0.76 0.12 180);
+  --chart-2: oklch(0.82 0.14 80);
+  --chart-3: oklch(0.76 0.11 230);
+  --chart-4: oklch(0.75 0.15 155);
+  --chart-5: oklch(0.72 0.012 258);
+  --sidebar: oklch(0.195 0.013 260);
+  --sidebar-foreground: oklch(0.95 0.005 255);
+  --sidebar-primary: oklch(0.76 0.12 180);
+  --sidebar-primary-foreground: oklch(0.2 0.03 200);
+  --sidebar-accent: oklch(0.3 0.04 182);
+  --sidebar-accent-foreground: oklch(0.86 0.08 180);
+  --sidebar-border: oklch(1 0 0 / 9%);
+  --sidebar-ring: oklch(0.76 0.12 180);
 }
 
 @layer base {
@@ -123,8 +169,37 @@
   }
   body {
     @apply bg-background text-foreground;
+    letter-spacing: -0.011em;
+    word-break: keep-all;
+    overflow-wrap: anywhere;
   }
   html {
     @apply font-sans;
+    -webkit-text-size-adjust: 100%;
+  }
+  h1,
+  h2,
+  h3 {
+    letter-spacing: -0.022em;
+  }
+}
+
+.bg-hero {
+  background: linear-gradient(120deg, var(--hero-from), var(--hero-to));
+  color: #fff;
+}
+
+/* 종목코드·시세는 숫자 폭을 맞춘다. font-mono는 코딩 폰트 대신 고정폭 숫자로 쓴다. */
+.font-mono {
+  font-variant-numeric: tabular-nums;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  ::before,
+  ::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }

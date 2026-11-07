@@ -34,11 +34,11 @@ function pickNumber(row: StockRow, key: string, fallback = 0): number {
 }
 
 function colorClass(change: number): string {
-  if (change >= 5) return "bg-emerald-500/30 hover:bg-emerald-500/40";
-  if (change >= 1) return "bg-emerald-500/20 hover:bg-emerald-500/30";
+  if (change >= 5) return "bg-up/30 hover:bg-up/40";
+  if (change >= 1) return "bg-up/15 hover:bg-up/25";
   if (change > -1) return "bg-muted hover:bg-muted/80";
-  if (change > -5) return "bg-red-500/20 hover:bg-red-500/30";
-  return "bg-red-500/30 hover:bg-red-500/40";
+  if (change > -5) return "bg-down/15 hover:bg-down/25";
+  return "bg-down/30 hover:bg-down/40";
 }
 
 export function Treemap({
@@ -99,7 +99,7 @@ export function Treemap({
               }
               role="gridcell"
               aria-label={`${row.name ?? row.ticker} ${change >= 0 ? "+" : ""}${change.toFixed(1)}%`}
-              className={`flex flex-col justify-center items-center text-center p-2 rounded transition focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 ${colorClass(change)}`}
+              className={`flex flex-col justify-center items-center text-center p-2 rounded transition focus:outline-none focus-visible:ring-2 focus-visible:ring-ring ${colorClass(change)}`}
               style={{ gridColumn: `span ${span}`, gridRow: `span ${span}` }}
             >
               <span className="font-medium text-sm truncate max-w-full">
@@ -108,7 +108,7 @@ export function Treemap({
               {display === "full" && (
                 <span
                   className={`text-xs tabular-nums ${
-                    change >= 0 ? "text-emerald-400" : "text-red-400"
+                    change > 0 ? "text-up" : change < 0 ? "text-down" : "text-muted-foreground"
                   }`}
                 >
                   {change >= 0 ? "+" : ""}

@@ -1,5 +1,8 @@
 "use client";
 
+import { Target } from "lucide-react";
+
+import { ObservationRange } from "@/components/viz/Meters";
 import {
   AgentCardShell,
   type AgentStatus,
@@ -36,7 +39,7 @@ function pctFromCurrent(price: number, current: number | null | undefined): stri
 function pctTone(price: number, current: number | null | undefined): string {
   if (!current || current <= 0) return "text-muted-foreground";
   const diff = price - current;
-  return diff > 0 ? "text-emerald-600" : "text-rose-600";
+  return diff > 0 ? "text-up" : "text-down";
 }
 
 export function StrategistCard({
@@ -55,15 +58,15 @@ export function StrategistCard({
   const cur = /^\d{6}$/.test((ticker ?? "").trim()) ? "원" : "달러";
   return (
     <AgentCardShell
-      icon="🎯"
-      title="종합 분석 (Strategist)"
-      subtitle={data ? `${HORIZON_NAME[data.persona_used] ?? data.persona_used} 관점` : "Opus"}
+      icon={Target}
+      title="AI 종합 분석"
+      subtitle={data ? `${HORIZON_NAME[data.persona_used] ?? data.persona_used} 관점` : undefined}
       status={status}
     >
       {!data ? (
         status === "running" ? (
           <p className="text-sm text-muted-foreground">
-            관점 분석 + 진입선 산출 중...
+            지금까지의 분석을 종합하고 있어요.
           </p>
         ) : null
       ) : (
@@ -74,13 +77,19 @@ export function StrategistCard({
               <div className="text-xs font-semibold mb-2">
                 📐 {HORIZON_NAME[data.persona_used] ?? "이"} 관점 — 어디까지? (저점 ~ 고점 관찰 범위)
               </div>
+              <ObservationRange
+                low={data.entry_points.tier_1}
+                high={data.exit_points.take_profit_final}
+                current={currentPrice}
+                unit={cur}
+              />
               <div className="flex items-center justify-between gap-2">
                 <div className="text-center flex-1">
-                  <div className="text-[10px] text-blue-600">저점 관찰 구간</div>
-                  <div className="font-mono font-semibold text-sm text-blue-600">
+                  <div className="text-[10px] text-down">저점 관찰 구간</div>
+                  <div className="font-mono font-semibold text-sm text-down">
                     {data.entry_points.tier_1.toLocaleString()}{cur}
                   </div>
-                  <div className="text-[10px] text-blue-600/80">
+                  <div className="text-[10px] text-down/80">
                     {pctFromCurrent(data.entry_points.tier_1, currentPrice)}
                   </div>
                 </div>
@@ -89,18 +98,18 @@ export function StrategistCard({
                   <div className="text-center">↔</div>
                 </div>
                 <div className="text-center flex-1">
-                  <div className="text-[10px] text-red-600">고점 참고 범위</div>
-                  <div className="font-mono font-semibold text-sm text-red-600">
+                  <div className="text-[10px] text-up">고점 참고 범위</div>
+                  <div className="font-mono font-semibold text-sm text-up">
                     {data.exit_points.take_profit_final.toLocaleString()}{cur}
                   </div>
-                  <div className="text-[10px] text-red-600/80">
+                  <div className="text-[10px] text-up/80">
                     {pctFromCurrent(data.exit_points.take_profit_final, currentPrice)}
                   </div>
                 </div>
               </div>
               <p className="text-[10px] text-muted-foreground mt-2 leading-relaxed">
                 저점은 분할 관찰 구간, 고점은 회복·차익 참고선입니다. 미래 가격 예측이
-                아니라, 이 시계에서 추세가 움직일 수 있는 <strong>관찰 범위</strong>입니다.
+                아니라, 이 기간에서 추세가 움직일 수 있는 <strong>관찰 범위</strong>입니다.
               </p>
             </section>
           )}
@@ -128,7 +137,7 @@ export function StrategistCard({
             <section>
               <div className="flex items-baseline justify-between mb-1 gap-2 flex-wrap">
                 <h4 className="text-xs font-medium text-muted-foreground">
-                  📌 진입 관찰 구간
+                  진입 관찰 구간
                 </h4>
                 {currentPrice != null && (
                   <span className="text-[10px] text-muted-foreground font-mono">
@@ -177,7 +186,7 @@ export function StrategistCard({
           {data.exit_points && (
             <section>
               <h4 className="text-xs font-medium text-muted-foreground mb-2">
-                🎯 회복·차익 실현 참고선
+                회복·차익 실현 참고선
                 <span className="ml-2 text-[10px] text-muted-foreground font-normal">
                   (매도 권유 아닌 참고)
                 </span>
@@ -232,7 +241,7 @@ export function StrategistCard({
           {data.follow_up_questions.length > 0 && (
             <section>
               <h4 className="text-xs font-medium text-muted-foreground mb-1">
-                💡 추가 검토할 질문
+                추가 검토할 질문
               </h4>
               <ol className="list-decimal list-inside space-y-1 text-sm">
                 {data.follow_up_questions.map((q, i) => (
@@ -243,7 +252,7 @@ export function StrategistCard({
           )}
 
           {data.confidence_note && (
-            <p className="text-xs text-amber-500 bg-amber-500/10 p-2 rounded">
+            <p className="text-xs text-caution bg-caution/10 p-2 rounded">
               {data.confidence_note}
             </p>
           )}

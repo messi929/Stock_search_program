@@ -11,6 +11,7 @@
  *  5. summary_neutral
  */
 
+import { Globe } from "lucide-react";
 import {
   AgentCardShell,
   type AgentStatus,
@@ -31,7 +32,7 @@ const CYCLE_LABELS: Array<{ key: keyof MacroPmResult["cycle_analysis"]; label: s
   { key: "interest_rate", label: "금리", emoji: "💹" },
   { key: "business_cycle", label: "경기", emoji: "🏭" },
   { key: "currency_cycle", label: "통화", emoji: "💱" },
-  { key: "inflation_cycle", label: "인플레", emoji: "📈" },
+  { key: "inflation_cycle", label: "인플레", emoji: "" },
 ];
 
 export function MacroPmCard({
@@ -43,9 +44,9 @@ export function MacroPmCard({
 }) {
   return (
     <AgentCardShell
-      icon="🌐"
-      title="매크로 사이클 분석 (Macro PM)"
-      subtitle={data ? `${data.macro_regime.current_regime} 국면` : "Sonnet"}
+      icon={Globe}
+      title="경기 사이클 분석"
+      subtitle={data ? `${data.macro_regime.current_regime} 국면` : undefined}
       status={status}
     >
       {!data ? (
@@ -165,7 +166,7 @@ function RegimePanel({ data }: { data: MacroPmResult }) {
         </div>
         <div className="h-1.5 rounded bg-muted overflow-hidden">
           <div
-            className="h-full bg-sky-500 transition-all"
+            className="h-full bg-info transition-all"
             style={{ width: `${confPct}%` }}
           />
         </div>
@@ -234,8 +235,8 @@ function isDataSparse(data: MacroPmResult): boolean {
 
 function DataSparseBanner() {
   return (
-    <section className="rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-xs leading-relaxed">
-      <p className="font-medium text-amber-700 mb-1">
+    <section className="rounded-md border border-caution/40 bg-caution/10 p-3 text-xs leading-relaxed">
+      <p className="font-medium text-caution mb-1">
         ℹ️ 매크로 정량 데이터 누적 중
       </p>
       <p className="text-muted-foreground">
@@ -265,16 +266,16 @@ function WeightingPanel({
       </h4>
       <div className="flex h-6 rounded-md overflow-hidden border text-[10px]">
         <div
-          className="bg-sky-500/20 text-sky-800 flex items-center justify-center font-mono"
+          className="bg-info/20 text-info flex items-center justify-center font-mono"
           style={{ width: `${usPct}%` }}
         >
-          🇺🇸 {usPct}%
+          {usPct}%
         </div>
         <div
-          className="bg-rose-500/20 text-rose-800 flex items-center justify-center font-mono"
+          className="bg-up/20 text-up flex items-center justify-center font-mono"
           style={{ width: `${krPct}%` }}
         >
-          🇰🇷 {krPct}%
+          {krPct}%
         </div>
       </div>
       {weighting.rationale && (

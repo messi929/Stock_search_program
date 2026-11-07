@@ -60,19 +60,19 @@ export function SubscriptionSection() {
         ) : tier === "free" || !sub ? (
           <div className="space-y-3">
             <p className="text-sm text-muted-foreground">
-              현재 무료 플랜입니다. Pro로 업그레이드하면 월 100회 분석·투자 시계 4종·
+              현재 무료 플랜입니다. Pro로 업그레이드하면 월 100회 분석·분석 기간 4종·
               커스텀 스크리너를 이용할 수 있습니다.{trialEligible ? " 첫 7일 무료." : ""}
             </p>
             <Link href="/pricing" className="block">
               <Button className="w-full sm:w-auto">
-                {trialEligible ? "💎 7일 무료로 Pro 시작" : "💎 Pro 구독"}
+                {trialEligible ? "7일 무료로 Pro 시작" : "Pro 구독"}
               </Button>
             </Link>
           </div>
         ) : (
           <div className="space-y-3">
             <div className="flex flex-wrap items-center gap-2 text-sm">
-              <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-xs font-medium text-amber-600">
+              <span className="rounded-full bg-caution/15 px-2 py-0.5 text-xs font-medium text-caution">
                 {STATUS_LABEL[sub.status] ?? sub.status}
               </span>
               {sub.current_period_end && (

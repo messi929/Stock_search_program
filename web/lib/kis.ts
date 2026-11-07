@@ -99,7 +99,7 @@ export function formatKisChangePct(value: string | undefined): string {
 /** prdy_vrss_sign 코드 → 색상 클래스 (Tailwind). */
 export function priceSignColorClass(sign: string | undefined): string {
   // 1상한·2상승 → 빨강, 4하한·5하락 → 파랑, 3보합 → 회색
-  if (sign === "1" || sign === "2") return "text-red-500";
-  if (sign === "4" || sign === "5") return "text-blue-500";
-  return "text-gray-500";
+  if (sign === "1" || sign === "2") return "text-up";
+  if (sign === "4" || sign === "5") return "text-down";
+  return "text-muted-foreground";
 }

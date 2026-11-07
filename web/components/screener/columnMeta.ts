@@ -6,6 +6,8 @@
  * 과거 데이터의 구버전 라벨("적극매수" 등)을 보정하는 안전망 역할.
  */
 
+import { fmtMarketCapEok } from "@/lib/stocks";
+
 export type Align = "left" | "right";
 
 export interface ColumnMeta {
@@ -83,13 +85,13 @@ const sanitizeGradeText = (s: string): string => {
 const colorBySign = (v: unknown): string | undefined => {
   const n = Number(v);
   if (!Number.isFinite(n) || n === 0) return undefined;
-  return n > 0 ? "text-rose-500" : "text-blue-500";
+  return n > 0 ? "text-up" : "text-down";
 };
 
 const colorByGrade = (v: unknown): string | undefined => {
   const tier = fmtBuyGradeNeutral(v);
-  if (tier === "상위") return "text-amber-500 font-semibold";
-  if (tier === "준상위") return "text-amber-400";
+  if (tier === "상위") return "text-caution font-semibold";
+  if (tier === "준상위") return "text-caution";
   if (tier === "관찰") return "text-muted-foreground";
   return undefined;
 };
@@ -101,7 +103,7 @@ const COLUMN_META: Record<string, ColumnMeta> = {
   volume: { label: "거래량", align: "right", format: fmtCompactKR },
   volume_ratio: { label: "거래량비", align: "right", format: fmtDecimal(2) },
   trading_value: { label: "거래대금", align: "right", format: fmtCompactKR },
-  market_cap: { label: "시총", align: "right", format: fmtCompactKR },
+  market_cap: { label: "시총", align: "right", format: fmtMarketCapEok },
 
   // ── 펀더멘털 ──
   per: { label: "PER", align: "right", format: fmtDecimal(2) },

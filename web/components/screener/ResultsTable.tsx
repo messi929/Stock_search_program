@@ -6,6 +6,10 @@
  */
 import Link from "next/link";
 
+import { StockAvatar } from "@/components/stocks/StockAvatar";
+import { Term } from "@/components/ui/term";
+import { COLUMN_TERMS } from "@/lib/glossary";
+
 import { getColumnMeta } from "./columnMeta";
 
 export type StockRow = Record<string, unknown> & { ticker: string; name?: string };
@@ -22,12 +26,12 @@ export function ResultsTable({
   const dataColumns = columns.filter((c) => c !== "ticker" && c !== "name");
 
   return (
-    <div className="rounded-md border overflow-x-auto">
+    <div className="rounded-xl border bg-card overflow-x-auto">
       <table className="w-full text-sm">
         <caption className="sr-only">{caption}</caption>
-        <thead className="bg-muted/50 text-xs">
+        <thead className="bg-muted/60 text-xs text-muted-foreground">
           <tr>
-            <th scope="col" className="px-3 py-2 text-left font-medium whitespace-nowrap">
+            <th scope="col" className="px-3.5 py-2.5 text-left font-medium whitespace-nowrap">
               종목
             </th>
             {dataColumns.map((key) => {
@@ -36,11 +40,11 @@ export function ResultsTable({
                 <th
                   key={key}
                   scope="col"
-                  className={`px-3 py-2 font-medium whitespace-nowrap ${
+                  className={`px-3.5 py-2.5 font-medium whitespace-nowrap ${
                     meta.align === "right" ? "text-right" : "text-left"
                   }`}
                 >
-                  {meta.label}
+                  {COLUMN_TERMS[key] ? <Term id={COLUMN_TERMS[key]}>{meta.label}</Term> : meta.label}
                 </th>
               );
             })}
@@ -50,21 +54,28 @@ export function ResultsTable({
           {stocks.map((row) => (
             <tr
               key={row.ticker}
-              className="border-t hover:bg-muted/30 transition"
+              className="border-t hover:bg-muted/40 transition"
             >
-              <td className="px-3 py-2 whitespace-nowrap">
-                <Link
-                  href={
-                    row.stock_type === "etf"
-                      ? `/etf/${row.ticker}`
-                      : `/analyze/${row.ticker}`
-                  }
-                  className="font-medium text-amber-500 hover:underline rounded focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-500"
-                >
-                  {typeof row.name === "string" && row.name ? row.name : row.ticker}
-                </Link>
-                <span className="ml-2 text-xs text-muted-foreground">
-                  {row.ticker}
+              <td className="px-3.5 py-2.5 whitespace-nowrap">
+                <span className="flex items-center gap-2.5">
+                  <StockAvatar
+                    ticker={row.ticker}
+                    name={typeof row.name === "string" ? row.name : null}
+                    className="size-8 text-xs"
+                  />
+                  <span>
+                    <Link
+                      href={
+                        row.stock_type === "etf"
+                          ? `/etf/${row.ticker}`
+                          : `/analyze/${row.ticker}`
+                      }
+                      className="block font-semibold hover:text-primary rounded focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    >
+                      {typeof row.name === "string" && row.name ? row.name : row.ticker}
+                    </Link>
+                    <span className="block text-xs text-muted-foreground">{row.ticker}</span>
+                  </span>
                 </span>
               </td>
               {dataColumns.map((key) => {
@@ -75,7 +86,7 @@ export function ResultsTable({
                 return (
                   <td
                     key={key}
-                    className={`px-3 py-2 whitespace-nowrap ${
+                    className={`px-3.5 py-2.5 whitespace-nowrap ${
                       meta.align === "right" ? "text-right tabular-nums" : "text-left"
                     } ${color}`}
                   >

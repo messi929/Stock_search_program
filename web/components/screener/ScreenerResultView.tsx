@@ -90,8 +90,7 @@ export function ScreenerResultView({ categoryId }: Props) {
         <Header />
         <Card>
           <CardContent className="p-8 space-y-3 text-center">
-            <div className="text-4xl">🔍</div>
-            <h2 className="font-semibold">존재하지 않는 카테고리입니다</h2>
+                        <h2 className="font-semibold">존재하지 않는 카테고리입니다</h2>
             <p className="text-sm text-muted-foreground">
               <code className="px-1 py-0.5 rounded bg-muted">{categoryId}</code>
               {" "}를 찾을 수 없습니다.
@@ -159,7 +158,7 @@ export function ScreenerResultView({ categoryId }: Props) {
             </p>
             <p className="text-xs text-muted-foreground">
               일부 카테고리는 한 시장에만 데이터가 있습니다. 다른 시장 탭(
-              {market === "US" ? "🇰🇷 국내" : "🇺🇸 미국"})을 확인해보세요.
+              {market === "US" ? "국내" : "미국"})을 확인해보세요.
             </p>
             {emptyMessage && (
               <p className="text-xs text-muted-foreground whitespace-pre-line">
@@ -217,7 +216,7 @@ function MarketTabs({
       role="tab"
       aria-selected={market === m}
       onClick={() => onChange(m)}
-      className={`px-3 py-1.5 text-sm rounded-md transition focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 ${
+      className={`px-3 py-1.5 text-sm rounded-md transition focus:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
         market === m
           ? "bg-muted text-foreground font-medium"
           : "text-muted-foreground hover:text-foreground"
@@ -228,8 +227,8 @@ function MarketTabs({
   );
   return (
     <div className="inline-flex rounded-md border p-0.5 gap-0.5" role="tablist" aria-label="시장 구분">
-      {tab("KR", "🇰🇷 국내")}
-      {tab("US", "🇺🇸 미국")}
+      {tab("KR", "국내")}
+      {tab("US", "미국")}
     </div>
   );
 }
@@ -246,7 +245,7 @@ function ViewToggle({
       type="button"
       aria-pressed={mode === m}
       onClick={() => onChange(m)}
-      className={`px-3 py-1.5 text-sm rounded-md transition focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 ${
+      className={`px-3 py-1.5 text-sm rounded-md transition focus:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
         mode === m
           ? "bg-muted text-foreground"
           : "text-muted-foreground hover:text-foreground"
@@ -257,7 +256,7 @@ function ViewToggle({
   );
   return (
     <div className="inline-flex rounded-md border p-0.5 gap-0.5" role="tablist">
-      {tab("table", "📋 표")}
+      {tab("table", "표")}
       {tab("treemap", "🗺️ 트리맵")}
     </div>
   );
@@ -293,7 +292,7 @@ function FreshnessBanner({ note }: { note: string }) {
   return (
     <div
       role="status"
-      className="flex items-start gap-2 rounded-md border border-amber-300/60 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-500/30 dark:bg-amber-950/30 dark:text-amber-300"
+      className="flex items-start gap-2 rounded-md border border-caution/60 bg-caution px-3 py-2 text-xs text-caution dark:border-caution/30 dark:bg-caution/30 dark:text-caution"
     >
       <span aria-hidden>⚠️</span>
       <span className="whitespace-pre-line">{note}</span>

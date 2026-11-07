@@ -38,7 +38,7 @@ export default function PortfolioPage() {
         >
           ← 대시보드
         </Link>
-        <h1 className="text-2xl font-bold">🧮 포트폴리오 리스크 분석</h1>
+        <h1 className="text-2xl font-bold">포트폴리오 리스크 분석</h1>
         <p className="text-sm text-muted-foreground">
           관심 종목 기반으로 건강도·집중도·상관관계·MDD를 점검합니다.
         </p>
@@ -49,8 +49,7 @@ export default function PortfolioPage() {
       ) : !canAnalyze ? (
         <Card>
           <CardContent className="p-6 space-y-3 text-center">
-            <div className="text-4xl">📋</div>
-            <p className="text-sm">관심 종목이 2개 이상 필요합니다.</p>
+                        <p className="text-sm">관심 종목이 2개 이상 필요합니다.</p>
             <p className="text-xs text-muted-foreground">
               현재 {tickers.length}개 등록됨.
             </p>

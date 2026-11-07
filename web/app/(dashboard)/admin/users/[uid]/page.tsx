@@ -54,7 +54,7 @@ export default function AdminUserDetailPage() {
   if (isError || !data)
     return (
       <div className="space-y-3">
-        <p className="text-sm text-red-500">사용자 조회 실패</p>
+        <p className="text-sm text-destructive">사용자 조회 실패</p>
         <Link href="/admin/users" className="text-sm text-primary hover:underline">
           ← 목록으로
         </Link>
@@ -71,9 +71,9 @@ export default function AdminUserDetailPage() {
 
       <div className="flex items-center gap-3 flex-wrap">
         <h2 className="text-lg font-bold">{u.email || uid}</h2>
-        {u.suspended && <span className="text-xs text-red-500">정지됨</span>}
+        {u.suspended && <span className="text-xs text-destructive">정지됨</span>}
         {u.suspicious && !u.suspended && (
-          <span className="text-xs text-amber-500">의심 계정</span>
+          <span className="text-xs text-caution">의심 계정</span>
         )}
       </div>
 

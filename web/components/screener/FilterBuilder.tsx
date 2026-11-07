@@ -57,11 +57,11 @@ export function FilterBuilder({ value, onChange }: Props) {
               onClick={() => update("market", m === "ALL" ? undefined : m)}
               className={`px-3 py-1.5 text-sm rounded transition ${
                 market === m
-                  ? "bg-amber-500 text-black font-medium"
+                  ? "bg-caution text-caution-foreground font-medium"
                   : "hover:bg-muted"
               }`}
             >
-              {m === "ALL" ? "전체" : m === "KR" ? "🇰🇷 한국" : "🇺🇸 미국"}
+              {m === "ALL" ? "전체" : m === "KR" ? "한국" : "미국"}
             </button>
           ))}
         </div>
@@ -324,7 +324,7 @@ function ToggleChip({
       aria-pressed={active}
       className={`rounded-full border px-3 py-1 text-sm transition ${
         active
-          ? "border-amber-500 bg-amber-500/10 text-amber-500"
+          ? "border-primary bg-primary/10 text-caution"
           : "hover:bg-muted"
       }`}
     >

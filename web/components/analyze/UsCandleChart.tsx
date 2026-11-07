@@ -57,13 +57,13 @@ export function UsCandleChart({ ticker }: { ticker: string }) {
     const chart = createChart(containerRef.current, {
       width: containerRef.current.clientWidth,
       height: 360,
-      layout: { background: { color: "transparent" }, textColor: "#94a3b8" },
+      layout: { background: { color: "transparent" }, textColor: "#64748b" },
       grid: {
-        vertLines: { color: "#1e293b22" },
-        horzLines: { color: "#1e293b22" },
+        vertLines: { color: "#94a3b822" },
+        horzLines: { color: "#94a3b822" },
       },
-      rightPriceScale: { borderColor: "#1e293b" },
-      timeScale: { borderColor: "#1e293b", timeVisible: false },
+      rightPriceScale: { borderColor: "#94a3b84d" },
+      timeScale: { borderColor: "#94a3b84d", timeVisible: false },
     });
     chartRef.current = chart;
     candleRef.current = chart.addSeries(CandlestickSeries, {
@@ -134,10 +134,10 @@ export function UsCandleChart({ ticker }: { ticker: string }) {
     <Card>
       <CardContent className="p-4 space-y-3">
         <div className="flex items-center justify-between">
-          <div className="text-sm font-semibold">📊 차트 (일봉)</div>
+          <div className="text-sm font-semibold">차트 (일봉)</div>
           <div className="text-[10px] text-muted-foreground">
-            <span className="text-amber-500">— MA20</span>{" "}
-            <span className="text-purple-500">— MA60</span>
+            <span className="text-caution">— MA20</span>{" "}
+            <span className="text-info">— MA60</span>
           </div>
         </div>
 
@@ -149,7 +149,7 @@ export function UsCandleChart({ ticker }: { ticker: string }) {
             </div>
           )}
           {error && !isLoading && (
-            <div className="absolute inset-0 flex items-center justify-center text-xs text-red-500">
+            <div className="absolute inset-0 flex items-center justify-center text-xs text-up">
               차트 불러오기 실패
             </div>
           )}
