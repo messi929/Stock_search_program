@@ -368,7 +368,7 @@ def _friendly_error_msg(e: Exception) -> str:
     """예외를 사용자에게 노출 가능한 친화 메시지로 변환.
 
     - Claude API 크레딧 부족·rate limit·overload·timeout 등 알려진 패턴은
-      한국어로 매핑. 그 외는 클래스명+detail 일부 노출.
+      한국어로 매핑. 그 외는 일반 안내만 노출하고 상세는 로그에 남긴다.
     """
     raw = str(e)
     low = raw.lower()
@@ -382,9 +382,8 @@ def _friendly_error_msg(e: Exception) -> str:
         return "응답 지연 — 잠시 후 다시 시도해주세요."
     if "unauthorized" in low or "authentication" in low or "401" in low:
         return "AI 인증 실패 — 관리자에게 문의해주세요."
-    # generic — 클래스명 + 메시지 앞부분
-    snippet = raw[:120]
-    return f"{type(e).__name__}: {snippet}"
+    logger.warning(f"[friendly_error] {type(e).__name__}: {raw[:300]}")
+    return "AI 분석 중 오류가 발생했습니다 — 잠시 후 다시 시도해주세요."
 
 
 def _fallback_event_summary():

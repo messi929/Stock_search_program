@@ -81,9 +81,11 @@ export async function listPublicStocks(): Promise<PublicStockListItem[]> {
 export function fmtCompactKR(v: number): string {
   const n = Number(v);
   if (!Number.isFinite(n) || n === 0) return "-";
-  if (n >= 1e12) return `${(n / 1e12).toFixed(2)}조`;
-  if (n >= 1e8) return `${(n / 1e8).toFixed(0)}억`;
-  if (n >= 1e4) return `${(n / 1e4).toFixed(0)}만`;
+  const abs = Math.abs(n);
+  const sign = n < 0 ? "-" : "";
+  if (abs >= 1e12) return `${sign}${(abs / 1e12).toFixed(2)}조`;
+  if (abs >= 1e8) return `${sign}${(abs / 1e8).toFixed(0)}억`;
+  if (abs >= 1e4) return `${sign}${(abs / 1e4).toFixed(0)}만`;
   return n.toLocaleString("ko-KR");
 }
 
@@ -93,6 +95,30 @@ export function fmtMarketCapEok(v: unknown): string {
   if (!Number.isFinite(n) || n <= 0) return "-";
   if (n >= 1e4) return `${(n / 1e4).toLocaleString("ko-KR", { maximumFractionDigits: n >= 1e6 ? 0 : 1 })}조`;
   return `${Math.round(n).toLocaleString("ko-KR")}억`;
+}
+
+/**
+ * 저장된 국내 시세가 직전 정규장 종가로 확정됐는지 판단한다.
+ * KIS 현재가는 마감 뒤에도 시간외 거래로 움직이므로, 장외 시간에는 이 값을 공식 종가로 쓴다.
+ * updatedAt은 백엔드 형식("YYYY-MM-DD HH:mm:ss", KST). 공휴일은 구분하지 않는다.
+ */
+export function isKrxCloseFinal(updatedAt: string | undefined, now = new Date()): boolean {
+  if (!updatedAt) return false;
+  const kst = new Date(now.getTime() + 9 * 3_600_000);
+  const isWeekday = (d: Date) => d.getUTCDay() >= 1 && d.getUTCDay() <= 5;
+  const minutes = kst.getUTCHours() * 60 + kst.getUTCMinutes();
+  const closeMinutes = 15 * 60 + 30;
+  if (isWeekday(kst) && minutes >= 9 * 60 && minutes < closeMinutes) return false;
+
+  const lastClose = new Date(
+    Date.UTC(kst.getUTCFullYear(), kst.getUTCMonth(), kst.getUTCDate(), 15, 30),
+  );
+  if (!isWeekday(kst) || minutes < closeMinutes) {
+    do {
+      lastClose.setUTCDate(lastClose.getUTCDate() - 1);
+    } while (!isWeekday(lastClose));
+  }
+  return Date.parse(`${updatedAt.replace(" ", "T")}Z`) >= lastClose.getTime();
 }
 
 /** KR 시장 여부(원화 표기 판단). */

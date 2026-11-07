@@ -48,9 +48,11 @@ const fmtSignedPct = (v: unknown): string => {
 const fmtCompactKR = (v: unknown): string => {
   const n = Number(v);
   if (!Number.isFinite(n) || n === 0) return "-";
-  if (n >= 1e12) return `${(n / 1e12).toFixed(2)}조`;
-  if (n >= 1e8) return `${(n / 1e8).toFixed(0)}억`;
-  if (n >= 1e4) return `${(n / 1e4).toFixed(0)}만`;
+  const abs = Math.abs(n);
+  const sign = n < 0 ? "-" : "";
+  if (abs >= 1e12) return `${sign}${(abs / 1e12).toFixed(2)}조`;
+  if (abs >= 1e8) return `${sign}${(abs / 1e8).toFixed(0)}억`;
+  if (abs >= 1e4) return `${sign}${(abs / 1e4).toFixed(0)}만`;
   return n.toLocaleString("ko-KR");
 };
 

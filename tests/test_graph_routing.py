@@ -223,7 +223,8 @@ def test_event_node_handles_exception_with_fallback():
     assert out is not None
     assert out.event_summary.certainty_breakdown.mode == "Refused"
     assert "분석 실패" in out.event_summary.badge or "분석" in out.summary_neutral
-    assert "RuntimeError" in out.summary_neutral
+    assert "오류가 발생했습니다" in out.summary_neutral
+    assert "RuntimeError" not in out.summary_neutral
 
 
 def test_macro_node_handles_exception_with_fallback():

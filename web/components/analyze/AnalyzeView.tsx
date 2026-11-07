@@ -21,6 +21,7 @@ import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 
 import { apiCall } from "@/lib/api";
+import { isKrMarket, isKrxCloseFinal } from "@/lib/stocks";
 
 import { AddToWatchlistButton } from "@/components/analyze/AddToWatchlistButton";
 import { AnalysisSteps } from "@/components/analyze/AnalysisSteps";
@@ -47,6 +48,7 @@ import { StockSnapshot } from "@/components/stocks/StockSnapshot";
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { useKisPrice } from "@/hooks/useKisPrice";
+import { usePublicStock } from "@/hooks/usePublicStock";
 import { useStockSearch } from "@/hooks/useStockSearch";
 import { useUserProfile } from "@/hooks/useUserProfile";
 import {
@@ -165,6 +167,13 @@ export function AnalyzeView({ ticker }: { ticker: string }) {
     ? Number(kisPriceData.data.prdy_ctrt)
     : null;
 
+  // 장외 시간에는 공식 종가를 쓴다. KIS 현재가는 시간외 거래까지 반영돼 스크리너·홈과 달라진다.
+  const { data: publicStock } = usePublicStock(ticker);
+  const krxClose =
+    publicStock && isKrMarket(publicStock.market) && isKrxCloseFinal(publicStock.updated_at)
+      ? publicStock.close
+      : null;
+
   // store run에서 파생 (run 없으면 빈/대기 fallback — 선택 화면 단계).
   const strategistFlow = run?.strategistFlow ?? EMPTY_FLOW;
   const strategistStatus = run?.strategistStatus ?? PENDING_STRATEGIST;
@@ -223,13 +232,20 @@ export function AnalyzeView({ ticker }: { ticker: string }) {
 
   // 종목명 표시 — Strategist 흐름은 analyst가 채워줌, 데이터 페르소나는 earlyName fallback
   const displayName = strategistFlow.analyst?.name ?? earlyName;
-  // 가격 우선순위: Analyst 결과 > KIS 라이브(KR) > 스크리너 캐시 fallback.
+  // 가격 우선순위: Analyst 결과 > 장외 시간 공식 종가 > KIS 라이브(KR) > 스크리너 캐시 fallback.
   // KIS는 5초 백엔드 캐시라 거의 실시간. 분석 진행 중에도 헤더가 갱신됨.
   const displayPrice =
-    strategistFlow.analyst?.technical.current_price ?? kisPrice ?? earlyPrice;
-  // 등락률 — KIS 라이브가 있을 때만 (Analyst는 등락률을 별도 필드로 안 줌)
-  const displayChangePct =
-    !strategistFlow.analyst && kisChangePct != null ? kisChangePct : null;
+    strategistFlow.analyst?.technical.current_price ?? krxClose ?? kisPrice ?? earlyPrice;
+  const showsKrxClose = krxClose != null && displayPrice === krxClose;
+  // 등락률 — 공식 종가 또는 KIS 라이브가 있을 때만 (Analyst는 등락률을 별도 필드로 안 줌)
+  const displayChangePct = strategistFlow.analyst
+    ? null
+    : krxClose != null
+      ? (publicStock?.change_pct ?? null)
+      : kisChangePct;
+  // 종가와 다른 시간외 가격은 별도 줄로 알려준다.
+  const afterHoursPrice =
+    showsKrxClose && kisPrice != null && kisPrice !== krxClose ? kisPrice : null;
   // 데이터 갱신 시각 — Analyst 결과 있을 때만 (KR 스크리너 updated_at).
   const displayUpdatedAt = strategistFlow.analyst?.timestamp ?? null;
 
@@ -275,6 +291,9 @@ export function AnalyzeView({ ticker }: { ticker: string }) {
                   <span className="ml-0.5 text-lg font-semibold">{isKR ? "원" : "달러"}</span>
                 </span>
                 <PriceChange pct={displayChangePct} className="text-base" />
+                {showsKrxClose && (
+                  <span className="text-xs text-muted-foreground">정규장 종가</span>
+                )}
                 {displayUpdatedAt && (
                   <span className="text-xs text-muted-foreground" title="분석 기준 시점">
                     {new Date(displayUpdatedAt).toLocaleString("ko-KR", {
@@ -287,6 +306,15 @@ export function AnalyzeView({ ticker }: { ticker: string }) {
                   </span>
                 )}
               </div>
+            )}
+            {afterHoursPrice != null && (
+              <p className="mt-1 flex flex-wrap items-baseline gap-x-1.5 text-sm text-muted-foreground">
+                <span title="정규장이 끝난 뒤 시간외 거래까지 반영된 가격이에요.">시간외</span>
+                <span className="font-semibold tabular-nums text-foreground">
+                  {afterHoursPrice.toLocaleString()}원
+                </span>
+                <PriceChange pct={kisChangePct} className="text-sm" />
+              </p>
             )}
           </div>
           {/* 결과 단계에서만 기간 전환 노출(재실행). 선택 단계에선 chooser가 담당. */}

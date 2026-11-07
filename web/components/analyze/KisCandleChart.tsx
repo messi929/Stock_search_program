@@ -77,6 +77,7 @@ export function KisCandleChart({ ticker }: { ticker: string }) {
     const chart = createChart(containerRef.current, {
       width: containerRef.current.clientWidth,
       height: 360,
+      localization: { priceFormatter: (p: number) => Math.round(p).toLocaleString("ko-KR") },
       layout: {
         background: { color: "transparent" },
         textColor: "#64748b",
@@ -235,7 +236,7 @@ export function KisCandleChart({ ticker }: { ticker: string }) {
         </div>
 
         <p className="text-[10px] text-muted-foreground">
-          데이터: 한국투자증권 OpenAPI · 수정주가 · 한국식 컬러(상승🔴/하락🔵)
+          데이터: 한국투자증권 OpenAPI · 수정주가 · 한국식 컬러(상승🔴/하락🔵) · 시간외 거래가 반영돼 정규장 종가와 다를 수 있어요
         </p>
       </CardContent>
     </Card>

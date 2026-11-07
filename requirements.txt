@@ -16,7 +16,7 @@ holidays>=0.50  # 한국 증시 휴장(공휴일) 판별 — 새벽 브리핑 '�
 tzdata>=2024.1  # zoneinfo IANA tz DB(slim 컨테이너엔 시스템 tz 없음) — US 종목 기준일 ET 변환
 
 # Axis AI Layer
-anthropic>=0.40.0
+anthropic==0.121.0  # 2.x는 messages.create의 temperature 제거 — claude_client 호환 확인 전 올리지 말 것
 langgraph>=0.2.0
 langchain-anthropic>=0.2.0
 pydantic>=2.0.0
