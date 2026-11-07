@@ -237,14 +237,15 @@ def collect_fundamentals(snapshot=None):
     kr_stocks = snapshot[snapshot["market"].isin(["KOSPI", "KOSDAQ"])]
     top_tickers = kr_stocks.nlargest(500, "market_cap")["ticker"].tolist()
     fund_data = fetch_naver_fundamentals(top_tickers)
-    if fund_data:
-        snapshot = apply_fundamentals(snapshot, fund_data)
-        fund_df = snapshot[snapshot["ticker"].isin(fund_data.keys())][
-            ["ticker", "per", "pbr", "div_yield", "roe"]
-        ]
-        save_stocks(fund_df, "kr")
-        update_sync_metadata(fundamentals_updated_at=datetime.now().isoformat())
-        logger.info(f"KR 펀더멘탈 완료: {len(fund_data)}종목")
+    if not fund_data:
+        raise RuntimeError("KR 펀더멘탈 0건 — 네이버 응답 확인 필요")
+    snapshot = apply_fundamentals(snapshot, fund_data)
+    fund_df = snapshot[snapshot["ticker"].isin(fund_data.keys())][
+        ["ticker", "per", "pbr", "div_yield", "roe", "sector", "industry"]
+    ]
+    save_stocks(fund_df, "kr")
+    update_sync_metadata(fundamentals_updated_at=datetime.now().isoformat())
+    logger.info(f"KR 펀더멘탈 완료: {len(fund_data)}종목")
 
 
 def collect_themes():
@@ -267,7 +268,7 @@ def collect_foreign_inst(snapshot=None):
     import pandas as pd
 
     logger.info("=== 외국인/기관 수집 시작 ===")
-    # 네이버 폴백용 ticker 목록 (pykrx 실패 시 사용)
+    # KIS 폴백용 ticker 목록 (pykrx 실패 시 사용)
     tickers = None
     if snapshot is not None and "ticker" in snapshot.columns:
         kr_mask = snapshot["market"].isin(["KOSPI", "KOSDAQ"])
@@ -280,18 +281,24 @@ def collect_foreign_inst(snapshot=None):
         except Exception:
             pass
     fi_data = fetch_foreign_inst(tickers=tickers)
-    if fi_data:
-        rows = [{"ticker": t, **d} for t, d in fi_data.items()]
-        fi_df = pd.DataFrame(rows)
-        save_stocks(fi_df, "kr")
-        update_sync_metadata(foreign_inst_updated_at=datetime.now().isoformat())
+    if not fi_data:
+        # 0건은 저장을 건너뛰어 옛 값이 그대로 남으므로 잡 실패로 드러낸다
+        raise RuntimeError("외국인/기관 0건 — pykrx/KIS 모두 실패")
 
-        # v6: 수급 이력 저장
-        try:
-            from screener.db.repository import save_supply_history
-            save_supply_history(fi_data)
-        except Exception as e:
-            logger.warning(f"supply_history 저장 실패: {e}")
+    rows = [
+        {"ticker": t, "foreign_net": d["foreign_net"], "inst_net": d["inst_net"]}
+        for t, d in fi_data.items()
+    ]
+    fi_df = pd.DataFrame(rows)
+    save_stocks(fi_df, "kr")
+    update_sync_metadata(foreign_inst_updated_at=datetime.now().isoformat())
+
+    # v6: 수급 이력 저장
+    try:
+        from screener.db.repository import save_supply_history
+        save_supply_history(fi_data)
+    except Exception as e:
+        logger.warning(f"supply_history 저장 실패: {e}")
 
     logger.info(f"외국인/기관 완료: {len(fi_data)}종목")
 
@@ -633,12 +640,14 @@ def collect_all():
     logger.info("전체 데이터 수집 시작")
     logger.info("=" * 60)
     start = time.time()
+    failed_steps = []
 
     def _safe(label, fn, *args):
         """단계 격리 실행 — 한 단계 실패가 전체(특히 마지막 history)를 막지 않도록."""
         try:
             fn(*args)
         except Exception as e:
+            failed_steps.append(label)
             logger.error(f"[{label}] 실패 — 계속 진행: {type(e).__name__}: {str(e)[:160]}")
 
     # Phase 1: 스냅샷 (snapshot은 history의 입력이라 실패 시 재시도로도 못 살리면 중단)
@@ -664,6 +673,7 @@ def collect_all():
 
     # Phase 4: 데이터 품질 검증
     validation = validate_data()
+    validation["failed_steps"] = failed_steps
     return validation
 
 
@@ -1031,8 +1041,12 @@ def main():
     elif args.validate:
         validate_data()
     elif args.all:
-        collect_all()
+        result = collect_all()
         _notify_cloud_run()
+        if result["failed_steps"]:
+            # 단계 실패를 잡 실패로 노출 (성공 표시 뒤에 숨은 무증상 고장 방지)
+            logger.error(f"수집 단계 실패: {', '.join(result['failed_steps'])}")
+            sys.exit(1)
     else:
         ran = False
         if args.kr_snapshot:

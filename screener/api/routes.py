@@ -79,14 +79,18 @@ def _data_freshness(category: str, market: str) -> dict:
     """
     out = {"data_updated_at": "", "data_fresh": True, "freshness_note": ""}
     phase = CATEGORY_PHASE.get(category, 1)
-    if phase <= 1:
+    if phase <= 1 and category != "foreign_inst":
         return out  # 시세 기반 = 항상 최신(스냅샷 자체)
 
     meta = _get_sync_meta()
     is_us = (market or "").upper() == "US"
     ref = _parse_iso(meta.get("stocks_us_updated_at" if is_us else "stocks_kr_updated_at", ""))
 
-    if phase >= 3:
+    if category == "foreign_inst":
+        # 수급은 시세와 별도 수집 — 수집이 멈추면 옛 값이 그대로 남는다
+        dep = _parse_iso(meta.get("foreign_inst_updated_at", ""))
+        label = "외국인·기관 수급"
+    elif phase >= 3:
         dep = _parse_iso(meta.get("us_history_updated_at" if is_us else "history_updated_at", ""))
         label = "기술지표(RSI·이동평균·52주·돌파)"
     else:  # phase 2

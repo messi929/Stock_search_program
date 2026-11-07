@@ -40,6 +40,7 @@ def _safe_val(v):
 
 # 펀더멘탈 필드 — 0이면 Firestore에 저장하지 않음 (다른 수집에서 덮어쓰기 방지)
 _FUNDAMENTAL_FIELDS = {"per", "pbr", "div_yield", "roe", "eps", "div_years", "div_growth"}
+_CLASSIFICATION_FIELDS = {"sector", "industry"}
 
 
 def _row_to_doc(row: dict, skip_zero_fundamentals: bool = True) -> dict:
@@ -52,6 +53,9 @@ def _row_to_doc(row: dict, skip_zero_fundamentals: bool = True) -> dict:
         v = _safe_val(v)
         # 펀더멘탈 필드가 0이면 Firestore에 저장하지 않아 기존 값 유지
         if skip_zero_fundamentals and k in _FUNDAMENTAL_FIELDS and v == 0:
+            continue
+        # 스냅샷의 빈 업종이 펀더멘탈 수집이 채운 값을 지우지 않도록
+        if skip_zero_fundamentals and k in _CLASSIFICATION_FIELDS and v == "":
             continue
         doc[k] = v
     return doc
@@ -648,7 +652,8 @@ def save_supply_history(supply_data: dict):
     """수급 이력 저장 (종목별 최근 20일 배열).
 
     Args:
-        supply_data: {ticker: {"foreign_net": int, "inst_net": int}, ...}
+        supply_data: {ticker: {"foreign_net": int, "inst_net": int, "date": "YYYY-MM-DD"}, ...}
+            date는 데이터 기준 거래일. 없으면 오늘로 기록.
     """
     db = get_db()
     col = db.collection("supply_history")
@@ -676,19 +681,15 @@ def save_supply_history(supply_data: dict):
             except Exception:
                 data_list = []
 
-            # 당일 데이터 중복 방지
-            if data_list and data_list[-1].get("date") == today:
-                data_list[-1] = {
-                    "date": today,
-                    "foreign_net": _safe_val(entry.get("foreign_net", 0)),
-                    "inst_net": _safe_val(entry.get("inst_net", 0)),
-                }
-            else:
-                data_list.append({
-                    "date": today,
-                    "foreign_net": _safe_val(entry.get("foreign_net", 0)),
-                    "inst_net": _safe_val(entry.get("inst_net", 0)),
-                })
+            # 같은 기준일 중복 방지
+            base_date = entry.get("date") or today
+            data_list = [e for e in data_list if e.get("date") != base_date]
+            data_list.append({
+                "date": base_date,
+                "foreign_net": _safe_val(entry.get("foreign_net", 0)),
+                "inst_net": _safe_val(entry.get("inst_net", 0)),
+            })
+            data_list.sort(key=lambda e: e.get("date", ""))
 
             # 최근 20일만 유지
             data_list = data_list[-20:]
