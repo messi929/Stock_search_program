@@ -5,7 +5,19 @@
  * enabled이고 (종료 시각 미설정 또는 아직 종료 전)이면 노출. 종료 시각 지나면 자동 숨김.
  * 비차단(공지만) — 서비스 자체는 계속 동작.
  */
+import { useEffect, useState } from "react";
+
 import { useMaintenance } from "@/hooks/useMaintenance";
+
+/** 주기적으로 갱신되는 현재 시각 — 쿼리 데이터가 그대로여도 종료 시각 경과를 반영. */
+function useNow(intervalMs: number): number {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), intervalMs);
+    return () => clearInterval(id);
+  }, [intervalMs]);
+  return now;
+}
 
 function fmt(dt: string): string {
   if (!dt) return "";
@@ -21,13 +33,14 @@ function fmt(dt: string): string {
 
 export function MaintenanceBanner() {
   const { data } = useMaintenance();
+  const now = useNow(30_000);
   if (!data) return null;
 
   // 수동 점검 공지 활성 여부(종료 시각 지나면 자동 숨김).
   let manualActive = !!data.enabled;
   if (manualActive && data.ends_at) {
     const end = new Date(data.ends_at);
-    if (!isNaN(end.getTime()) && Date.now() > end.getTime()) manualActive = false;
+    if (!isNaN(end.getTime()) && now > end.getTime()) manualActive = false;
   }
 
   // 수동 공지 우선. 없으면 자동 AI 장애 감지 배너.

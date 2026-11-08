@@ -13,7 +13,7 @@
  */
 import { Check, Lock } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { toast } from "sonner";
 
 import { HorizonIcon } from "@/components/analyze/HorizonIcon";
@@ -33,7 +33,8 @@ export function HorizonChooser({
   defaultHorizon: HorizonId;
   onStart: (horizon: HorizonId) => void;
 }) {
-  const [selected, setSelected] = useState<HorizonId>(defaultHorizon);
+  // 사용자가 직접 고른 관점 (null이면 아직 기본값 사용 중)
+  const [picked, setSelected] = useState<HorizonId | null>(null);
 
   // Pro 잠금 — 사용자 플랜 + 시계별 free 허용 여부(/api/ai/personas의 horizons).
   const { data: personasData } = usePersonas();
@@ -47,15 +48,13 @@ export function HorizonChooser({
     return !free;
   };
 
-  // Free 사용자가 잠긴 기본 시계(예: 중기)에 막히지 않도록, 플랜 정보 로드 후
-  // 선택이 Pro 잠금이면 무료로 열린 첫 시계(단기)로 자동 보정.
-  useEffect(() => {
-    if (isProLocked(selected)) {
-      const firstFree = ALL_HORIZONS.find((id) => !isProLocked(id));
-      if (firstFree) setSelected(firstFree);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [personasData]);
+  // 기본 시계가 Pro 잠금이면 무료로 열린 첫 시계(단기)로 보정. 직접 고른 잠긴 시계는 그대로
+  // 두어 업그레이드 안내를 보여준다.
+  const selected: HorizonId =
+    picked ??
+    (isProLocked(defaultHorizon)
+      ? (ALL_HORIZONS.find((id) => !isProLocked(id)) ?? defaultHorizon)
+      : defaultHorizon);
 
   const selectedProLocked = isProLocked(selected);
 

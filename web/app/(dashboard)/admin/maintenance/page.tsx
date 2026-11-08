@@ -5,7 +5,7 @@
  * 켜기/끄기 + 시작·종료 시각 + 메시지 → PUT /api/admin/maintenance.
  * 전 사용자 상단 배너(MaintenanceBanner)에 즉시 반영(공개 GET /api/maintenance).
  */
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 
@@ -25,13 +25,15 @@ export default function AdminMaintenancePage() {
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
 
-  useEffect(() => {
-    if (!data) return;
+  // 서버 값이 바뀌면 폼에 반영 (렌더 중 동기화 — effect 연쇄 렌더 방지)
+  const [syncedFrom, setSyncedFrom] = useState<typeof data>(undefined);
+  if (data && data !== syncedFrom) {
+    setSyncedFrom(data);
     setEnabled(!!data.enabled);
     setStartsAt(data.starts_at || "");
     setEndsAt(data.ends_at || "");
     setMessage(data.message || "");
-  }, [data]);
+  }
 
   const save = async () => {
     setBusy(true);

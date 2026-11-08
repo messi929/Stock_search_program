@@ -6,7 +6,7 @@
  * MVP: opt-in 토글 + 이메일 override만 수집. 실제 발송은 v1.1 (Mailgun + Cloud
  * Scheduler 잡 도입 후). UI 상단에 "준비 중" 배너로 명시.
  */
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
 
@@ -28,14 +28,15 @@ export default function NotificationsSettingsPage() {
   const [emailOverride, setEmailOverride] = useState("");
   const [dirty, setDirty] = useState(false);
 
-  // 서버 값 도착 시 폼에 반영 (한 번만)
-  useEffect(() => {
-    if (!data) return;
+  // 서버 값 도착/변경 시 폼에 반영 (렌더 중 동기화 — effect 연쇄 렌더 방지)
+  const [syncedFrom, setSyncedFrom] = useState<typeof data>(undefined);
+  if (data && data !== syncedFrom) {
+    setSyncedFrom(data);
     setDaily(!!data.preferences.daily_briefing_enabled);
     setEntry(!!data.preferences.entry_point_alerts_enabled);
     setEmailOverride(data.preferences.email_override ?? "");
     setDirty(false);
-  }, [data]);
+  }
 
   const markDirty = () => setDirty(true);
 

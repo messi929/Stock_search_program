@@ -75,15 +75,16 @@ export default function OnboardingPage() {
     }
   }, [user, onboarded, authLoading, profileLoading, router]);
 
-  // 이전에 일부 작성한 적 있으면 복원
-  useEffect(() => {
-    if (!profile) return;
+  // 이전에 일부 작성한 적 있으면 복원 (렌더 중 동기화 — effect 연쇄 렌더 방지)
+  const [syncedFrom, setSyncedFrom] = useState<typeof profile | undefined>(undefined);
+  if (profile && profile !== syncedFrom) {
+    setSyncedFrom(profile);
     if (profile.investing_experience) setExperience(profile.investing_experience);
     if (profile.holding_period) setHoldingPeriod(profile.holding_period);
     if (profile.interested_sectors) setSectors(profile.interested_sectors);
     if (profile.investment_principles) setPrinciples(profile.investment_principles);
     if (profile.preferred_horizon) setHorizon(profile.preferred_horizon);
-  }, [profile]);
+  }
 
   const toggleSector = (s: string) =>
     setSectors((prev) => (prev.includes(s) ? prev.filter((x) => x !== s) : [...prev, s]));
