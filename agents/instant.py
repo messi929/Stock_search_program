@@ -171,7 +171,8 @@ _INSTANT_SYSTEM = """당신은 한국/미국 주식의 '첫인상 요약'을 작
 - 허용: '관찰', '참고', '현재 ~ 구간', 수치의 중립적 해석
 - RSI 70+ 과열·30- 침체, 52주 고가 대비 위치, 외국인 연속 수급, 밸류(PER/PBR)를 사실 위주로
 - 마지막에 정밀 분석이 곧 이어진다는 점을 짧게 언급('자세한 분석이 곧 표시됩니다' 류)
-- 한국어, 군더더기 없이 2~3문장."""
+- 한국어, 군더더기 없이 2~3문장.
+- 평문만 출력: 제목(#), 굵게(**), 목록 기호 없이 문장만 쓰세요."""
 
 
 # 경기민감(사이클) 업종 — 이익이 사이클을 크게 타 단일 PER/PBR이 신호를 거꾸로 줄 수
@@ -353,7 +354,19 @@ async def instant_quick_take(snapshot: dict, uid: str = "") -> str:
             max_tokens=300,
             uid=uid,
         )
-        return (result.get("content") or "").strip()
+        return _to_plain_text(result.get("content") or "")
     except Exception as e:
         logger.debug(f"[instant] quick-take 실패: {e}")
         return ""
+
+
+def _to_plain_text(text: str) -> str:
+    """카드는 평문으로 그리므로 모델이 붙인 마크다운 제목·굵게 표시를 걷어낸다.
+
+    예: "# 한미약품(128940) · 첫인상 요약 ... **자세한 분석이 곧 진행됩니다.**"
+    """
+    raw = [ln.strip() for ln in text.splitlines() if ln.strip()]
+    body = [ln for ln in raw if not ln.startswith("#")]
+    # 제목 줄은 종목명 반복이라 버린다. 제목뿐이면 # 기호만 떼고 살린다.
+    lines = body or [ln.lstrip("#").strip() for ln in raw]
+    return " ".join(lines).replace("**", "").replace("__", "").strip()

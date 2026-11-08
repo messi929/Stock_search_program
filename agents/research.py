@@ -5,15 +5,13 @@
 데이터 소스:
   - 외국인/기관 수급: screener.db.repository.load_stocks (기존 v7.5)
   - 테마 동향: screener.db.repository.load_themes (기존 v7.5)
-  - 매크로 이벤트: data/macro_events.json (수동 큐레이션 — Week 2 후반 채움)
+  - 매크로 이벤트: data/macro_calendar.json (오늘 이후 일정만)
   - 뉴스 RSS: 향후 Naver RSS 추가 (Week 2 후반)
 """
 
 from __future__ import annotations
 
-import json
 from datetime import datetime, timezone
-from pathlib import Path
 from typing import Optional
 
 import pandas as pd
@@ -144,22 +142,42 @@ RESEARCH_SYSTEM_PROMPT = """당신은 한국 증시 전문 시황 분석가입�
 
 
 # ──────────────────────────────────────────────
-# Macro 이벤트 로드 (data/macro_events.json)
+# Macro 이벤트 로드 (data/macro_calendar.json)
 # ──────────────────────────────────────────────
+# 예전 data/macro_events.json은 2026-04~05 예시 데이터라 날짜 필터 없이 넣으면
+# "다음 FOMC 2026-05-07" 같은 지난 일정이 분석에 섞였다. 관리되는 캘린더에서
+# 오늘 이후 일정만 쓴다.
 
-_MACRO_EVENTS_PATH = Path(__file__).resolve().parent.parent / "data" / "macro_events.json"
+_MACRO_LOOKAHEAD_DAYS = 60
+_HIGH_IMPACT_TYPES = {"FOMC", "BOK_RATE"}
 
 
 def _load_macro_events() -> list[dict]:
-    """매크로 이벤트 캘린더 로드. 파일 없으면 빈 리스트."""
-    if not _MACRO_EVENTS_PATH.exists():
-        return []
+    """오늘 이후 N일 안의 매크로 일정. 실패하거나 없으면 빈 리스트."""
     try:
-        with _MACRO_EVENTS_PATH.open("r", encoding="utf-8") as f:
-            return json.load(f)
+        from utils.data_collectors.regime_detector import get_upcoming_macro_events
+
+        events = get_upcoming_macro_events(days_ahead=_MACRO_LOOKAHEAD_DAYS)
     except Exception as e:
-        logger.warning(f"macro_events.json 로드 실패: {e}")
+        logger.warning(f"매크로 캘린더 로드 실패: {e}")
         return []
+    return [
+        {
+            "date": ev.get("date", ""),
+            "type": ev.get("type", ""),
+            "event": ev.get("name", ev.get("type", "")),
+            "impact": "high" if ev.get("type") in _HIGH_IMPACT_TYPES else "medium",
+        }
+        for ev in events
+    ]
+
+
+def _next_fomc(events: list[dict]) -> Optional[str]:
+    """캘린더 기준 다음 FOMC 날짜. 없으면 None (LLM 추정값을 쓰지 않는다)."""
+    for ev in events:
+        if ev.get("type") == "FOMC":
+            return ev.get("date") or None
+    return None
 
 
 # ──────────────────────────────────────────────
@@ -188,6 +206,8 @@ class ResearchAgent(BaseAgent):
 
         # timestamp 보정 (Claude가 부정확한 값을 줄 수 있음)
         result_model.timestamp = datetime.now(timezone.utc).isoformat()
+        # 다음 FOMC도 모델 기억이 아니라 캘린더 값으로 덮는다
+        result_model.macro_context.fomc_next = _next_fomc(context.get("macro_events", []))
         return result_model
 
     # ──────────────────────────────────────────
@@ -308,12 +328,18 @@ class ResearchAgent(BaseAgent):
             lines.append(", ".join(context["ticker_themes"]))
 
         if context.get("macro_events"):
-            lines.append("\n# 다가오는 매크로 이벤트")
+            lines.append(f"\n# 다가오는 매크로 이벤트 (향후 {_MACRO_LOOKAHEAD_DAYS}일, 공식 일정)")
             for ev in context["macro_events"][:10]:
                 lines.append(
                     f"- {ev.get('date', '')} {ev.get('event', '')} "
                     f"(영향: {ev.get('impact', 'unknown')})"
                 )
+            lines.append("위 목록에 없는 일정 날짜는 만들어내지 마세요.")
+        else:
+            lines.append(
+                "\n# 다가오는 매크로 이벤트\n확인된 일정이 없습니다. "
+                "FOMC·금통위 등 일정 날짜를 추정해 쓰지 마세요."
+            )
 
         news = context.get("news") or []
         if news:
