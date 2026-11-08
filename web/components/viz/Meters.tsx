@@ -15,6 +15,19 @@ function Marker({ pct, title }: { pct: number; title: string }) {
   );
 }
 
+/** KRX 호가 단위(2023-01 개편 기준)로 반올림. */
+function roundToKrxTick(price: number): number {
+  const tick =
+    price < 2_000 ? 1
+    : price < 5_000 ? 5
+    : price < 20_000 ? 10
+    : price < 50_000 ? 50
+    : price < 200_000 ? 100
+    : price < 500_000 ? 500
+    : 1_000;
+  return Math.round(price / tick) * tick;
+}
+
 /** 52주 최저~최고 사이에서 현재가의 위치. 등락 비율로 최저·최고가를 역산한다. */
 export function Range52Week({
   close,
@@ -34,7 +47,13 @@ export function Range52Week({
   const low = close / (1 + vsLow / 100);
   if (high <= low) return null;
   const pct = ((close - low) / (high - low)) * 100;
-  const fmt = (n: number) => `${Math.round(n).toLocaleString("ko-KR")}${unit}`;
+  // 등락률이 소수 둘째 자리로 반올림돼 있어 역산값에 끝자리 오차가 생긴다(353,503원 등).
+  // 국내는 KRX 호가 단위, 그 외는 센트 단위로 맞춘다.
+  const isKrw = unit === "원";
+  const fmt = (n: number) =>
+    isKrw
+      ? `${roundToKrxTick(n).toLocaleString("ko-KR")}${unit}`
+      : `${n.toLocaleString("ko-KR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}${unit}`;
 
   return (
     <div className="space-y-2">
