@@ -4,7 +4,7 @@
 analyze/validate는 graph 단위 테스트(test_graph.py)에서 검증됨.
 
 실행:
-    py -m tests.test_ai_route
+    py -m pytest tests/test_ai_route.py
 """
 
 from __future__ import annotations
@@ -17,12 +17,61 @@ try:
 except Exception:
     pass
 
+import pytest
 from dotenv import load_dotenv
 
 load_dotenv()
 
 
-def test_personas_route() -> None:
+def _login_as(monkeypatch, tier: str) -> dict[str, str]:
+    """AuthMiddleware를 통과하는 가짜 로그인 사용자 (Firebase·Firestore 호출 없음).
+
+    /api/ai/* 는 비로그인 전면 차단(401)이라 라우트 자체를 검증하려면 uid가 필요하다.
+    AUTH_ENABLED=false 환경에선 미들웨어가 통과시키므로 패치가 무해하다.
+    """
+    import api.routes.ai as ai
+    import screener.middleware as mw
+    import screener.services.subscription as sub
+
+    user = {"uid": "test-uid", "email": "tester@example.com", "email_verified": True, "tier": tier}
+    monkeypatch.setattr(mw, "verify_firebase_token", lambda token: dict(user) if token else None)
+
+    def _no_firestore():
+        raise RuntimeError("테스트: Firestore 미사용")
+
+    monkeypatch.setattr(sub, "_users_ref", _no_firestore)
+    monkeypatch.setattr(
+        ai, "_count_month_usage", lambda uid: {"analyses": 0, "validations": 0, "discoveries": 0}
+    )
+    return {"Authorization": "Bearer test-token"}
+
+
+@pytest.fixture
+def pro_headers(monkeypatch):
+    return _login_as(monkeypatch, "pro")
+
+
+@pytest.fixture
+def free_headers(monkeypatch):
+    return _login_as(monkeypatch, "free")
+
+
+def test_ai_routes_require_login() -> None:
+    """/api/ai/* 비로그인 호출은 401 (Claude 비용 누수 방지 게이트)."""
+    import screener.middleware as mw
+
+    if not mw.AUTH_ENABLED:
+        pytest.skip("AUTH_ENABLED=false — 로그인 게이트 비활성")
+
+    from fastapi.testclient import TestClient
+    from screener.main import app
+
+    res = TestClient(app).post("/api/ai/analyze", json={"ticker": "005930", "stream": False})
+    assert res.status_code == 401
+    assert res.json().get("login_required") is True
+
+
+def test_personas_route(pro_headers) -> None:
     """GET /api/ai/personas — 1차 축 horizon 4종 + 내부 데이터 노드 3종 반환.
 
     블랙록/ARK/그레이엄 페르소나는 2026-06-22 horizon으로 폐지.
@@ -31,7 +80,7 @@ def test_personas_route() -> None:
     from screener.main import app
 
     client = TestClient(app)
-    res = client.get("/api/ai/personas")
+    res = client.get("/api/ai/personas", headers=pro_headers)
     assert res.status_code == 200, f"status={res.status_code}, body={res.text}"
 
     data = res.json()
@@ -58,7 +107,7 @@ def test_personas_route() -> None:
         print(f"  {free_mark} {h['icon']} {h['name']} ({h['id']})")
 
 
-def test_analyze_invalid_ticker() -> None:
+def test_analyze_invalid_ticker(pro_headers) -> None:
     """POST /api/ai/analyze — 잘못된 ticker → 400."""
     from fastapi.testclient import TestClient
     from screener.main import app
@@ -67,22 +116,18 @@ def test_analyze_invalid_ticker() -> None:
     res = client.post(
         "/api/ai/analyze",
         json={"ticker": "", "stream": False},
+        headers=pro_headers,
     )
     assert res.status_code == 400, f"빈 ticker는 400이어야 함, got {res.status_code}"
     print(f"[analyze_invalid] 빈 ticker → 400 OK")
 
 
-def test_analyze_locked_persona() -> None:
-    """POST /api/ai/analyze — Free에서 Pro 전용 데이터 노드(macro) → 402.
+def test_analyze_locked_persona(free_headers) -> None:
+    """POST /api/ai/analyze — Free에서 Pro 전용 데이터 노드(macro) → 402."""
+    import screener.middleware as mw
 
-    AUTH_ENABLED=false 환경에서는 middleware가 tier='pro'로 통과시켜 검증 어려움.
-    이 테스트는 AUTH_ENABLED=true 운영 환경에서만 의미 있음. 여기서는 skip.
-    """
-    import os
-
-    if os.environ.get("AUTH_ENABLED", "false").lower() != "true":
-        print("[analyze_locked] AUTH_ENABLED=false 환경 — 스킵")
-        return
+    if not mw.AUTH_ENABLED:
+        pytest.skip("AUTH_ENABLED=false — 미들웨어가 tier='pro'로 통과시켜 검증 불가")
 
     from fastapi.testclient import TestClient
     from screener.main import app
@@ -91,9 +136,10 @@ def test_analyze_locked_persona() -> None:
     res = client.post(
         "/api/ai/analyze",
         json={"ticker": "207940", "persona": "macro", "stream": False},
+        headers=free_headers,
     )
     assert res.status_code == 402, f"Free 사용자가 macro 호출 → 402 기대, got {res.status_code}"
-    print(f"[analyze_locked] Free + macro → 402 OK")
+    assert res.json()["detail"]["code"] == "PERSONA_LOCKED"
 
 
 def test_smart_lists_route() -> None:
@@ -212,27 +258,8 @@ def test_quota_enforcement() -> None:
 
 
 def main() -> None:
-    print("=" * 60)
-    print("AI/Screener 라우트 통합 테스트")
-    print("=" * 60)
-
-    test_personas_route()
-    print()
-    test_analyze_invalid_ticker()
-    print()
-    test_analyze_locked_persona()
-    print()
-    test_smart_lists_route()
-    print()
-    test_entry_points_routes()
-    print()
-    test_usage_route_unauthenticated()
-    print()
-    test_quota_enforcement()
-
-    print("\n" + "=" * 60)
-    print("[OK] 모든 테스트 통과")
-    print("=" * 60)
+    """수동 실행 — fixture를 쓰므로 pytest로 위임."""
+    raise SystemExit(pytest.main([__file__, "-v", "-s"]))
 
 
 if __name__ == "__main__":

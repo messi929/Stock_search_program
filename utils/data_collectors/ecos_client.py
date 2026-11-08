@@ -231,7 +231,7 @@ def to_ecos_date_format(date_str: str, freq: str) -> str:
         ECOS 호출용 형식:
           D → YYYYMMDD
           M → YYYYMM
-          Q → YYYY{1~4}  (예: 2024-Q3 → "20243")
+          Q → YYYYQn  (예: 2024-Q3 / 20243 / 2024-08-15 → "2024Q3")
           A → YYYY
     """
     s = str(date_str).replace("-", "").replace("/", "").strip().upper()
@@ -252,6 +252,9 @@ def to_ecos_date_format(date_str: str, freq: str) -> str:
         if "Q" in date_str.upper():
             year, q = date_str.upper().split("Q")
             return f"{year.replace('-', '').strip()[:4]}Q{_validate_q(q.strip()[:1])}"
+        # 구 ECOS 분기 표기 YYYYn (5자리) → 그대로 분기로 해석
+        if len(s) == 5 and s.isdigit():
+            return f"{s[:4]}Q{_validate_q(s[4])}"
         # YYYYMMDD/YYYYMM → 월(2자리)에서 분기 산출
         if len(s) >= 6 and s[:6].isdigit():
             q = (int(s[4:6]) - 1) // 3 + 1

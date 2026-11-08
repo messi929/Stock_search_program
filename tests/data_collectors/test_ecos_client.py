@@ -42,7 +42,8 @@ def test_ecos_codes_required_categories_present():
         # treasury는 일별 시장금리 통계(817Y002)로 정정 (2026-05-02 검증)
         ("treasury_3y", "817Y002", "D"),
         ("treasury_10y", "817Y002", "D"),
-        ("gdp_yoy", "200Y002", "Q"),
+        # GDP는 902Y015(주요국 경제성장률)/KOR로 확정 (2026-06-04 재검증)
+        ("gdp_yoy", "902Y015", "Q"),
         # 광공업생산은 AB00 코드 (I31AA → 미존재)
         ("industrial_production", "901Y033", "M"),
         ("cpi_total", "901Y009", "M"),
@@ -69,9 +70,11 @@ def test_ecos_codes_industrial_production_uses_ab00_with_원계열():
 
 
 def test_get_verified_codes_returns_subset():
-    """verified=True 항목만 반환 (현재 6개: base_rate, treasury_3y/10y, industrial_production, cpi_total, usd_krw)."""
+    """verified=True 항목만 반환 (2026-06-04 gdp_yoy·kr_unemployment_rate 확정으로 8개)."""
     verified = get_verified_codes()
-    assert len(verified) == 6
+    assert len(verified) == 8
+    assert "gdp_yoy" in verified
+    assert "kr_unemployment_rate" in verified
     assert "base_rate" in verified
     assert "treasury_3y" in verified
     assert "treasury_10y" in verified
@@ -81,10 +84,9 @@ def test_get_verified_codes_returns_subset():
 
 
 def test_get_unverified_codes_marks_pending_updates():
-    """verified=False 항목 (gdp_yoy, cpi_core) — 한국은행 개편으로 코드 갱신 필요."""
+    """verified=False 항목 (cpi_core) — 한국은행 개편으로 코드 갱신 필요."""
     unverified = get_unverified_codes()
-    assert "gdp_yoy" in unverified
-    assert "cpi_core" in unverified
+    assert set(unverified) == {"cpi_core"}
     for meta in unverified.values():
         assert "verified_note" in meta
 
@@ -142,11 +144,12 @@ def test_mask_api_key_preserves_short_codes():
         ("2025-12", "M", "202512"),
         ("202512", "M", "202512"),
         ("2025-12-31", "M", "202512"),
-        # Q: YYYY+분기
-        ("2024-Q3", "Q", "20243"),
-        ("2024Q3", "Q", "20243"),
-        ("20243", "Q", "20243"),
-        ("2024", "Q", "20241"),  # 기본 Q1
+        # Q: YYYYQn (ECOS 분기 형식)
+        ("2024-Q3", "Q", "2024Q3"),
+        ("2024Q3", "Q", "2024Q3"),
+        ("20243", "Q", "2024Q3"),  # 구 표기 YYYYn
+        ("2024-08-15", "Q", "2024Q3"),  # 월에서 분기 산출
+        ("2024", "Q", "2024Q1"),  # 기본 Q1
         # A: YYYY
         ("2024", "A", "2024"),
         ("2024-12-31", "A", "2024"),
@@ -372,7 +375,7 @@ def test_get_series_by_axis_key_converts_dates_to_ecos_format():
 
 
 def test_get_series_by_axis_key_quarterly_format():
-    """gdp_yoy (Q) → YYYY+분기 형식으로 변환."""
+    """gdp_yoy (Q) → YYYYQn 형식으로 변환."""
     http = MagicMock()
     http.get.return_value = _mk_response({"StatisticSearch": {"list_total_count": 0, "row": []}})
     client = ECOSClient(api_key="X" * 20, http_client=http, sleep_sec=0)
@@ -380,7 +383,7 @@ def test_get_series_by_axis_key_quarterly_format():
     client.get_series_by_axis_key("gdp_yoy", "2024-Q1", "2024-Q4")
 
     called_url = http.get.call_args.args[0]
-    assert "/200Y002/Q/20241/20244/" in called_url
+    assert "/902Y015/Q/2024Q1/2024Q4/" in called_url
 
 
 # ──────────────────────────────────────────────
