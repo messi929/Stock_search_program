@@ -26,10 +26,14 @@ WEEK_B.md Day 4 산출물 — Macro PM 페르소나용 국면 종합 판정.
 from __future__ import annotations
 
 import json
+import os
 import threading
+import time
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
+
+from loguru import logger
 
 
 CALENDAR_FILE = Path(__file__).resolve().parents[2] / "data" / "macro_calendar.json"
@@ -265,19 +269,64 @@ _calendar_lock = threading.Lock()
 _EMPTY_CALENDAR: dict[str, Any] = {"_meta": {}, "events": []}
 
 
-def _load_calendar(force_refresh: bool = False) -> dict[str, Any]:
-    """매크로 캘린더 JSON 로드 + thread-safe 캐시.
+# jobs/macro_calendar_sync.py가 공식 출처에서 받아 매주 갱신하는 문서.
+# 이미지에 박힌 JSON 파일은 Firestore를 못 읽을 때의 대체본이다.
+REMOTE_CALENDAR_COLLECTION = "config"
+REMOTE_CALENDAR_DOC = "macro_calendar"
+_CALENDAR_TTL_SEC = 6 * 3600
+_calendar_loaded_at: float = 0.0
 
-    파일 미존재/파싱 실패 시 빈 결과 반환 (캐시 X) → 다음 호출 시 재시도 가능.
-    Cloud Run 멀티 워커 race condition은 워커 분리로 사실상 없음.
+
+def _remote_enabled() -> bool:
+    return os.environ.get("MACRO_CALENDAR_REMOTE", "1") != "0"
+
+
+def _fetch_remote_calendar() -> dict[str, Any] | None:
+    """Firestore 캘린더. 없거나 실패하면 None (파일로 대체)."""
+    try:
+        from screener.db.firebase_client import get_db
+
+        snap = (
+            get_db()
+            .collection(REMOTE_CALENDAR_COLLECTION)
+            .document(REMOTE_CALENDAR_DOC)
+            .get()
+        )
+        data = snap.to_dict() if snap.exists else None
+        if data and data.get("events"):
+            return data
+    except Exception as e:
+        logger.warning(f"Firestore 매크로 캘린더 로드 실패 — 파일 사용: {e}")
+    return None
+
+
+def _load_calendar(force_refresh: bool = False) -> dict[str, Any]:
+    """매크로 캘린더 로드 + thread-safe 캐시(6시간).
+
+    Firestore(config/macro_calendar) 우선, 실패 시 data/macro_calendar.json.
+    둘 다 실패하면 빈 결과 반환 (캐시 X) → 다음 호출 시 재시도 가능.
     스레드 안전성: double-checked locking.
     """
-    global _calendar_cache
-    if _calendar_cache is not None and not force_refresh:
-        return _calendar_cache
+    global _calendar_cache, _calendar_loaded_at
+
+    def _fresh() -> bool:
+        return (
+            _calendar_cache is not None
+            and not force_refresh
+            and time.monotonic() - _calendar_loaded_at < _CALENDAR_TTL_SEC
+        )
+
+    if _fresh():
+        return _calendar_cache  # type: ignore[return-value]
 
     with _calendar_lock:
-        if _calendar_cache is not None and not force_refresh:
+        if _fresh():
+            return _calendar_cache  # type: ignore[return-value]
+
+        remote = _fetch_remote_calendar() if _remote_enabled() else None
+        if remote is not None:
+            _calendar_cache = remote
+            _calendar_loaded_at = time.monotonic()
             return _calendar_cache
 
         if not CALENDAR_FILE.exists():
@@ -287,6 +336,7 @@ def _load_calendar(force_refresh: bool = False) -> dict[str, Any]:
         try:
             with open(CALENDAR_FILE, encoding="utf-8") as f:
                 _calendar_cache = json.load(f)
+            _calendar_loaded_at = time.monotonic()
         except Exception:
             # 파싱 실패도 캐시 X (파일 수정으로 복구 가능)
             return _EMPTY_CALENDAR
@@ -296,9 +346,10 @@ def _load_calendar(force_refresh: bool = False) -> dict[str, Any]:
 
 def reset_calendar_cache() -> None:
     """테스트용."""
-    global _calendar_cache
+    global _calendar_cache, _calendar_loaded_at
     with _calendar_lock:
         _calendar_cache = None
+        _calendar_loaded_at = 0.0
 
 
 def get_upcoming_macro_events(

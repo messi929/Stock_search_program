@@ -27,3 +27,9 @@ def pytest_collection_modifyitems(config, items):
     for item in items:
         if "integration" in item.keywords:
             item.add_marker(skip_integration)
+
+
+@pytest.fixture(autouse=True)
+def _macro_calendar_file_only(monkeypatch):
+    """단위 테스트는 Firestore 캘린더 대신 data/macro_calendar.json만 읽는다."""
+    monkeypatch.setenv("MACRO_CALENDAR_REMOTE", "0")
