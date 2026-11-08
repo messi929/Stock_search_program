@@ -16,6 +16,11 @@
 
 set -euo pipefail
 
+# Windows Git Bash에서 gcloud 셸 스크립트가 python을 못 찾으면 GCLOUD_BIN=gcloud.cmd 로 실행
+if [ -n "${GCLOUD_BIN:-}" ]; then
+    gcloud() { "${GCLOUD_BIN}" "$@"; }
+fi
+
 PROJECT_ID="${GCP_PROJECT:-all-of-asset}"
 REGION="asia-northeast3"
 TIMEZONE="Asia/Seoul"
